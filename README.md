@@ -127,11 +127,18 @@ therefore emits a topological order.
 
 ```
 README.md              this file
-Cargo.toml             crate `tekmerion`
+Cargo.toml             crate `tekmerion`, published as 0.1.0
 src/                   typed revocation engine
 tests/                 30 tests, including one per refusal site
 examples/              reassembly.rs: the gap s2n-bignum names, step by step
+trace/                 failure-side extension to TacticTrace
+  exptrace_failure.ml  write-through failure capture, `exptrace_guard`
+  fixtures/            wrapper golden file and conformance record pairs
 tools/mutate.py        refusal-site mutation harness
+tools/patch_wrapper.py rewrites a generated kernel_wrapper.ml, fail-closed
+tools/trace_conformance.py  stock vs patched success records, field by field
+tools/test_write_through.py proves a failure reaches disk before any dump
+tools/selftest.sh      runs every check above in one command
 mutation-report.json   last measured mutation score
 research/
   TEKMERION-FRONTIER-PROMPT.md   the brief this work audits
@@ -145,9 +152,29 @@ research/
 ## Reproduce
 
 ```sh
+bash tools/selftest.sh                     # everything below, one command
 cargo test --offline                       # 30 tests
 python3 tools/mutate.py                    # refusal-site mutation score
 cargo run --offline --example reassembly   # the reassembly gap, step by step
+```
+
+The failure-trace scaffold is verified offline: the OCaml module is syntax-checked and
+type-checked against stubs, the wrapper patcher is checked against a golden file, the
+conformance checker is checked against matching and deliberately diverging fixtures, and a
+test proves a failure record reaches disk before any dump call. It has **not** been run
+inside HOL Light; that is the first CI job when the benchmark environment exists.
+
+## Branches and releasing
+
+- `main` — every published state. Nothing is on `main` that was not published.
+- `staging` — all work. Committed and pushed continuously so nothing is lost.
+
+Releasing: merge `staging` into `main`, tag `vX.Y.Z`, `cargo publish`, push the tag.
+
+```sh
+git checkout main && git merge --ff-only staging
+cargo publish
+git tag -a vX.Y.Z -m "tekmerion X.Y.Z" && git push origin main vX.Y.Z
 ```
 
 ## Non-claims
