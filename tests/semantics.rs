@@ -414,6 +414,460 @@ fn wire_round_trip_preserves_identity() {
 }
 
 // ---------------------------------------------------------------------------
+// B1: the v2 node table round-trips after every class of update
+// ---------------------------------------------------------------------------
+
+fn assert_round_trip(s: &Store) {
+    let text = wire::render(s);
+    let parsed = match wire::parse(&text) {
+        Ok(p) => p,
+        Err(e) => panic!("parse(render(store)) failed: {e}\n--- document ---\n{text}"),
+    };
+
+    let mut heads: Vec<(UnitId, Digest)> = s.units().map(|(u, d)| (u.clone(), *d)).collect();
+    heads.sort();
+    let mut parsed_heads: Vec<(UnitId, Digest)> =
+        parsed.units().map(|(u, d)| (u.clone(), *d)).collect();
+    parsed_heads.sort();
+    assert_eq!(heads, parsed_heads, "unit -> head map changed");
+
+    let nodes: BTreeSet<Digest> = s.nodes().map(|(d, _)| *d).collect();
+    let parsed_nodes: BTreeSet<Digest> = parsed.nodes().map(|(d, _)| *d).collect();
+    assert_eq!(nodes, parsed_nodes, "node set changed");
+
+    for d in &nodes {
+        assert_eq!(
+            s.status(d),
+            parsed.status(d),
+            "effective status changed for {}",
+            d.hex()
+        );
+    }
+
+    assert_eq!(wire::render(&parsed), text, "render is not a fixed point");
+}
+
+#[test]
+fn round_trip_after_semantic_update() {
+    let mut s = Store::new();
+    let sp = unit("spec/s");
+    s.insert(
+        sp.clone(),
+        Node::new(
+            Kind::Spec,
+            Some(lbl("s-meaning-v1")),
+            Some(lbl("s-src-v1")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    s.insert(
+        t,
+        theorem("t-stmt", "t-cert", vec![pin(&s, &sp, EdgeKind::Semantic)]),
+    )
+    .unwrap();
+
+    s.update(
+        &sp,
+        Node::new(
+            Kind::Spec,
+            Some(lbl("s-meaning-v2")),
+            Some(lbl("s-src-v2")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    assert_round_trip(&s);
+}
+
+#[test]
+fn round_trip_after_subject_update() {
+    let mut s = Store::new();
+    let ar = unit("obj/a");
+    s.insert(
+        ar.clone(),
+        Node::new(Kind::Artefact, None, Some(lbl("a-bytes-v1")), vec![]),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    s.insert(
+        t,
+        theorem("t-stmt", "t-cert", vec![pin(&s, &ar, EdgeKind::Subject)]),
+    )
+    .unwrap();
+
+    s.update(
+        &ar,
+        Node::new(Kind::Artefact, None, Some(lbl("a-bytes-v2")), vec![]),
+    )
+    .unwrap();
+    assert_round_trip(&s);
+}
+
+#[test]
+fn round_trip_after_attestation_update() {
+    let mut s = Store::new();
+    let ke = unit("kernel/k");
+    s.insert(
+        ke.clone(),
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic")),
+            Some(lbl("kbin-v1")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    s.insert(
+        t,
+        theorem(
+            "t-stmt",
+            "t-cert",
+            vec![pin(&s, &ke, EdgeKind::Attestation)],
+        ),
+    )
+    .unwrap();
+
+    s.update(
+        &ke,
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic")),
+            Some(lbl("kbin-v2")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    assert_round_trip(&s);
+}
+
+#[test]
+fn round_trip_after_repin_with_unchanged_semantic_and_bytes() {
+    let mut s = Store::new();
+    let sp = unit("spec/s");
+    s.insert(
+        sp.clone(),
+        Node::new(Kind::Spec, Some(lbl("s-sem")), Some(lbl("s-src")), vec![]),
+    )
+    .unwrap();
+
+    let u = unit("lemma/u");
+    s.insert(
+        u.clone(),
+        Node::new(
+            Kind::Theorem,
+            Some(lbl("u-stmt")),
+            Some(lbl("u-cert")),
+            vec![],
+        ),
+    )
+    .unwrap();
+
+    let t = unit("thm/t");
+    s.insert(
+        t,
+        theorem("t-stmt", "t-cert", vec![pin(&s, &u, EdgeKind::Semantic)]),
+    )
+    .unwrap();
+
+    // Same meaning and bytes; only the derivation (pins) changes.
+    s.update(
+        &u,
+        Node::new(
+            Kind::Theorem,
+            Some(lbl("u-stmt")),
+            Some(lbl("u-cert")),
+            vec![pin(&s, &sp, EdgeKind::Semantic)],
+        ),
+    )
+    .unwrap();
+
+    assert_round_trip(&s);
+}
+
+// ---------------------------------------------------------------------------
+// B3: effective status, not the event delta
+// ---------------------------------------------------------------------------
+
+#[test]
+fn effective_status_survives_artefact_change_then_checker_rebuild() {
+    let mut s = Store::new();
+    let ar = unit("obj/a");
+    let ke = unit("kernel/k");
+    s.insert(
+        ar.clone(),
+        Node::new(Kind::Artefact, None, Some(lbl("a-bytes-v1")), vec![]),
+    )
+    .unwrap();
+    s.insert(
+        ke.clone(),
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic")),
+            Some(lbl("kbin-v1")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    let t_digest = s
+        .insert(
+            t,
+            theorem(
+                "t-stmt",
+                "t-cert",
+                vec![
+                    pin(&s, &ar, EdgeKind::Subject),
+                    pin(&s, &ke, EdgeKind::Attestation),
+                ],
+            ),
+        )
+        .unwrap();
+
+    s.update(
+        &ar,
+        Node::new(Kind::Artefact, None, Some(lbl("a-bytes-v2")), vec![]),
+    )
+    .unwrap();
+    assert_eq!(s.status(&t_digest), Some(Severity::SubjectChanged));
+
+    // The rebuild's own event is only an attestation delta...
+    let rev = s
+        .update(
+            &ke,
+            Node::new(
+                Kind::Kernel,
+                Some(lbl("logic")),
+                Some(lbl("kbin-v2")),
+                vec![],
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        rev.affected.get(&t_digest),
+        Some(&Severity::AttestationStale)
+    );
+
+    // ...but the effective status still holds the unresolved subject mismatch.
+    assert_eq!(s.status(&t_digest), Some(Severity::SubjectChanged));
+    assert!(!s.is_admissible(&t_digest));
+}
+
+#[test]
+fn effective_status_logic_change_is_semantic() {
+    let mut s = Store::new();
+    let ke = unit("kernel/k");
+    s.insert(
+        ke.clone(),
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic-v1")),
+            Some(lbl("kbin")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    let t_digest = s
+        .insert(
+            t,
+            theorem(
+                "t-stmt",
+                "t-cert",
+                vec![pin(&s, &ke, EdgeKind::Attestation)],
+            ),
+        )
+        .unwrap();
+
+    s.update(
+        &ke,
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic-v2")),
+            Some(lbl("kbin")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    assert_eq!(s.status(&t_digest), Some(Severity::SemanticsChanged));
+}
+
+#[test]
+fn effective_status_reformat_is_none() {
+    let mut s = Store::new();
+    let sp = unit("spec/s");
+    s.insert(
+        sp.clone(),
+        Node::new(
+            Kind::Spec,
+            Some(lbl("meaning")),
+            Some(lbl("src-v1")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    let t_digest = s
+        .insert(
+            t,
+            theorem("t-stmt", "t-cert", vec![pin(&s, &sp, EdgeKind::Semantic)]),
+        )
+        .unwrap();
+
+    s.update(
+        &sp,
+        Node::new(
+            Kind::Spec,
+            Some(lbl("meaning")),
+            Some(lbl("src-v2")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    assert_eq!(s.status(&t_digest), None);
+    assert!(s.is_admissible(&t_digest));
+}
+
+#[test]
+fn effective_status_checker_only_rebuild_is_stale() {
+    let mut s = Store::new();
+    let ke = unit("kernel/k");
+    s.insert(
+        ke.clone(),
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic")),
+            Some(lbl("kbin-v1")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    let t_digest = s
+        .insert(
+            t,
+            theorem(
+                "t-stmt",
+                "t-cert",
+                vec![pin(&s, &ke, EdgeKind::Attestation)],
+            ),
+        )
+        .unwrap();
+
+    s.update(
+        &ke,
+        Node::new(
+            Kind::Kernel,
+            Some(lbl("logic")),
+            Some(lbl("kbin-v2")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    assert_eq!(s.status(&t_digest), Some(Severity::AttestationStale));
+}
+
+#[test]
+fn effective_status_repin_is_semantic() {
+    let mut s = Store::new();
+    let sp = unit("spec/s");
+    s.insert(
+        sp.clone(),
+        Node::new(Kind::Spec, Some(lbl("s-sem")), Some(lbl("s-src")), vec![]),
+    )
+    .unwrap();
+
+    let u = unit("lemma/u");
+    s.insert(
+        u.clone(),
+        Node::new(
+            Kind::Theorem,
+            Some(lbl("u-stmt")),
+            Some(lbl("u-cert")),
+            vec![],
+        ),
+    )
+    .unwrap();
+    let t = unit("thm/t");
+    let t_digest = s
+        .insert(
+            t,
+            theorem("t-stmt", "t-cert", vec![pin(&s, &u, EdgeKind::Semantic)]),
+        )
+        .unwrap();
+
+    let rev = s
+        .update(
+            &u,
+            Node::new(
+                Kind::Theorem,
+                Some(lbl("u-stmt")),
+                Some(lbl("u-cert")),
+                vec![pin(&s, &sp, EdgeKind::Semantic)],
+            ),
+        )
+        .unwrap();
+
+    assert_eq!(
+        rev.affected.get(&t_digest),
+        Some(&Severity::SemanticsChanged)
+    );
+    assert_eq!(s.status(&t_digest), Some(Severity::SemanticsChanged));
+}
+
+#[test]
+fn effective_status_closes_over_unchanged_intermediates() {
+    let mut s = Store::new();
+    let sp = unit("spec/s");
+    s.insert(
+        sp.clone(),
+        Node::new(
+            Kind::Spec,
+            Some(lbl("meaning-v1")),
+            Some(lbl("src-v1")),
+            vec![],
+        ),
+    )
+    .unwrap();
+
+    let lemma = unit("lemma/l");
+    s.insert(
+        lemma.clone(),
+        theorem("l-stmt", "l-cert", vec![pin(&s, &sp, EdgeKind::Semantic)]),
+    )
+    .unwrap();
+
+    let top = unit("thm/t");
+    let top_digest = s
+        .insert(
+            top,
+            theorem(
+                "t-stmt",
+                "t-cert",
+                vec![pin(&s, &lemma, EdgeKind::Semantic)],
+            ),
+        )
+        .unwrap();
+
+    // Change the spec but leave the lemma at its old node. The theorem's direct pin is
+    // unchanged; only the transitive closure can see the revocation.
+    s.update(
+        &sp,
+        Node::new(
+            Kind::Spec,
+            Some(lbl("meaning-v2")),
+            Some(lbl("src-v2")),
+            vec![],
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(s.status(&top_digest), Some(Severity::SemanticsChanged));
+}
+
+// ---------------------------------------------------------------------------
 // Model conformance on a synthetic corpus
 //
 // This is a regression test for the *model*, on synthetic data. It is not empirical

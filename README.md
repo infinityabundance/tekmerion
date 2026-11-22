@@ -56,6 +56,12 @@ Revocation reports a severity per affected object:
 - `AttestationStale` — the proof stands; the record of who checked it is stale, so replay is
   enough. This severity does not propagate.
 
+A `Revocation` is the **delta of one update**, not the object's current status: an event
+reports only what it made worse. `Store::status` recomputes effective severity from the
+current head map over the transitive pin closure, and admission reads that. Without the
+distinction, an artefact change followed by a checker rebuild would report only the
+rebuild's attestation delta while the subject mismatch remained unresolved.
+
 Keeping two digests per object — one for meaning, one for bytes — is the whole trick. It is
 also what closes the gap s2n-bignum names in its own `SOUNDNESS.md`: nothing checks that a
 downstream reassembly produced the bytes the proofs were about.
@@ -87,10 +93,12 @@ Measured on 2026-11-22, Rust 1.98.0, this machine:
 
 | Measurement | Value | How |
 |---|---|---|
-| Tests | 30 passing | `cargo test` |
+| Tests | 46 passing | `cargo test` |
 | Refusal sites | 16 | `R01`–`R16` |
 | Valid mutants | 16 (no non-compiling mutants) | `tools/mutate.py` |
 | Mutation score | **16/16 = 1.000** | every disabled refusal is caught |
+| Lifecycle fault sites | 5 | `L01`–`L05`, feature `fault-injection` |
+| Lifecycle mutation score | **5/5 = 1.000** | every lifecycle control is caught |
 | Synthetic corpus | 310 objects, 40 changes | `tests/semantics.rs` |
 | Naive revocation | 240 objects needing reproof | untyped closure over changed digests |
 | Typed revocation | 150 affected: 60 semantic, 60 subject, 30 attestation | this engine |
@@ -102,7 +110,7 @@ discovered by it. It guards the implementation against regression. The empirical
 experiment E3 in `research/02-EXPERIMENTS.md`, which puts real object bytes from
 `s2n-bignum` through the same path.
 
-### The mutation harness
+### The mutation harnesses
 
 `tools/mutate.py` implements invariant 5 — every instrument proves its sensitivity. For each
 refusal site it replaces `refuse!` with the no-op `skip_refusal!` and runs the suite. A
@@ -113,17 +121,31 @@ The technique is not ours. It is published as refusal-site mutation testing
 (arXiv 2608.26183, August 2026), which also reports 112 refusal sites of which 75 could be
 deleted with a green suite. Cite it; do not claim it.
 
+`tools/mutate_lifecycle.py` covers the lifecycle rather than the wire format. The crate has
+an off-by-default `fault-injection` feature and a `fault(code)` switch driven by
+`TEKMERION_FAULT`. Five guarded sites (`L01`–`L05`) disable, respectively, pin handling in
+effective status, the pins comparison in `classify`, closure propagation in `status`,
+attestation edges in `status`, and retention of the superseded node in `update`. The
+harness runs the suite once per code and exits non-zero on any survivor.
+
 ### Wire format
 
 ```text
-TEKMERION-EVIDENCE v1
-kind<TAB>unit<TAB>semantic<TAB>bytes<TAB>pins
+TEKMERION-EVIDENCE v2
+node<TAB>kind<TAB>unit<TAB>semantic<TAB>bytes<TAB>pins
+head<TAB>unit<TAB>hex-digest
 ```
 
-`semantic` and `bytes` are `-` or 64 hex characters. `pins` is empty or a comma-separated
-list of `m:unit@hex` (semantic), `s:unit@hex` (subject), `a:unit@hex` (attestation).
-Documents are order-sensitive: a pin may only reference a unit declared above it. Rendering
-therefore emits a topological order.
+A document is an **immutable node table plus a head map**. Each `node` line declares one
+node and its identity is derived from content, so the line carries no digest. A unit may be
+declared by several `node` lines; its `head` line names the current one. `semantic` and
+`bytes` are `-` or 64 hex characters. `pins` is empty or a comma-separated list of
+`m:unit@hex` (semantic), `s:unit@hex` (subject), `a:unit@hex` (attestation).
+
+Pins must reference a `(unit, digest)` node declared earlier, and heads come after every
+node, so the table is a topological order. Superseded nodes are emitted too: that is what
+lets a dependent keep its stale pin and makes `parse(render(store))` succeed after any
+update. Rendering emits the node table, then the head map.
 
 ---
 
@@ -133,17 +155,19 @@ therefore emits a topological order.
 README.md              this file
 Cargo.toml             crate `tekmerion`, published as 0.1.0
 src/                   typed revocation engine
-tests/                 30 tests, including one per refusal site
+tests/                 46 tests, including one per refusal site and lifecycle status tests
 examples/              reassembly.rs: the gap s2n-bignum names, step by step
 trace/                 failure-side extension to TacticTrace
   exptrace_failure.ml  write-through failure capture, `exptrace_guard`
   fixtures/            wrapper golden file and conformance record pairs
 tools/mutate.py        refusal-site mutation harness
+tools/mutate_lifecycle.py  lifecycle fault-injection harness (feature `fault-injection`)
 tools/patch_wrapper.py rewrites a generated kernel_wrapper.ml, fail-closed
 tools/trace_conformance.py  stock vs patched success records, field by field
 tools/test_write_through.py proves a failure reaches disk before any dump
 tools/selftest.sh      runs every check above in one command
-mutation-report.json   last measured mutation score
+mutation-report.json   last measured parser mutation score
+lifecycle-report.json  last measured lifecycle mutation score
 research/
   TEKMERION-FRONTIER-PROMPT.md   the brief this work audits
   00-VERDICT.md        the verdict, eleven corrections, the three-claim programme
@@ -157,8 +181,10 @@ research/
 
 ```sh
 bash tools/selftest.sh                     # everything below, one command
-cargo test --offline                       # 30 tests
+cargo test --offline                       # 46 tests
+cargo test --offline --features fault-injection  # same suite, lifecycle faults armed
 python3 tools/mutate.py                    # refusal-site mutation score
+python3 tools/mutate_lifecycle.py          # lifecycle mutation score
 cargo run --offline --example reassembly   # the reassembly gap, step by step
 ```
 

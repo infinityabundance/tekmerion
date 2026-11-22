@@ -7,14 +7,10 @@
 //!
 //! It demonstrates the *mechanism*. It is not evidence about any real proof.
 
-use tekmerion::{Digest, EdgeKind, Kind, Node, Pin, Revocation, Severity, Store, UnitId};
+use tekmerion::{Digest, EdgeKind, Kind, Node, Pin, Store, UnitId};
 
 fn lbl(s: &str) -> Digest {
     Digest::of_label(s)
-}
-
-fn status(r: &Revocation, thm: &Digest) -> Option<Severity> {
-    r.affected.get(thm).copied()
 }
 
 fn main() {
@@ -95,7 +91,7 @@ fn main() {
         )
         .unwrap();
     println!("   {}", r.summary());
-    println!("   theorem status: {:?}", status(&r, &thm_d));
+    println!("   theorem status: {:?}", store.status(&thm_d));
     println!("   -> still true, but no longer covers the shipped bytes\n");
 
     println!("3. rebuild the checker binary (logic unchanged)");
@@ -111,8 +107,9 @@ fn main() {
         )
         .unwrap();
     println!("   {}", r.summary());
-    println!("   theorem status: {:?}", status(&r, &thm_d));
-    println!("   -> replay is enough; the proof was not invalidated\n");
+    println!("   theorem status: {:?}", store.status(&thm_d));
+    println!("   -> the rebuild's event is only attestation-stale; the earlier subject");
+    println!("      mismatch is still effective, so the replay alone is not enough\n");
 
     println!("4. change the meaning of the specification");
     let r = store
@@ -127,6 +124,6 @@ fn main() {
         )
         .unwrap();
     println!("   {}", r.summary());
-    println!("   theorem status: {:?}", status(&r, &thm_d));
+    println!("   theorem status: {:?}", store.status(&thm_d));
     println!("   -> the proof must be redone");
 }

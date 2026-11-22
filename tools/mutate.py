@@ -80,7 +80,9 @@ def main() -> int:
             shutil.copytree(
                 ROOT,
                 work,
-                ignore=shutil.ignore_patterns("target", ".git", "*.md"),
+                # `.bench` holds benchmark artefacts (including dangling symlinks) and is
+                # never needed by the test suite.
+                ignore=shutil.ignore_patterns("target", ".git", ".bench", "*.md"),
             )
             for rel in FILES:
                 path = work / rel

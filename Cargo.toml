@@ -15,5 +15,11 @@ exclude = ["/target", "/.github"]
 [dependencies]
 sha2 = "0.10"
 
+[features]
+# Off by default. `tools/mutate_lifecycle.py` enables this feature and drives a
+# deterministic lifecycle fault through TEKMERION_FAULT.
+default = []
+fault-injection = []
+
 [profile.test]
 opt-level = 1

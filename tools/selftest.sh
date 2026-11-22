@@ -25,7 +25,7 @@ cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 
 # ---------------------------------------------------------------------------
-section "1/5 OCaml syntax check (syntax only; type-checking needs HOL Light)"
+section "1/6 OCaml syntax check (syntax only; type-checking needs HOL Light)"
 
 # Compile a copy inside the temp directory so .cmo/.cmi artifacts never land
 # in the repository, wherever ocamlc decides to put them.
@@ -41,7 +41,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "2/5 patch_wrapper.py --self-test"
+section "2/6 patch_wrapper.py --self-test"
 if python3 tools/patch_wrapper.py --self-test; then
   printf 'OK: patch_wrapper self-test passed\n'
 else
@@ -49,7 +49,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "3/5 trace_conformance.py --self-test"
+section "3/6 trace_conformance.py --self-test"
 if python3 tools/trace_conformance.py --self-test; then
   printf 'OK: trace_conformance self-test passed\n'
 else
@@ -57,7 +57,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "4/5 write-through self-test (module compiled against stubs, no dump)"
+section "4/6 write-through self-test (module compiled against stubs, no dump)"
 if python3 tools/test_write_through.py; then
   printf 'OK: write-through self-test passed\n'
 else
@@ -65,18 +65,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "5/5a existing Rust suite (cargo test --offline)"
+section "5/6a existing Rust suite (cargo test --offline)"
 if cargo test --offline; then
   printf 'OK: cargo test --offline passed\n'
 else
   fail "cargo test --offline failed"
 fi
 
-section "5/5b existing mutation harness (tools/mutate.py)"
+section "5/6b existing mutation harness (tools/mutate.py)"
 if python3 tools/mutate.py; then
   printf 'OK: tools/mutate.py passed\n'
 else
   fail "tools/mutate.py failed"
+fi
+
+section "6/6 lifecycle mutation harness (tools/mutate_lifecycle.py)"
+if python3 tools/mutate_lifecycle.py; then
+  printf 'OK: tools/mutate_lifecycle.py passed\n'
+else
+  fail "tools/mutate_lifecycle.py failed"
 fi
 
 # ---------------------------------------------------------------------------

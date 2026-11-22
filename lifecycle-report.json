@@ -1,0 +1,15 @@
+{
+  "sites": {
+    "L01": "KILLED",
+    "L02": "KILLED",
+    "L03": "KILLED",
+    "L04": "KILLED",
+    "L05": "KILLED"
+  },
+  "valid_mutants": 5,
+  "killed": 5,
+  "survived": 0,
+  "invalid_mutants": 0,
+  "lifecycle_mutation_score": 1.0,
+  "parser_mutation_score": "16/16 = 1.000"
+}

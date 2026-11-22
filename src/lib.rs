@@ -28,6 +28,14 @@
 //! (the proof no longer applies to the artefact, but its statement is unchanged), and
 //! [`Severity::SemanticsChanged`] (the proof must be redone).
 //!
+//! ## Event delta versus effective status
+//!
+//! A [`Revocation`] (alias [`AffectedByEvent`]) is **the delta of one event**: what the
+//! update just made worse. It is not current status. A later event can report only its own
+//! small delta while an older, more severe mismatch remains unresolved. Admission must
+//! therefore read [`Store::status`], which recomputes the effective severity of an object
+//! from the current head map over the whole transitive pin closure.
+//!
 //! ## What this crate does *not* establish
 //!
 //! It does not decide whether any theorem is true. Revocation is a graph property of
@@ -38,8 +46,10 @@
 //! ## Design invariants enforced here
 //!
 //! 1. Object identity is *derived* from content; it is never supplied by a caller.
-//! 2. Construction is monotone: a node may only pin an already-declared unit at its
-//!    current digest, so the graph is acyclic by construction.
+//! 2. Construction is monotone: through the API, a node may only pin a declared unit at
+//!    its current digest, so the graph is acyclic by construction. A parsed document's
+//!    node table may contain historical pins, but a pin must still name a node declared
+//!    earlier, which gives the same acyclicity guarantee.
 //! 3. Every unrepresentable or ambiguous input is refused rather than coerced. Refusal
 //!    sites carry stable identifiers (`R01`…`R16`) so that
 //!    `tools/mutate.py` can prove each one is load-bearing.
@@ -50,6 +60,29 @@ use std::fmt;
 use sha2::{Digest as _, Sha256};
 
 pub mod wire;
+
+// ---------------------------------------------------------------------------
+// Lifecycle fault injection
+// ---------------------------------------------------------------------------
+
+/// Deterministic lifecycle fault switch, used only by `tools/mutate_lifecycle.py`.
+///
+/// With the `fault-injection` feature disabled this is a constant `false` and does not
+/// read the environment. With the feature enabled, `TEKMERION_FAULT` may name one or
+/// more comma-separated lifecycle codes (`L01`…`L05`).
+pub fn fault(code: &str) -> bool {
+    #[cfg(feature = "fault-injection")]
+    {
+        std::env::var("TEKMERION_FAULT")
+            .map(|v| v.split(',').any(|c| c.trim() == code))
+            .unwrap_or(false)
+    }
+    #[cfg(not(feature = "fault-injection"))]
+    {
+        let _ = code;
+        false
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Refusal sites
@@ -97,7 +130,7 @@ pub enum Error {
     /// R07
     UnknownUnit(String),
     /// R08
-    PinDigestNotCurrent(String),
+    PinDigestNotDeclared(String),
     /// R09
     UnknownEdgeKind(String),
     /// R10
@@ -114,6 +147,12 @@ pub enum Error {
     UnknownUnitOnUpdate(String),
     /// R16
     DuplicateUnit(String),
+    /// R10: the first field is not a known record tag.
+    UnknownRecord(String),
+    /// R03: a `node` record appeared after the head map started.
+    RecordAfterHead,
+    /// R03: a unit has declared nodes but no head.
+    MissingHead(String),
     /// Internal inconsistency (should be unreachable through the public API).
     Corrupt(&'static str),
 }
@@ -132,8 +171,8 @@ impl fmt::Display for Error {
                 write!(f, "R06: digest must be 64 hex characters, got {n}")
             }
             Error::UnknownUnit(u) => write!(f, "R07: reference to undeclared unit {u:?}"),
-            Error::PinDigestNotCurrent(u) => {
-                write!(f, "R08: pin on {u:?} is not at its current digest")
+            Error::PinDigestNotDeclared(u) => {
+                write!(f, "R08: reference to a node digest not declared for {u:?}")
             }
             Error::UnknownEdgeKind(k) => write!(f, "R09: unknown edge kind {k:?}"),
             Error::UnknownKind(k) => write!(f, "R10: unknown evidence kind {k:?}"),
@@ -148,6 +187,9 @@ impl fmt::Display for Error {
             ),
             Error::UnknownUnitOnUpdate(u) => write!(f, "R15: cannot update undeclared unit {u:?}"),
             Error::DuplicateUnit(u) => write!(f, "R16: unit {u:?} declared twice"),
+            Error::UnknownRecord(r) => write!(f, "R10: unknown record tag {r:?}"),
+            Error::RecordAfterHead => write!(f, "R03: node record after the head map"),
+            Error::MissingHead(u) => write!(f, "R03: unit {u:?} has nodes but no head"),
             Error::Corrupt(w) => write!(f, "internal inconsistency: {w}"),
         }
     }
@@ -479,6 +521,44 @@ impl Node {
         }
     }
 
+    /// The single validity path shared by the parser and by [`Store::insert`] / [`Store::update`].
+    ///
+    /// Field requirements are part of a kind's meaning; a caller must not be able to build a
+    /// node through the public API that a document could never contain. Duplicate pins are
+    /// also refused here so that the API and the wire format agree exactly.
+    pub fn validate(&self, unit: &UnitId) -> Result<(), Error> {
+        if self.kind.requires(Field::Semantic) && self.semantic.is_none() {
+            crate::refuse!(
+                R11,
+                Error::MissingRequiredField {
+                    unit: unit.as_str().to_string(),
+                    field: "semantic",
+                }
+            );
+        }
+        if self.kind.requires(Field::Bytes) && self.bytes.is_none() {
+            crate::refuse!(
+                R11,
+                Error::MissingRequiredField {
+                    unit: unit.as_str().to_string(),
+                    field: "bytes",
+                }
+            );
+        }
+
+        let mut seen: BTreeSet<(u8, String, Digest)> = BTreeSet::new();
+        for p in &self.pins {
+            let key = (p.kind.tag(), p.unit.as_str().to_string(), p.digest);
+            if !seen.insert(key) {
+                crate::refuse!(
+                    R13,
+                    Error::DuplicatePin(format!("{}:{}", p.kind.sigil(), p.unit))
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// The object's identity: derived from content, including its typed pins.
     pub fn digest(&self) -> Digest {
         let mut c = Canon::new("tekmerion/evidence/v1");
@@ -506,9 +586,16 @@ impl Node {
 /// An append-only evidence store.
 #[derive(Clone, Debug, Default)]
 pub struct Store {
+    /// Current head of each unit: the head map.
     units: BTreeMap<UnitId, Digest>,
+    /// First unit that declared each node digest. Kept forever so [`Store::unit_of`] can
+    /// name historical nodes; it is not a head map.
     names: BTreeMap<Digest, UnitId>,
+    /// The immutable node table. Superseded nodes stay here: dependents still pin them.
     nodes: BTreeMap<Digest, Node>,
+    /// Node digest -> every unit that declared it. Identity is content-only, so identical
+    /// content may legitimately appear under more than one unit name.
+    declared: BTreeMap<Digest, BTreeSet<UnitId>>,
     /// dependency digest -> (dependent digest, how the dependent uses it)
     rev: BTreeMap<Digest, Vec<(Digest, EdgeKind)>>,
     /// dependency unit -> (dependent digest, pinned digest, how the dependent uses it).
@@ -531,6 +618,7 @@ impl Store {
         self.units.get(u).copied()
     }
 
+    /// The first unit that declared this node digest, including superseded nodes.
     pub fn unit_of(&self, d: &Digest) -> Option<&UnitId> {
         self.names.get(d)
     }
@@ -541,6 +629,36 @@ impl Store {
 
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty()
+    }
+
+    /// The head map, in canonical (unit-name) order.
+    pub fn units(&self) -> impl Iterator<Item = (&UnitId, &Digest)> {
+        self.units.iter()
+    }
+
+    /// The whole immutable node table, including superseded nodes.
+    pub fn nodes(&self) -> impl Iterator<Item = (&Digest, &Node)> {
+        self.nodes.iter()
+    }
+
+    pub(crate) fn declared_units(&self, d: &Digest) -> Option<&BTreeSet<UnitId>> {
+        self.declared.get(d)
+    }
+
+    /// Every unit name that has at least one declared node, sorted and deduplicated.
+    pub(crate) fn declared_unit_names(&self) -> Vec<UnitId> {
+        let mut names: Vec<UnitId> = self
+            .declared
+            .values()
+            .flat_map(|units| units.iter().cloned())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    pub(crate) fn has_head(&self, unit: &UnitId) -> bool {
+        self.units.contains_key(unit)
     }
 
     /// Direct dependents of a digest, with the edge kind that connects them.
@@ -580,14 +698,64 @@ impl Store {
         out
     }
 
+    /// Every node digest in an order where pins name a digest emitted earlier.
+    ///
+    /// This is the order the v2 node table requires. Historical nodes are included, which
+    /// is exactly what makes stale pins serialisable.
+    pub(crate) fn topological_nodes(&self) -> Vec<Digest> {
+        fn visit(store: &Store, d: Digest, seen: &mut BTreeSet<Digest>, out: &mut Vec<Digest>) {
+            if !seen.insert(d) {
+                return;
+            }
+            if let Some(node) = store.nodes.get(&d) {
+                let mut deps: Vec<Digest> = node.pins.iter().map(|p| p.digest).collect();
+                deps.sort();
+                deps.dedup();
+                for dep in deps {
+                    visit(store, dep, seen, out);
+                }
+            }
+            out.push(d);
+        }
+
+        let mut keys: Vec<Digest> = self.nodes.keys().copied().collect();
+        keys.sort();
+        let mut seen = BTreeSet::new();
+        let mut out = Vec::new();
+        for k in keys {
+            visit(self, k, &mut seen, &mut out);
+        }
+        out
+    }
+
+    /// API-side pin rule: a new node pins each unit at that unit's current head.
     fn check_pins(&self, node: &Node) -> Result<(), Error> {
         for p in &node.pins {
             match self.units.get(&p.unit) {
                 None => crate::refuse!(R07, Error::UnknownUnit(p.unit.as_str().to_string())),
-                Some(current) if *current != p.digest => {
-                    crate::refuse!(R08, Error::PinDigestNotCurrent(p.unit.as_str().to_string()))
-                }
+                Some(current) if *current != p.digest => crate::refuse!(
+                    R08,
+                    Error::PinDigestNotDeclared(p.unit.as_str().to_string())
+                ),
                 Some(_) => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Wire-side pin rule: a pin names a `(unit, digest)` node declared earlier.
+    fn check_declared_pins(&self, node: &Node) -> Result<(), Error> {
+        for p in &node.pins {
+            let unit_known = self.declared.values().any(|units| units.contains(&p.unit));
+            if !unit_known {
+                crate::refuse!(R07, Error::UnknownUnit(p.unit.as_str().to_string()));
+            }
+            match self.declared.get(&p.digest) {
+                Some(units) if units.contains(&p.unit) => {}
+                _ => crate::refuse!(
+                    R08,
+                    Error::PinDigestNotDeclared(p.unit.as_str().to_string())
+                ),
             }
         }
         Ok(())
@@ -598,26 +766,59 @@ impl Store {
         if self.units.contains_key(&unit) {
             crate::refuse!(R16, Error::DuplicateUnit(unit.as_str().to_string()));
         }
+        node.validate(&unit)?;
         self.check_pins(&node)?;
         let d = node.digest();
-        self.apply(unit, d, node);
+        self.record(unit.clone(), d, node);
+        self.units.insert(unit, d);
         Ok(d)
     }
 
-    fn apply(&mut self, unit: UnitId, d: Digest, node: Node) {
+    /// Add an immutable node to the table. Does not touch the head map.
+    fn record(&mut self, unit: UnitId, d: Digest, node: Node) {
         for p in &node.pins {
-            self.rev.entry(p.digest).or_default().push((d, p.kind));
-            self.rev_unit
-                .entry(p.unit.clone())
-                .or_default()
-                .push((d, p.digest, p.kind));
+            let dependents = self.rev.entry(p.digest).or_default();
+            if !dependents.contains(&(d, p.kind)) {
+                dependents.push((d, p.kind));
+            }
+            let by_unit = self.rev_unit.entry(p.unit.clone()).or_default();
+            if !by_unit.contains(&(d, p.digest, p.kind)) {
+                by_unit.push((d, p.digest, p.kind));
+            }
         }
-        self.names.insert(d, unit.clone());
-        self.units.insert(unit, d);
+        self.declared.entry(d).or_default().insert(unit.clone());
+        self.names.entry(d).or_insert(unit);
         self.nodes.insert(d, node);
     }
 
-    /// Replace a unit's content and return everything whose status changed.
+    /// Parser constructor: validate, require pins to be declared earlier, record only.
+    pub(crate) fn declare_checked(&mut self, unit: UnitId, node: Node) -> Result<Digest, Error> {
+        node.validate(&unit)?;
+        self.check_declared_pins(&node)?;
+        let d = node.digest();
+        self.record(unit, d, node);
+        Ok(d)
+    }
+
+    /// Parser head-map entry: exactly one head per unit, pointing at a declared node.
+    pub(crate) fn declare_head(&mut self, unit: UnitId, d: Digest) -> Result<(), Error> {
+        if self.units.contains_key(&unit) {
+            crate::refuse!(R16, Error::DuplicateUnit(unit.as_str().to_string()));
+        }
+        let unit_known = self.declared.values().any(|units| units.contains(&unit));
+        if !unit_known {
+            crate::refuse!(R07, Error::UnknownUnit(unit.as_str().to_string()));
+        }
+        match self.declared.get(&d) {
+            Some(units) if units.contains(&unit) => {}
+            _ => crate::refuse!(R08, Error::PinDigestNotDeclared(unit.as_str().to_string())),
+        }
+        self.units.insert(unit, d);
+        Ok(())
+    }
+
+    /// Replace a unit's content and return the **event delta**: everything this event
+    /// made worse. This is [`AffectedByEvent`], not current status; see [`Store::status`].
     ///
     /// The caller does not need to say *what* changed: old and new nodes are compared.
     /// A change is classified per edge kind (see [`EdgeKind`]), which is the whole point
@@ -637,6 +838,7 @@ impl Store {
             return Err(Error::Corrupt("stored node does not match its identity"));
         }
 
+        node.validate(unit)?;
         self.check_pins(&node)?;
         let new_digest = node.digest();
 
@@ -652,8 +854,14 @@ impl Store {
             }
         }
 
-        self.names.remove(&old_digest);
-        self.apply(unit.clone(), new_digest, node);
+        self.record(unit.clone(), new_digest, node);
+        self.units.insert(unit.clone(), new_digest);
+
+        if crate::fault("L05") && new_digest != old_digest {
+            // Fault L05: forget the superseded node, so dependents' stale pins no longer
+            // resolve when status is recomputed or the store is rendered.
+            self.nodes.remove(&old_digest);
+        }
 
         let affected = self.propagate(direct);
         Ok(Revocation {
@@ -691,32 +899,154 @@ impl Store {
         }
         out
     }
+
+    /// **Effective** status of an object against the current head map.
+    ///
+    /// Walks every pin in the transitive closure, compares the pinned node with its
+    /// unit's current head, classifies the comparison through the pin's edge kind, and
+    /// takes the maximum. Memoised. The graph is acyclic by construction, but a visiting
+    /// set is still used so a corrupt store cannot recurse forever.
+    ///
+    /// `None` means no revocation is effective (or the digest is not in this store).
+    /// Admission decisions must use this, never a [`Revocation`] event delta.
+    pub fn status(&self, d: &Digest) -> Option<Severity> {
+        let mut memo: BTreeMap<Digest, Option<Severity>> = BTreeMap::new();
+        let mut visiting: BTreeSet<Digest> = BTreeSet::new();
+        self.status_inner(d, &mut memo, &mut visiting)
+    }
+
+    fn status_inner(
+        &self,
+        d: &Digest,
+        memo: &mut BTreeMap<Digest, Option<Severity>>,
+        visiting: &mut BTreeSet<Digest>,
+    ) -> Option<Severity> {
+        if let Some(cached) = memo.get(d) {
+            return *cached;
+        }
+        if !visiting.insert(*d) {
+            return None;
+        }
+
+        let mut worst: Option<Severity> = None;
+        if let Some(node) = self.nodes.get(d) {
+            // Fault L01: status ignores pins, so nothing is ever effectively revoked.
+            if !crate::fault("L01") {
+                for p in &node.pins {
+                    // Fault L04: status ignores attestation edges.
+                    if p.kind == EdgeKind::Attestation && crate::fault("L04") {
+                        continue;
+                    }
+
+                    if let (Some(pinned), Some(head)) = (
+                        self.nodes.get(&p.digest),
+                        self.units.get(&p.unit).and_then(|h| self.nodes.get(h)),
+                    ) {
+                        if let Some(sev) = classify(pinned, head, p.kind) {
+                            worst = Some(worst.map_or(sev, |w| w.max(sev)));
+                        }
+                    }
+
+                    // Fault L03: stop at the direct edge (the event delta) instead of
+                    // propagating effective status through the transitive closure.
+                    if !crate::fault("L03") {
+                        if let Some(deeper) = self.status_inner(&p.digest, memo, visiting) {
+                            worst = Some(worst.map_or(deeper, |w| w.max(deeper)));
+                        }
+                    }
+                }
+            }
+        }
+
+        visiting.remove(d);
+        memo.insert(*d, worst);
+        worst
+    }
+
+    /// Admission: an object is admissible only when it exists and has no effective
+    /// revocation. Reads [`Store::status`] only.
+    pub fn is_admissible(&self, d: &Digest) -> bool {
+        self.nodes.contains_key(d) && self.status(d).is_none()
+    }
+}
+
+/// The class of a change, as seen through an edge of a given kind.
+///
+/// This names one event. It is deliberately not called "status": a bytes-only change is
+/// a subject event through a [`EdgeKind::Subject`] edge and an attestation event through
+/// an [`EdgeKind::Attestation`] edge.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ChangeEvent {
+    Semantic,
+    Subject,
+    Attestation,
+}
+
+impl ChangeEvent {
+    /// Detect the change event of `old` to `new` through an edge of kind `edge`.
+    pub fn detect(old: &Node, new: &Node, edge: EdgeKind) -> Option<Self> {
+        // A re-pin (same semantic and bytes, different pins) changes the derivation, so
+        // it is a semantic event. Fault L02 drops this comparison.
+        let pins_changed = !crate::fault("L02") && !pins_equal(&old.pins, &new.pins);
+        if old.kind != new.kind || old.semantic != new.semantic || pins_changed {
+            return Some(ChangeEvent::Semantic);
+        }
+        if old.bytes != new.bytes {
+            return match edge {
+                EdgeKind::Semantic => None,
+                EdgeKind::Subject => Some(ChangeEvent::Subject),
+                EdgeKind::Attestation => Some(ChangeEvent::Attestation),
+            };
+        }
+        None
+    }
+
+    pub fn severity(self) -> Severity {
+        match self {
+            ChangeEvent::Semantic => Severity::SemanticsChanged,
+            ChangeEvent::Subject => Severity::SubjectChanged,
+            ChangeEvent::Attestation => Severity::AttestationStale,
+        }
+    }
+}
+
+/// Pins are a set, so order must not matter.
+fn pins_equal(a: &[Pin], b: &[Pin]) -> bool {
+    fn key(p: &Pin) -> (u8, UnitId, Digest) {
+        (p.kind.tag(), p.unit.clone(), p.digest)
+    }
+    let mut x: Vec<_> = a.iter().map(key).collect();
+    let mut y: Vec<_> = b.iter().map(key).collect();
+    x.sort();
+    y.sort();
+    x == y
 }
 
 /// Classify a change of `old` to `new` as seen through an edge of kind `k`.
 fn classify(old: &Node, new: &Node, k: EdgeKind) -> Option<Severity> {
-    if old.kind != new.kind || old.semantic != new.semantic {
-        return Some(Severity::SemanticsChanged);
-    }
-    if old.bytes != new.bytes {
-        return match k {
-            EdgeKind::Semantic => None,
-            EdgeKind::Subject => Some(Severity::SubjectChanged),
-            EdgeKind::Attestation => Some(Severity::AttestationStale),
-        };
-    }
-    None
+    ChangeEvent::detect(old, new, k).map(ChangeEvent::severity)
 }
 
-/// The result of one change.
+/// The **per-event** result of one update: what that event made worse.
+///
+/// This is an event delta, not current status. See [`AffectedByEvent`]. After several
+/// updates, the object with the worst effective status may not appear here at all (for
+/// example, an unresolved subject mismatch followed by a checker rebuild reports only the
+/// rebuild's attestation delta). Admission must use [`Store::status`].
 #[derive(Clone, Debug)]
 pub struct Revocation {
     pub unit: UnitId,
     pub old: Digest,
     pub new: Digest,
-    /// Affected object digest -> severity. Contains only objects whose recorded status changed.
+    /// Affected object digest -> severity, for this event only.
     pub affected: BTreeMap<Digest, Severity>,
 }
+
+/// The set of objects affected by one [`ChangeEvent`].
+///
+/// Alias of [`Revocation`], named for what it is: an event delta. It is not effective
+/// status; use [`Store::status`] for admission.
+pub type AffectedByEvent = Revocation;
 
 impl Revocation {
     pub fn is_empty(&self) -> bool {

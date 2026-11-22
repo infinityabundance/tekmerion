@@ -63,31 +63,22 @@ Every item below came from an external review or from the programme's own audit.
 
 ## B. Revocation-engine lifecycle hardening (external code review)
 
-- [ ] **B1. Round-trip after update.**
-  `Store::update` keeps dependents pinned to an old digest; `wire::render` serializes the current unit
-  digest; `wire::parse` requires pins to match the current digest. So `parse(render(store))` fails with
-  `R08` for any store containing a stale pin.
-  *Acceptance:* redesign the wire format as an immutable node table plus a head map, so pins reference
-  node digests that need only exist. Regression test `parse(render(s)) == s` after every class of update
-  (semantic, subject, attestation, pin re-point).
+- [x] **B1. Round-trip after update.**
+  Done: wire v2 is an immutable node table plus head map; pins name nodes declared earlier
+  and rendering emits superseded nodes too. `parse(render(s))` is tested after semantic,
+  subject, attestation and re-pin updates.
 
-- [ ] **B2. Shared validated constructor.**
-  `wire::parse` checks required semantic/bytes per `Kind`; `Store::insert`/`update` do not. A caller can
-  insert `Node::new(Kind::Theorem, None, None, vec![])` that the parser would refuse.
-  *Acceptance:* one validation path used by parser and public API; invalid states unrepresentable where
-  practical; test that the API refuses what the parser refuses.
+- [x] **B2. Shared validated constructor.**
+  Done: `Node::validate` is the single path used by `wire::parse`, `Store::insert` and
+  `Store::update`; a test asserts the API refuses exactly what the parser refuses.
 
-- [ ] **B3. Separate event delta from effective status.**
-  `Revocation` reports one update's effect. Consumed as current status it is wrong: after an artefact
-  change and a checker rebuild, a theorem reports `AttestationStale` while the subject mismatch is still
-  unresolved. `classify` also ignores changed pins when `semantic` and `bytes` are unchanged.
-  *Acceptance:* introduce `ChangeEvent`, `AffectedByEvent`, and `EffectiveEvidenceStatus`; admission reads
-  only the last; `classify` compares pins; tests for the artefact-then-rebuild sequence.
+- [x] **B3. Separate event delta from effective status.**
+  Done: added `ChangeEvent`, `AffectedByEvent` and `Store::status` over the transitive pin
+  closure; `classify` treats a re-pin as semantic; admission uses `is_admissible`/`status`.
 
-- [ ] **B4. Mutation controls for lifecycle, not just parsing.**
-  The 16 refusal sites cover the wire format. Nothing proves the lifecycle semantics.
-  *Acceptance:* mutation controls for stale-pin propagation, repeated updates, revalidation, and
-  snapshot/restore; report the score next to the existing 16/16.
+- [x] **B4. Mutation controls for lifecycle, not just parsing.**
+  Done: off-by-default `fault-injection` feature with `L01`–`L05` guarded sites and
+  `tools/mutate_lifecycle.py`; measured 5/5 killed next to the parser's 16/16.
 
 ---
 
