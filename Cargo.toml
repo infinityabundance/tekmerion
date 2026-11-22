@@ -1,0 +1,19 @@
+[package]
+name = "tekmerion"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Typed, content-addressed revocation for kernel-checked proof evidence"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/infinityabundance/tekmerion"
+homepage = "https://github.com/infinityabundance/tekmerion"
+readme = "README.md"
+keywords = ["formal-verification", "proof-assistant", "hol-light", "provenance", "revocation"]
+categories = ["development-tools", "science"]
+exclude = ["/target", "/.github"]
+
+[dependencies]
+sha2 = "0.10"
+
+[profile.test]
+opt-level = 1

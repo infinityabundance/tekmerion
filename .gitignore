@@ -1,0 +1,9 @@
+/target
+*.cmo
+*.cmi
+*.cmx
+*.cma
+*.cmxa
+*.o
+*.a
+.DS_Store

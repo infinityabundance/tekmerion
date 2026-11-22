@@ -1,0 +1,41 @@
+[
+  {
+    "tactic":"REWRITE_TAC",
+    "definition_line_number": {
+       "file_path": "hol.ml",
+       "line": 245
+    },
+    "user_line_number": {
+       "file_path": "proof.ml",
+       "line": 57
+    },
+    "arg_names": ["thms"],
+    "arg_types": ["thm list"],
+    "arg_values": ["[]"],
+    "arg_exprs": ["[]"],
+    "goal_before": "|- x + 0 = x",
+    "goals_after": [{"goal": "|- x + 0 = x", "added_assumptions": [], "removed_assumptions": []}],
+    "num_subgoals": 1
+  },
+  {
+    "tactic":"REWRITE_TAC",
+    "definition_line_number": {
+       "file_path": "hol.ml",
+       "line": 245
+    },
+    "user_line_number": {
+       "file_path": "proof.ml",
+       "line": 61
+    },
+    "arg_names": ["thms"],
+    "arg_types": ["thm list"],
+    "arg_values": ["[ADD_0]"],
+    "arg_exprs": ["[ADD_0]"],
+    "goal_before": "[x = x] |- x + 0 = x",
+    "goals_after": [
+      {"goal": "|- x = x", "added_assumptions": [], "removed_assumptions": ["x = x"]},
+      {"goal": "|- x + 0 = x", "added_assumptions": ["x = x"], "removed_assumptions": []}
+    ],
+    "num_subgoals": 3
+  }
+]

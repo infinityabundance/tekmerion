@@ -1,0 +1,25 @@
+{
+  "sites": {
+    "R01": "KILLED",
+    "R02": "KILLED",
+    "R03": "KILLED",
+    "R04": "KILLED",
+    "R05": "KILLED",
+    "R06": "KILLED",
+    "R07": "KILLED",
+    "R08": "KILLED",
+    "R09": "KILLED",
+    "R10": "KILLED",
+    "R11": "KILLED",
+    "R12": "KILLED",
+    "R13": "KILLED",
+    "R14": "KILLED",
+    "R15": "KILLED",
+    "R16": "KILLED"
+  },
+  "valid_mutants": 16,
+  "killed": 16,
+  "survived": 0,
+  "invalid_mutants": 0,
+  "mutation_score": 1.0
+}
