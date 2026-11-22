@@ -193,3 +193,118 @@ Every item below came from an external review or from the programme's own audit.
 4. F1–F3 (environment gate as far as credentials allow).
 5. D1–D4 (the pivot; the only route to beating the bar).
 6. A5–A8, E, G (rewrite the plan around the pivot; keep the novelty register current).
+
+---
+
+# PART II — v2 programme, CERTCUT, N1–N12 (added 2026-11-22)
+
+Supersedes the C1–C3 ordering. Keeps the corrections in PART I except where `X1`/`X2` say
+otherwise. Nothing below is dropped; each item is one dispatchable unit.
+
+## V. Frontier facts to verify and freeze (before any claim)
+
+- [ ] **V1.** Verify AlphaProof Code (DeepMind, 2026-11-10): ~6.3M Lean lines, compiled
+  `libsignal`, machine-code level, stated assumptions. Store a receipt.
+- [ ] **V2.** Verify Aria (arXiv 2607.06341): 4,257 Iris lemmas, 318 reglang lemmas, code
+  agent + kernel harness, no fixed tactic strategy.
+- [ ] **V3.** Verify Anthropic + Theorem (2026-10-22): 123 libraries / 239 entry points,
+  RISC-V, no-crash properties only, no functional correctness, no constant time.
+- [ ] **V4.** Verify `s2n-bignum/doc/program_equivalence.md` and `arm/proofs/equiv.ml`
+  (2,392 lines, 11 ARM proof files).
+- [ ] **V5.** Resolve the corpus-count conflict: paper 2,284 vs poster 2,301 vs leaderboard
+  2,622. Pin one SHA, one count, one attempt budget per claim.
+- [ ] **V6.** Record that no agent entry exists on the leaderboard as of 2026-11-22.
+
+## M. v2 mechanisms
+
+- [ ] **M-A.** De-optimisation as a proof strategy: agent writes a simple twin; prove twin;
+  discharge twin ≡ shipped with `ensures2`; compose. Metric: FC solve with vs without twin.
+- [ ] **M-B.** External certified algebra into HOL Light object-code proofs: Gröbner /
+  ideal-membership cofactors, in-kernel ring check, LRAT for bit-width side conditions.
+- [ ] **M-C.** Executable ISA model as a cheap falsifier: run every proposed invariant on the
+  machine model before the kernel. Metric: kernel calls per accepted proof, false invariants
+  reaching the kernel.
+- [ ] **M-D.** Cross-ISA proof transport from the system's own proved lemmas; cache holds no
+  human proof text. Metric: conditional x86 solve rate vs unconditional, order ablated.
+- [ ] **M-E.** DSFB on symbolic-simulation traces: per-step term size, abbreviation count,
+  open side conditions; typed early-cutoff reason instead of timeout.
+- [ ] **M-F.** rustc-generated P-256 objects against s2n-bignum's own specification; no new
+  ISA model; contamination-free held-out set by construction.
+
+## N. N1–N12
+
+- [ ] **N1.** Proof-term residuals: partial proof term with typed holes is the state; residual
+  is hole count, hole type complexity, unification failure pair. Compare against goal-size
+  pruning at equal budget.
+- [ ] **N2.** CEGIS for lemmas: SMT counterexample → generalized lemma → kernel proof; count
+  only lemmas reused in another proof.
+- [ ] **N3.** Conformal abstention for doomed branches: preregistered coverage; fail closed if
+  calibration degrades.
+- [ ] **N4.** Dense residual reward `r_t = -ΔGoalComplexity - λ·KernelCalls +
+  μ·CertificateProgress`; sparse vs dense at equal budget.
+- [ ] **N5.** Proof repair as semantic transport along a SemantEq-admissible diff; zero-search
+  transport rate, with the theorem statement guarded.
+- [ ] **N6.** Dual-logic acceptance with a translation certificate; planted translation bugs
+  (binder capture, definition shadowing, implicit-argument mismatch) must be caught.
+- [ ] **N7.** Slice ISA equivalence over the instructions the shipped kernel actually executes;
+  bind to the slice digest; mutation controls must fire.
+- [ ] **N8.** Relational leakage by transformation: prove the transformer once; leaky control
+  variant must be distinguished or the build fails.
+- [ ] **N9.** Cross-logic failure intersection (HOL Light vs Lean) as a diagnosis channel that
+  feeds N2; precision = intersected subgoals that unblock the original proof.
+- [ ] **N10.** Proof difficulty as a specification-health metric; detect weakened postconditions
+  (e.g. Montgomery `out < m` dropped) by proof-difficulty collapse plus mutation sensitivity.
+- [ ] **N11.** GPU-parallel certificate checking with CPU aggregation and recheck; target 2×
+  replay at identical accepted theorems.
+- [ ] **N12.** SemantEq-preserving transforms as a contamination probe; original-minus-transform
+  gap is the memorisation score.
+
+## C. CERTCUT (RFC execution)
+
+- [ ] **C.1.** Adopt CERTCUT as the primary research bet: automatic cutpoints and arithmetic
+  bridge lemmas, every one kernel-checked, original theorem unchanged.
+- [ ] **C.2.** Gates G0 (frozen comparator) → G1 (real end-to-end tracing) → G2 (first certified
+  cutpoint) → G3 (generalised lemma reused on a held-out family) → G4 (benchmark
+  confrontation) → G5 (production-relevant theorem).
+- [ ] **C.3.** Arms A0–A6 plus leave-one-out L-x, same per-task budget in tokens, wall clock,
+  kernel calls, hardware.
+- [ ] **C.4.** Splits S1 (public FC, obfuscated variant), S2 (temporal hold-out by file-add
+  date), S3 (openssl-rs objects).
+- [ ] **C.5.** Types: `AttemptOutcome`, `Intervention`; `KernelAccepted` constructible only
+  from a verified response of the pinned HOL Light process.
+- [ ] **C.6.** Modules: harness, trace, obligation, certcut, strategy, evidence, frontier.
+  Do not start with fourteen crates.
+- [ ] **C.7.** Reject list: new Rust kernel as first deliverable; forecast accuracy as a
+  frontier claim; 6.35% vs 10.26% as a like-for-like comparison; counting near-duplicate
+  proofs independently; calling a replay a security theorem; speculative constant time from a
+  sequential model without a hardware contract.
+
+## X. Conflicts to resolve (do not silently "fix" either way)
+
+- [ ] **X1.** v2 §7 says 10.26%/0-864 come from the leaderboard, not the abstract. The receipt
+  (`research/receipts/s2n-bignum-bench-abstract.md`) shows the **poster abstract** contains
+  them and the arXiv paper does not. Keep the poster citation; record the difference.
+- [ ] **X2.** v2 §7 says the Grok 4.6 line is absent everywhere. The same receipt shows it in
+  the poster abstract. Keep it, cite the poster, and note the reviewer checked other documents.
+- [ ] **X3.** Reconcile "supersedes C1–C3": C1 and C3 remain infrastructure; C2's mechanism is
+  replaced by M-A/M-D/CERTCUT.
+- [ ] **X4.** 2,284 vs 2,301 vs 2,622 — one pinned SHA per claim.
+
+## R. Residual channels and the DSFB split
+
+- [ ] **R7.** Proof-term channel: hole structure, hole types, proof-term size, certificate
+  progress.
+- [ ] **R8.** Specification channel: SemantEq distance between candidate specs, proof-difficulty
+  delta.
+- [ ] **R9.** Cross-logic channel: failure intersection, translation diff, kernel disagreement.
+- [ ] **R10.** Separate numeric residuals (subtraction meaningful: drift/slew/envelopes) from
+  typed residuals (no subtraction: typed transitions, grammar, motifs). Never mix them.
+
+## Immediate order (v2)
+
+1. X1–X4, then V1–V4 (verify the frontier facts and store receipts).
+2. F1–F3 (environment gate; assembler shim already validated).
+3. G0/G1: reproduce A0, build the agent harness, land lossless tracing.
+4. Pilot A1 on 40 FC tasks, smallest first; record every simulation trace.
+5. M-C and M-A pilots; then M-B and M-D; then preregister the ladder.
+6. M-F on one openssl-rs P-256 kernel.
