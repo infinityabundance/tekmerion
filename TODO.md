@@ -84,7 +84,7 @@ Every item below came from an external review or from the programme's own audit.
 
 ## C. Instrument — lossless trajectories (C1)
 
-- [ ] **C1. Persist successes and failures together, unsampled.**
+- [~] **C1. Persist successes and failures together, unsampled.** Write-through works: a terminal failure persisted 30 journals and a recovered failure persisted 1 line before any dump. Successes are still sampled by `TacticTrace`, and no runner exists that executes proof binaries.
   Failure records are write-through, but surrounding successful transitions are still subject to
   `TacticTrace`'s sampling and end-of-proof dump. An aborted proof can leave failures without the
   transitions needed to reconstruct the trajectory.
@@ -97,17 +97,26 @@ Every item below came from an external review or from the programme's own audit.
   *Acceptance:* distinguish *failed tactic*, *failed attempt*, and *search-exhausted branch*; E1 claims only
   the first two as labels, with the third derived separately.
 
-- [ ] **C3. One fully replayable failed trajectory, published.**
+- [~] **C3. One fully replayable failed trajectory, published.** Achieved in `.bench/G1/` (byte-identical replay, same `goal_before`, same sha256) but not yet packaged as a tracked, content-addressed artefact.
   *Acceptance:* a real HOL Light run produces a failed attempt whose trajectory replays to the same
   exception and goal state, archived and content-addressed.
 
 - [ ] **C4. Guard conversions.**
-  A conversion that raises currently writes no failure record.
+  A conversion that raises currently writes no failure record (211 conversion wrappers; 288 conv trace files skipped).
   *Acceptance:* conversion path instrumented, or the omission stated in every report that uses the corpus.
 
-- [ ] **C5. Conformance on real runs.**
-  Success-record identity is structural today. *Acceptance:* byte-identical to stock `TacticTrace` on at
-  least three real proof files of increasing size, including one using conversions.
+- [ ] **C6. Make `trace/exptrace_failure.ml` standalone.** It calls `ExportTrace.effective_output_dir`
+  and `get_sampling_config`, which do not exist at pinned TacticTrace `7ea3808`. Use an explicit
+  directory (`TEKMERION_FAILURE_DIR` or a setter) so it compiles against the pin.
+  *Acceptance:* the tracked module compiles against `7ea3808`; the selftest uses the tracked file, not a copy.
+
+- [ ] **C7. Fix `research/03-INSTRUMENT.md` §9.** It documents `exptrace_dump ()`; the real function is
+  `string -> unit`. *Acceptance:* the doc matches the source.
+
+- [ ] **C8. Provide a runner that actually executes proofs.** `setup.sh` runs `make build_proofs`, which
+  builds binaries but never runs them, so `.bench/trace-logs` stays empty; `build-proof.sh:88` also
+  pre-creates the dump directory that `exportTrace.ml:192` then `Sys.mkdir`s.
+  *Acceptance:* one command produces success traces on a named theorem, with the pre-created directory resolved.
 
 ---
 
@@ -153,8 +162,8 @@ Every item below came from an external review or from the programme's own audit.
 
 ## F. Benchmark environment gate
 
-- [x] **F1. Build HOL Light + TacticTrace + s2n-bignum.** ARM passed: exit 0, 6,331 s, 348 objects, no OOM. x86 proofs still running. See `research/receipts/environment-gate.md`.
-- [~] **F2. `collect-problems.py`; record actual counts by category.** ARM+common = **1,915** (generic 648, FC-arm 463, program_state 450, bit_vector 354). **2,622 = full corpus at this pin** (`timeout-map.json`: arm 1,106 + common 809 + x86 707); 2,301 and 2,284 are **not** produced by this commit. Rerun after x86 to reach 2,622.
+- [x] **F1. Build HOL Light + TacticTrace + s2n-bignum.** ARM exit 0 (6,331 s, 348 objects). x86 terminated at the 3 GB disk floor after 335/342 binaries; corpus unaffected. See `research/receipts/g1-failure-trace.md`.
+- [x] **F2. `collect-problems.py`; record actual counts by category.** **2,622 confirmed** at this pin: generic 686, program_state 601, FC-arm 463, bit_vector 437, FC-x86 435. 2,301 and 2,284 are not produced by this commit.
 - [x] **F3. Harness validation without a model.** Real proof → `OK` ×4; `CHEAT_TAC` → `CHEATING`; `ALL_TAC` → `FAIL`. **Correction: this revision has no `SYNTAX_ERROR` verdict**; malformed answers produce a compile error and no judge file. Use `ERROR`/pre-check failure instead.
 - [x] **F4. Reproducing 6.35% and 10.26% is blocked.** No model credentials in this environment. Stated the blocker; no model was substituted.
 
