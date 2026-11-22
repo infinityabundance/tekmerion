@@ -61,10 +61,10 @@ Two rules:
 
 1. **Never swallow.** `raise e` preserves HOL Light's semantics exactly. A verifier that
    changes the behaviour it observes is measuring itself.
-2. **Never sample failures.** `TacticTrace` keeps at most 20 records per tactic across five
-   subgoal buckets. For failure analysis, completeness matters more than size: configure a
-   single bucket with an unbounded quota for the failure channel, or accept that the corpus
-   is a sample and say so in every report.
+2. **Never sample the trajectory streams.** `TacticTrace` keeps at most 20 records per tactic
+   across five subgoal buckets and prefers the shortest goals. That is acceptable for browsing
+   successes and unacceptable for any statistic: it biases both failure rates and forecast
+   error. The C1 stream keeps every success and every failure for a given attempt, in order.
 
 ## 3. Record schema
 
@@ -136,9 +136,13 @@ brief's R1–R6 table implies, and the gap is where the research actually is.
 | R3 forecast | structural distance between predicted and observed `goals_after` | only available on success records; failure records have no observed result to compare against |
 | R6 replay | replay the same step against a changed definition or model; compare `goal_before` and outcome | exact when deterministic |
 
-R3 deserves emphasis: because `goals_after` is already recorded on every success, forecast
-residuals are computable **today**, before any failure capture exists. That is experiment
-E4 and it is the cheapest scientific result available in this programme.
+R3 needs one correction before it is usable. `goals_after` is recorded on every success, so
+forecast residuals are computable without new instrumentation — but not from stock traces.
+`TacticTrace` keeps at most 20 records per tactic, prefers the shortest printed goals, and
+records no step order. Forecast error computed on that sample is biased downward: the easiest
+goals to predict are the ones most likely to be retained. E4 must therefore consume C1's
+unsampled stream, and any figure computed from stock traces must be labelled as a lower bound
+on difficulty, not as a result.
 
 ## 6. Conformance test (the gate for E1)
 

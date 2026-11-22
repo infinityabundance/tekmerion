@@ -1,8 +1,10 @@
 # Tekmerion — verdict on the frontier brief
 
 **Date:** 2026-11-22
-**Basis:** source inspection of four repositories at pinned commits, the public benchmark
-abstract and leaderboard, the CVE advisory, and an arXiv sweep. Every load-bearing claim
+**Basis:** source inspection of four repositories at pinned commits, the NeurIPS 2026 poster
+abstract (receipted in `research/receipts/`) and the leaderboard, the CVE advisory, and an
+arXiv sweep. The poster abstract, the arXiv paper and the leaderboard data are three
+different documents and are cited separately. Every load-bearing claim
 below was checked against a source; see `01-PRIOR-ART.md` for the evidence table and
 `sources.md` for URLs and commit hashes. Claims I could not verify are marked as such.
 
@@ -29,8 +31,9 @@ benchmark authors already published at 10.26%, is a non-result.
 
 | # | The brief says | What the source says | Consequence |
 |---|---|---|---|
-| 1 | "≤ 6.35% ... zero-shot frontier models" is *the* number to beat | Same abstract: **10.26% Pass@5** with execution feedback; **0/864** functional-correctness for all original baselines; v1.1 first **5** FC successes, all smallest | Beating 6.35% with a feedback loop re-runs a published arm. Target FC instead, or compare against 10.26% at equal budget. |
+| 1 | "≤ 6.35% ... zero-shot frontier models" is *the* number to beat | Poster abstract (`receipts/s2n-bignum-bench-abstract.md`): **10.26% Pass@5** with execution feedback; **0/864** functional-correctness for all original baselines; v1.1 first **5** FC successes, all smallest | Beating 6.35% with a feedback loop re-runs a published arm. Target FC instead, or compare against 10.26% at equal budget. |
 | 2 | The frontier is unclaimed, so any beat is first | Public leaderboard exists; repository has **0 issues, 0 forks**, no `results.json` on `master`, last push 2026-09-25; submissions arrive as issues | The scoreboard is genuinely empty — but a submission is adjudicated by the authors (incl. the HOL Light author). Compare the right arms or it is rejected. |
+| 2b | The 10.26% figure and the Grok line are cited as "the abstract" | They are in the **poster abstract**; the arXiv paper `2603.14628` abstract contains none of them, and a reviewer did not find the Grok line in the leaderboard data | Cite the poster abstract explicitly for both. Never attribute them to the paper or to `results.json`. |
 | 3 | T2 trajectory capture is new work | `TacticTrace` already wraps every tactic/conv and records `{goal_before, goals_after, num_subgoals}` as JSON, CI-tested and pinned by the harness | Reimplementing it is a straight credibility loss. Consume it. |
 | 4 | (implied) capture is the contribution | `TacticTrace`: "the proof ends with an explicit `exptrace_dump ()`, so **a proof that fails writes no traces**" | The one thing best-in-class capture discards is exactly the programme's thesis. That is the seam. |
 | 5 | "No published number" for proof repair | CAPRI: 138/180 valid repairs, 32/36 frozen iterative, contract violations measured; VerusWeave 75–85% / 29–47%; TopoVerus 61.6/72.2 Safe-Pass; APRIL 260k repair tuples | Delete the row or re-scope to *ISA-model-induced* breakage of machine-code proofs, which is unmeasured. |
@@ -88,23 +91,33 @@ scheduling without failure trajectories, and no one has a lossless labelled corp
 on this benchmark. C1 also produces a permanent, reusable artefact, which is the most
 durable kind of win in this field.
 
-**C2 is second because the scoreboard is empty and at zero.** The mechanism I would bet on
-is not residual magic; it is **cross-task lemma transfer inside one proof corpus**. The
-898 functional-correctness tasks share carry, limb and Montgomery structure, and the
-baselines fail because a single-shot model cannot recall library lemmas it has never seen.
-A system that carries kernel-accepted lemmas from earlier tasks into later ones attacks
-exactly that failure. This is honest: the lever is retrieval plus reuse, and the ablation
-will show whether DSFB adds anything on top.
+**C2 is second because the scoreboard is empty and at zero.** My earlier diagnosis was wrong,
+and the harness proves it: `collect-problems.py` replaces *every* proof in the inlined file
+with `CHEAT_TAC`, so all preceding lemmas are already theorems in each task's context. Recall
+is not the bottleneck. The evidence points at proof *length*: functional-correctness proofs
+are long symbolic-simulation scripts — set up, step through the code, state a loop invariant,
+close the arithmetic — running to hundreds or thousands of lines. On ARM FC the Codex runs had
+only 33 and 42 answers evaluated at all, with zero accepted; most answers never reached the
+checker. The lever is **step-level construction**: a fixed skeleton drives the simulation, the
+model supplies the creative parts, and the harness checks each step. That is a different arm
+with its own budget, and it is not Pass@1.
 
-**C3 is third because it is cheap and closes a named gap.** `SOUNDNESS.md` states there is
-no systematic check that downstream reassembly produces the bytes the proofs were about.
-The crate in `src/` implements the typed model and measures it.
+**C3 is third because it is cheap and closes a named gap — but it is infrastructure, not a
+frontier result.** `SOUNDNESS.md` states there is no systematic check that downstream
+reassembly produces the bytes the proofs were about. The crate in `src/` implements the typed
+model. The 75% figure below follows from the model by definition; the claim-bearing experiment
+is E3, on real reassembled bytes.
 
-**E4 is the best idea in the brief, and the brief does not know it.** `TacticTrace` records
-`goal_before` and `goals_after`. Therefore the forecast residual R3 — ask the proposer to
-predict the post-tactic goal state, compare with the observed one — **is computable today
-with zero new instrumentation**, on a public benchmark. I could find no prior system that
-scores predicted goal states this way; the field predicts *tactics*, not *their result*.
+**E4 is the sharpest idea in the brief, once its novelty is narrowed.** `TacticTrace` records
+`goal_before` and `goals_after`, so predicting the post-tactic state is affordable. It is not
+novel: 3D-Prover (arXiv 2410.11133) already represents a tactic's effect on the proving
+environment, its success likelihood and its cost, and Xin et al. (2024) use environment
+responses as a training signal. What remains is narrower and testable: use the forecast error
+**online, per region, as a trust signal**, and show it raises kernel-accepted proofs at equal
+compute. It is also **not free**. `TacticTrace` keeps at most 20 records per tactic, prefers
+the shortest goals and records no step order, so forecast data drawn from it is biased toward
+the easiest goals. E4 must therefore run on C1's unsampled stream, not on stock traces.
+See `receipts/forecast-prior-art.md`.
 
 ---
 
@@ -128,19 +141,21 @@ Refusing is the part that protects the programme.
 
 ---
 
-## Addressing "a negative result is pointless"
+## "A negative result is pointless"
 
-This instinct is right about *programme design* and wrong about *experiment design*. A
-negative result is worthless when the experiment was unfalsifiable, was a re-run of a
-published arm, or had no kill criterion — because then a null is indistinguishable from a
-bug. The fix is not to avoid negatives. It is:
+Agreed, and the earlier framing here was too comfortable. A null that does not move a
+published number is not a contribution. Exit criteria exist to reallocate budget toward an arm
+that can win — not to make nulls publishable.
 
-1. Only run experiments with positive expected value of information.
-2. Preregister a kill criterion, so a null is a clean fact rather than a failure.
-3. Order the programme so the first two results are likely positive (C1, C3), buying the
-   credibility that lets a null on C2 or E4 be published rather than buried.
+The programme is therefore designed so the expected outcome is a win:
 
-That is why C1 and C3 come before any residual-conditioned search.
+1. Aim at the empty category, with an external adjudicator, not at a marginal aggregate delta.
+2. Put the first real compute into the mechanism the harness evidence supports (step-level
+   construction), not the one that sounds most novel (residual recall).
+3. If no arm clears the bar, stop and say so. That is a stop, not a result, and it will not be
+   presented as one.
+
+C3 stays because it is cheap and closes a named gap, but it is not counted as a frontier result.
 
 ---
 

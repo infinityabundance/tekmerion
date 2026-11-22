@@ -9,19 +9,19 @@ Every item below came from an external review or from the programme's own audit.
 
 ## A. Claim corrections — blocking, do before any new claim
 
-- [ ] **A1. Fix the attribution of 10.26% and 0/864.**
+- [x] **A1. Fix the attribution of 10.26% and 0/864.**
   The verdict attributes both to "the same abstract". A reviewer traced them to the leaderboard's
   `results.json` embedded in `index.html` and says the NeurIPS abstract gives only 6.35%.
   *Acceptance:* fetch both sources, store verbatim receipts under `research/receipts/`, quote the exact
   sentence in each, and cite the precise document. If a number appears only in the leaderboard data,
   say so. No claim cites an unspecified "abstract".
 
-- [ ] **A2. Source or delete the Grok 4.6 / five-v1.1-FC-successes line.**
+- [x] **A2. Source or delete the Grok 4.6 / five-v1.1-FC-successes line.**
   A reviewer could not find it in the leaderboard data, its README, or the paper.
   *Acceptance:* exact quote and URL in `research/receipts/`, or the sentence is deleted. If deleted, FC
   is still exactly zero, which strengthens the case.
 
-- [ ] **A3. Narrow E4's novelty claim.**
+- [x] **A3. Narrow E4's novelty claim.**
   arXiv 2410.11133 predicts a tactic's success likelihood, execution time, and the resulting proof state
   or error message; it cites Xin et al. (2024), which used successful environment responses as an
   auxiliary objective. "Learning Proof Transformations..." (2023) learns proof-state transformations for
@@ -29,31 +29,31 @@ Every item below came from an external review or from the programme's own audit.
   *Acceptance:* E4 states the narrower hypothesis — using forecast error *online, per region*, as a trust
   and calibration signal, evaluated on an industrial machine-code corpus — and cites all three.
 
-- [ ] **A4. Withdraw "R3 for free".**
+- [x] **A4. Withdraw "R3 for free".**
   `TacticTrace` keeps at most 20 records per tactic, prefers the shortest goals, and records no step order.
   Forecast data drawn from it is biased toward the easiest goals.
   *Acceptance:* `00-VERDICT.md`, `02-EXPERIMENTS.md` and `03-INSTRUMENT.md` all state that E4 runs on
   C1's unsampled corpus, and why.
 
-- [ ] **A5. Rewrite C2's mechanism.**
+- [x] **A5. Rewrite C2's mechanism.**
   `collect-problems.py` replaces *every* proof in the inlined file with `CHEAT_TAC`, so all preceding lemmas
   are already theorems in each task's context. "A single-shot model cannot recall library lemmas" is ruled
   out by the harness. FC answers mostly never reach the checker (33 and 42 evaluated on ARM FC, zero OK).
   *Acceptance:* C2's mechanism is step-level construction, not recall; the old explanation is removed.
 
-- [ ] **A6. Reposition C3.**
+- [x] **A6. Reposition C3.**
   C3 is infrastructure, not a frontier result. Its 75% figure follows from the model by definition and
   must not occupy the only "Measured" slot. E3, on real reassembled bytes, is the part that counts.
   *Acceptance:* README and verdict label C3 infrastructure; the synthetic number is labelled a model
   conformance test; E3 is named as the claim-bearing experiment.
 
-- [ ] **A7. Rewrite the negative-results section.**
+- [x] **A7. Rewrite the negative-results section.**
   It reads defensively. Nulls are published, but the programme must be designed so the expected outcome
   is a win.
   *Acceptance:* the section is replaced with: pick arms whose prior of clearing the bar is high; exit
   losers to reallocate budget; if no arm can clear a bar, stop — and say so.
 
-- [ ] **A8. Fix the comparator table.**
+- [x] **A8. Fix the comparator table.**
   146/2,301 zero-shot and 236/2,301 within five feedback attempts are the exact comparators.
   Benchmark versions and attempt budgets must never be mixed.
   *Acceptance:* a single comparator table in `02-EXPERIMENTS.md` with version, attempt budget, and mode

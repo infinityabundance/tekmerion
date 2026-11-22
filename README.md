@@ -21,13 +21,13 @@ What is left, once those are removed, is a smaller and better programme:
 |---|---|---|---|
 | **C1** | Lossless **failure-side** trajectories on an industrial machine-code proof corpus | Conformance against `TacticTrace`; replay | Specified (`research/03-INSTRUMENT.md`) |
 | **C2** | First replay-checked solve rate on the **functional-correctness** category | Public leaderboard, `CHEATING` check | Preregistered (`research/02-EXPERIMENTS.md`) |
-| **C3** | **Typed revocation** of proof evidence, measured | Reproducible harness | Implemented + measured here |
+| **C3** | **Typed revocation** of proof evidence, measured | Reproducible harness | Implemented; E3 is the claim-bearing experiment |
 | **E4** | Goal-state forecasting (R3) from fields the harness already records | Structural distance vs observed goals | Preregistered |
 
 C1 is the substrate: `TacticTrace` records `goal_before` and `goals_after` for successes and
 explicitly writes nothing for failures. That blind spot is exactly the programme's thesis.
-E4 is the cheapest scientific result available, because R3 needs no new instrumentation at
-all.
+E4 is cheap but not free: `TacticTrace` samples at most 20 records per tactic and prefers the
+shortest goals, so forecast residuals must be computed on C1's unsampled stream.
 
 ---
 
@@ -77,7 +77,11 @@ identity, never validity.
 
 ---
 
-## Measured
+## Measured — model conformance, not a frontier result
+
+These numbers show that the implementation matches its stated model. They are not evidence of
+any advance: the ground truth is definitional. The claim-bearing experiment is E3, which runs
+real reassembled object bytes through the same path.
 
 Measured on 2026-11-22, Rust 1.98.0, this machine:
 

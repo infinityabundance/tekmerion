@@ -19,6 +19,20 @@ Common protocol, from the brief and not negotiable here:
 
 ---
 
+## Comparators — exact, and never mixed
+
+| Number | Value | Revision | Attempts | Mode |
+|---|---|---|---|---|
+| Zero-shot baseline | 6.35% | 2,301 | 1 | query-only |
+| Feedback baseline | 10.26% | 2,301 | 5 | with execution feedback |
+| Functional correctness, all originals | 0 / 864 | 2,301 | — | — |
+
+Source: NeurIPS 2026 poster abstract (`research/receipts/s2n-bignum-bench-abstract.md`).
+The 2,301 and 2,622 revisions are never compared to each other, and one-shot is never compared
+to five-attempt.
+
+---
+
 ## E1 · Failure-side trajectory instrument
 
 **Why first.** Every later experiment that mentions residuals, doomed branches, or repair
@@ -70,10 +84,11 @@ usable by people who do not adopt Tekmerion.
 0/864. A first category result is better than a marginal aggregate result, and it is
 adjudicated by the authors.
 
-**Hypothesis.** At equal kernel-call and wall-clock budget, **cross-task lemma transfer**
-raises the FC solve rate above the strongest published baseline. The mechanism is not
-"residual magic"; it is that the 898 FC tasks share library structure that a single-shot
-model cannot recall.
+**Hypothesis (revised).** At equal budget, **step-level construction** raises the FC solve rate
+above every published baseline, which is zero on the original 864 tasks. The earlier
+lemma-recall hypothesis is withdrawn: the harness replaces every proof with `CHEAT_TAC`, so all
+preceding lemmas are already available in each task's context. The bottleneck is that FC proofs
+are long symbolic-simulation scripts that a one-shot answer cannot produce.
 
 **Arms (all on the same frozen corpus, same timeouts, same hardware).**
 
@@ -81,10 +96,10 @@ model cannot recall.
 |---|---|---|
 | A0 | `prompt-basic.txt`, one attempt | Reproduce the 6.35% class |
 | A1 | Same prompt, 5 attempts with checker feedback | Reproduce the 10.26% class; sanity check |
-| A2 | A1 + retrieval over lemmas present in the loaded HOL Light session | Isolate retrieval |
-| A3 | A2 + certificate tactics for bit-vector/arithmetic subgoals | Isolate certificate engines |
-| A4 | A3 + a cache of kernel-accepted lemmas proved for earlier tasks | The thesis |
-| A5 | A4 + residual-conditioned scheduling (only after E1) | Isolate the DSFB contribution |
+| A2 | A1 + certificate tactics for bit-vector/arithmetic subgoals | Isolate certificate engines |
+| A3 | A2 + ARM→x86 (then x86→ARM) sibling transfer of the system's own kernel-accepted proofs | Cross-architecture transfer |
+| A4 | **Step-level harness**: fixed simulation skeleton, model supplies invariants, bounds and case splits, every step checked | The primary thesis |
+| A5 | A4 + per-step residual cutoff (term size, carry-chain depth, open side conditions) | Isolate the DSFB contribution |
 
 A0 and A1 are **reproduction arms**. If they do not land near the published numbers, the
 environment is wrong and no other arm may be interpreted.
@@ -104,9 +119,10 @@ Secondary: total `OK` across all 2,622; cost per `OK` (kernel calls, wall clock,
 is stable, run the full category. Sequential testing with a fixed total budget; no peeking
 beyond the preregistered checkpoints.
 
-**Kill criterion.** If A4 does not beat A2 at equal budget with non-overlapping bootstrap
-intervals and A12 ≥ 0.56, publish the null and retire the cross-task-transfer hypothesis.
-If A1 does not reproduce the published 10.26%-class number, the harness is wrong: fix and
+**Kill criterion.** If the step-level arm produces no kernel-accepted FC proof at equal budget,
+stop that line and reallocate. If A1 cannot run because the exact model is unavailable, record
+the reproduction as blocked; never substitute a different model and call it a reproduction. If
+A1 does run and does not land near the published 10.26% class, the harness is wrong: fix and
 restart, do not interpret.
 
 **What would make this a real frontier claim.** A0/A1 reproduced, A4 > A1 on FC at equal
@@ -162,12 +178,17 @@ toolchain tested, and do not claim a gap.
 applications. Predicting the post-tactic goal state and scoring the error is a
 white-box calibration signal that needs no new instrumentation.
 
-**Hypothesis.** Per-motif forecast error predicts which tactic families will succeed on the
-next step better than tactic frequency or goal size alone.
+**Hypothesis (narrowed).** A model's prediction error about a tactic's effect identifies when
+its future recommendations are unreliable, and using that signal online raises kernel-accepted
+proofs at equal compute. Post-tactic state prediction is already published (3D-Prover, arXiv
+2410.11133); novelty is claimed only for online per-region error as a trust signal on an
+industrial machine-code corpus. See `receipts/forecast-prior-art.md`.
 
 **Construction.**
 
-1. From `TacticTrace` output on the corpus, build `(goal_before, tactic, goals_after)` triples.
+1. From **C1's unsampled stream**, build `(attempt_id, step, goal_before, tactic, goals_after)`
+   tuples. Stock `TacticTrace` output is unusable here: it keeps at most 20 records per tactic,
+   prefers the shortest goals, and records no step order, which biases forecast error downward.
 2. Ask the model to predict `goals_after` from `goal_before` and `tactic` only.
 3. Score with a structural distance that does not pretend to be a metric space:
    subgoal-count delta, term-size delta, leading-connective match, multiset distance over
