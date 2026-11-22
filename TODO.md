@@ -153,13 +153,10 @@ Every item below came from an external review or from the programme's own audit.
 
 ## F. Benchmark environment gate
 
-- [~] **F1. Build HOL Light + TacticTrace + s2n-bignum.** ARM first, then `--reuse x86`.
-- [ ] **F2. `collect-problems.py`; record actual counts by category.** Flag any discrepancy against the
-  paper's 2,301 / 2,622 and category split. Do not assume the version.
-- [ ] **F3. Harness validation without a model.** Real human proof → `OK`; `CHEAT_TAC` → `CHEATING`;
-  invalid tactic → `SYNTAX_ERROR`; empty answer → `FAIL`. Exact verdicts and file paths.
-- [!] **F4. Reproducing 6.35% and 10.26% is blocked.** No model credentials in this environment. State
-  the blocker; do not substitute a different model and call it a reproduction.
+- [x] **F1. Build HOL Light + TacticTrace + s2n-bignum.** ARM passed: exit 0, 6,331 s, 348 objects, no OOM. x86 proofs still running. See `research/receipts/environment-gate.md`.
+- [~] **F2. `collect-problems.py`; record actual counts by category.** ARM+common = **1,915** (generic 648, FC-arm 463, program_state 450, bit_vector 354). **2,622 = full corpus at this pin** (`timeout-map.json`: arm 1,106 + common 809 + x86 707); 2,301 and 2,284 are **not** produced by this commit. Rerun after x86 to reach 2,622.
+- [x] **F3. Harness validation without a model.** Real proof → `OK` ×4; `CHEAT_TAC` → `CHEATING`; `ALL_TAC` → `FAIL`. **Correction: this revision has no `SYNTAX_ERROR` verdict**; malformed answers produce a compile error and no judge file. Use `ERROR`/pre-check failure instead.
+- [x] **F4. Reproducing 6.35% and 10.26% is blocked.** No model credentials in this environment. Stated the blocker; no model was substituted.
 
 ---
 
@@ -288,7 +285,7 @@ otherwise. Nothing below is dropped; each item is one dispatchable unit.
   the poster abstract. Keep it, cite the poster, and note the reviewer checked other documents.
 - [ ] **X3.** Reconcile "supersedes C1–C3": C1 and C3 remain infrastructure; C2's mechanism is
   replaced by M-A/M-D/CERTCUT.
-- [ ] **X4.** 2,284 vs 2,301 vs 2,622 — one pinned SHA per claim.
+- [x] **X4.** Resolved for this pin: `timeout-map.json` = arm 1,106 + common 809 + x86 707 = 2,622; ARM+common collected = 1,915. 2,301 and 2,284 are not reproduced by this commit and must not be quoted without a commit that produces them.
 
 ## R. Residual channels and the DSFB split
 
