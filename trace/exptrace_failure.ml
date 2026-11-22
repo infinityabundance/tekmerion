@@ -7,27 +7,49 @@
 
    or with the mechanism the surrounding project uses for exportTrace.ml.
 
+   This module has no dependency on ExportTrace. It is standalone: the only
+   names it needs from the surrounding session are HOL Light's `goal`,
+   `pp_print_goal`, `term`, and `string_of_term`.
+
    Scope of a record
    -----------------
-   A record written here means exactly: "this tactic application raised at
-   least once". It does NOT mean "the proof failed". The wrapper sees one
+   A tactic record written here means exactly: "this tactic application raised
+   at least once". It does NOT mean "the proof failed". The wrapper sees one
    tactic application and cannot see whether a combinator, TRY/ORELSE, or a
    later step recovered, nor what the attempt's terminal outcome was. Any
    downstream label must therefore combine these records with the attempt's
-   outcome, which this module does not observe.
+   outcome, which this module does not observe. Every tactic record carries
+   `"scope": "tactic"` to make the limit unmistakable.
+
+   A conversion record is the same kind of observation for one conversion
+   application and carries `"scope": "conv"`.
 
    Write-through, not buffering
    ----------------------------
-   TacticTrace writes only when exptrace_dump () is called at the end of a
+   TacticTrace writes only when exptrace_dump is called at the end of a
    successful proof, so a proof that raises loses all evidence. This module
    must not repeat that defect. At record time it appends one JSON object per
-   line to <tacname>.failures.jsonl and closes the file before re-raising.
-   No later call is required: if the process exits immediately, the evidence
-   is already on disk.
+   line to <name>.failures.jsonl (tactics) or <name>.conv.failures.jsonl
+   (conversions) and closes the file before re-raising. No later call is
+   required: if the process exits immediately, the evidence is already on
+   disk.
 
-   exptrace_failures_dump () is only an optional consolidation step. It
-   merges the journals into <tacname>.failures.json arrays in TacticTrace's
-   dump style, sorted deterministically, refusing to overwrite output. It is
+   Directory selection
+   -------------------
+   The recording directory is chosen, in order, from:
+
+     1. exptrace_failures_set_dir "<dir>" (explicit, wins);
+     2. the environment variable TEKMERION_FAILURE_DIR;
+     3. "./tekmerion-failures".
+
+   The directory is created lazily on the first write. A missing parent is an
+   error: the module creates only the leaf, like TacticTrace's exptrace_dump.
+
+   exptrace_failures_dump "<dir>" is only an optional consolidation step. It
+   reads the journals in the given directory and merges them into
+   <name>.failures.json / <name>.conv.failures.json arrays in TacticTrace's
+   dump style, sorted deterministically, refusing to overwrite output. The
+   caller should pass the same directory the journals were written to. It is
    safe never to call it.
 
    Dependency-free: only the OCaml standard library and pieces HOL Light
@@ -39,18 +61,17 @@
                          (printer.ml); failure goal_before must serialise the
                          same way as success goal_before or the two channels
                          cannot be compared.
-     - `ExportTrace`   : loaded before this file; used only to locate the same
-                         output directory TacticTrace writes to.
+     - `term`, `string_of_term` : for conversion inputs.
    `string_of_term` (HOL Light) is deliberately not used for goal_before:
    TacticTrace serialises the whole goal with pp_print_goal. If
    hypothesis-level text is added later, render it as
    `string_of_term (concl th)` and escape it with String.escaped, exactly as
    exportTrace.ml does for added/removed assumptions.
 
-   The success-record path is untouched. exptrace_guard wraps only the
-   tactic application expression and re-raises the original exception
-   unchanged, so HOL Light's semantics are identical to calling the
-   application directly.
+   The success-record path is untouched. exptrace_guard and
+   exptrace_guard_conv wrap only the application expression and re-raise the
+   original exception unchanged, so HOL Light's semantics are identical to
+   calling the application directly.
 *)
 
 unset_jrh_lexer;;
@@ -64,23 +85,41 @@ type tac_failure = {
   elapsed_cpu_s: float;
 }
 
+type conv_failure = {
+  conv_scope: string;
+  conv: string;
+  input: string;
+  conv_exception_text: string;
+  conv_elapsed_cpu_s: float;
+}
+
 let exptrace_failure_scope = "tactic"
+let exptrace_conv_failure_scope = "conv"
 
 (* Only counts are kept in memory. The evidence itself is on disk as soon as
-   it is recorded. *)
+   it is recorded. Separate tables keep tactic and conversion names from
+   colliding. *)
 let exptrace_failure_counts : (string, int) Hashtbl.t = Hashtbl.create 32
+let exptrace_conv_failure_counts : (string, int) Hashtbl.t = Hashtbl.create 32
 
 let exptrace_failure_dir_cache : string option ref = ref None
 
-(* The failure channel uses the same output directory as TacticTrace: consult
-   ExportTrace (loaded first) instead of duplicating its configuration logic.
-   This is the one place the module reads TacticTrace state. *)
+(* Explicit setter. It always wins over the environment. The directory itself
+   is created lazily, on the first write, so a run that records nothing leaves
+   no empty directory behind. *)
+let exptrace_failures_set_dir (dir : string) : unit =
+  if String.length dir = 0 then
+    invalid_arg "exptrace_failures_set_dir: empty directory";
+  exptrace_failure_dir_cache := Some dir
+
 let exptrace_failures_dir () : string =
   match !exptrace_failure_dir_cache with
   | Some dir -> dir
   | None ->
     let dir =
-      ExportTrace.effective_output_dir (ExportTrace.get_sampling_config ())
+      match Sys.getenv_opt "TEKMERION_FAILURE_DIR" with
+      | Some value when String.length value > 0 -> value
+      | _ -> "./tekmerion-failures"
     in
     exptrace_failure_dir_cache := Some dir;
     dir
@@ -102,6 +141,9 @@ let exptrace_goal_to_string (g : goal) : string =
 
 let exptrace_failure_journal_path (name : string) : string =
   exptrace_failures_dir () ^ "/" ^ name ^ ".failures.jsonl"
+
+let exptrace_conv_failure_journal_path (name : string) : string =
+  exptrace_failures_dir () ^ "/" ^ name ^ ".conv.failures.jsonl"
 
 (* One JSON object per line, flushed and closed immediately. The key style
    mirrors TacticTrace's dump: String.escaped values, same field spelling.
@@ -129,6 +171,26 @@ let exptrace_write_failure_line (r : tac_failure) : unit =
     close_out_noerr oc;
     raise e
 
+let exptrace_write_conv_failure_line (r : conv_failure) : unit =
+  let dir = exptrace_failures_dir () in
+  exptrace_ensure_dir dir;
+  let path = exptrace_conv_failure_journal_path r.conv in
+  let oc =
+    open_out_gen [Open_wronly; Open_creat; Open_append; Open_text] 0o666 path
+  in
+  try
+    Printf.fprintf oc
+      "{\"scope\": \"%s\",\"conv\":\"%s\",\"input\": \"%s\",\"exception_text\": \"%s\",\"elapsed_cpu_s\": %g}\n"
+      (String.escaped r.conv_scope)
+      (String.escaped r.conv)
+      (String.escaped r.input)
+      (String.escaped r.conv_exception_text)
+      r.conv_elapsed_cpu_s;
+    close_out oc
+  with e ->
+    close_out_noerr oc;
+    raise e
+
 let exptrace_record_failure
     (name : string) (goal_before : goal)
     (exception_text : string) (elapsed_cpu_s : float) : unit =
@@ -151,6 +213,24 @@ let exptrace_record_failure
   in
   Hashtbl.replace exptrace_failure_counts name (previous + 1)
 
+let exptrace_record_conv_failure
+    (name : string) (input : term)
+    (exception_text : string) (elapsed_cpu_s : float) : unit =
+  let record : conv_failure = {
+    conv_scope = exptrace_conv_failure_scope;
+    conv = name;
+    input = "`" ^ string_of_term input ^ "`";
+    conv_exception_text = exception_text;
+    conv_elapsed_cpu_s = elapsed_cpu_s;
+  } in
+  exptrace_write_conv_failure_line record;
+  let previous =
+    match Hashtbl.find_opt exptrace_conv_failure_counts name with
+    | None -> 0
+    | Some n -> n
+  in
+  Hashtbl.replace exptrace_conv_failure_counts name (previous + 1)
+
 (* [exptrace_guard name goal_before f] has exactly the semantics of [f ()]:
    it returns the same value, or raises the same exception. Its only extra
    effect is the write-through record. Timing uses Sys.time (CPU time); the
@@ -170,6 +250,21 @@ let exptrace_guard (name : string) (goal_before : goal) (f : unit -> 'a) : 'a =
      with record_error ->
        prerr_endline
          ("exptrace_guard: could not record failure for " ^ name ^ ": " ^
+          Printexc.to_string record_error));
+    raise e
+
+(* The conversion counterpart. It records the input term because a conversion
+   failure has no goal. Its semantics are exactly those of [f ()]. *)
+let exptrace_guard_conv (name : string) (input : term) (f : unit -> 'a) : 'a =
+  let started = Sys.time () in
+  try f () with e ->
+    let elapsed_cpu_s = Sys.time () -. started in
+    (try
+       exptrace_record_conv_failure name input (Printexc.to_string e)
+         elapsed_cpu_s
+     with record_error ->
+       prerr_endline
+         ("exptrace_guard_conv: could not record failure for " ^ name ^ ": " ^
           Printexc.to_string record_error));
     raise e
 
@@ -266,23 +361,21 @@ let exptrace_write_consolidated_file
     (try Sys.remove path with Sys_error _ -> ());
     raise e
 
-(* Optional. No-op when nothing was recorded. For every tactic with a
-   journal, write <dir>/<tacname>.failures.json once. Every destination is
-   checked before any file is opened. It is safe to never call this. *)
-let exptrace_failures_dump () : unit =
-  if Hashtbl.length exptrace_failure_counts = 0 then () else begin
-    let dir = exptrace_failures_dir () in
+(* Optional. No-op when nothing was recorded. For every name with a journal,
+   write <dir>/<name>.failures.json (tactics) or
+   <dir>/<name>.conv.failures.json (conversions) once. Every destination is
+   checked before any file is opened. It is safe to never call this.
+
+   `dir` is explicit, matching exptrace_dump : string -> unit. Pass the
+   directory the journals were written to. *)
+let exptrace_failures_dump (dir : string) : unit =
+  if Hashtbl.length exptrace_failure_counts = 0 &&
+     Hashtbl.length exptrace_conv_failure_counts = 0 then () else begin
     if Sys.file_exists dir && not (Sys.is_directory dir) then
       invalid_arg ("Failure trace directory is not a directory: " ^ dir);
-    let tactics =
-      List.sort compare
-        (Hashtbl.fold
-           (fun name _ acc -> name :: acc)
-           exptrace_failure_counts [])
-    in
-    let jobs =
+    let tactic_jobs =
       List.map (fun name ->
-          let journal = exptrace_failure_journal_path name in
+          let journal = dir ^ "/" ^ name ^ ".failures.jsonl" in
           let consolidated = dir ^ "/" ^ name ^ ".failures.json" in
           let expected =
             match Hashtbl.find_opt exptrace_failure_counts name with
@@ -290,8 +383,27 @@ let exptrace_failures_dump () : unit =
             | Some n -> n
           in
           name, journal, consolidated, expected)
-        tactics
+        (List.sort compare
+           (Hashtbl.fold
+              (fun name _ acc -> name :: acc)
+              exptrace_failure_counts []))
     in
+    let conv_jobs =
+      List.map (fun name ->
+          let journal = dir ^ "/" ^ name ^ ".conv.failures.jsonl" in
+          let consolidated = dir ^ "/" ^ name ^ ".conv.failures.json" in
+          let expected =
+            match Hashtbl.find_opt exptrace_conv_failure_counts name with
+            | None -> 0
+            | Some n -> n
+          in
+          name, journal, consolidated, expected)
+        (List.sort compare
+           (Hashtbl.fold
+              (fun name _ acc -> name :: acc)
+              exptrace_conv_failure_counts []))
+    in
+    let jobs = tactic_jobs @ conv_jobs in
     List.iter (fun (name, journal, consolidated, _) ->
         if not (Sys.file_exists journal) then
           invalid_arg

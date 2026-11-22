@@ -47,7 +47,8 @@ let REWRITE_TAC ?(args_str:string list option) ?(caller_linenum:(string * int) o
     });
     (trace_ga_inst,trace_goals_after,trace_justf);;
 let BETA_CONV ?(args_str:string list option) ?(caller_linenum:(string * int) option) (tm:term) : thm =
-  let thm_output = BETA_CONV tm in
+  let thm_output =
+    exptrace_guard_conv "BETA_CONV" tm (fun () -> BETA_CONV tm) in
   exptrace_add_conv "BETA_CONV" {
     definition_line_number = ("hol.ml",310);
     user_line_number = (match caller_linenum with

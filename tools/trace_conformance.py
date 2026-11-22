@@ -3,7 +3,7 @@
 
 Each directory holds the per-tactic files TacticTrace writes, ``<tac>.json``.
 Files whose records carry a ``conv`` key are conversion traces and are skipped;
-conversions are not guarded in this version.
+conversion success records are a separate channel and are not compared here.
 Records are aligned by (tactic, ordinal within file); JSON key order and
 whitespace are normalised by parsing, but field values are compared exactly.
 
@@ -50,8 +50,8 @@ def _load_file(path: Path) -> list[dict] | None:
     """Return tactic records, or None for a conversion trace.
 
     Conversion traces use a ``conv`` key and are a separate generator branch,
-    not guarded in this version, so they are skipped rather than mixed into
-    the tactic alignment.
+    so they are skipped rather than mixed into the tactic alignment. Conversion
+    failure journals are a separate channel and are not compared here.
     """
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -199,8 +199,8 @@ def report(stock_dir: Path, patched_dir: Path) -> int:
         print(f"DIFF {diff}")
     if skipped:
         print(
-            f"skipped {skipped} conversion trace file(s); conversions are not "
-            "guarded in this version"
+            f"skipped {skipped} conversion trace file(s); conversion success "
+            "records are not compared"
         )
     print(
         f"checked {checked} aligned record pair(s); "

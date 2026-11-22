@@ -177,29 +177,32 @@ Report all three, every time.
 
 ## 9. Scaffold: files and commands
 
-This section records the scaffold for the failure-side extension. It is a scaffold, not a
-validated instrument: no HOL Light or s2n-bignum build was performed. Everything below runs
-offline. The OCaml module is syntax-checked and compiled against a small stub harness that
-exercises the write-through path; it is not type-checked against HOL Light's real `goal`,
-`pp_print_goal`, or `ExportTrace`.
+This section records the scaffold for the failure-side extension. The offline checks in
+`tools/selftest.sh` do not build HOL Light. The tracked module has also been loaded in the
+prepared HOL Light environment, after `exportTrace.ml`, to confirm it type-checks against the
+real `goal`, `pp_print_goal`, `term`, and `string_of_term`; the load command is given in
+step 3 and the runner that executes proofs is step 10.
 
-**Scope of a failure record.** A record means "this tactic application raised at least
+**Scope of a failure record.** A tactic record means "this tactic application raised at least
 once". It does **not** mean "the proof failed". The wrapper sees one application and cannot
 see whether a combinator or `TRY`/`ORELSE` recovered, nor what the attempt's terminal
 outcome was. Downstream labelling must combine these records with that outcome, which this
-module does not observe. Every record carries `"scope": "tactic"` to make the limit
-unmistakable.
+module does not observe. Every tactic record carries `"scope": "tactic"` to make the limit
+unmistakable. A conversion record is the same kind of observation for one conversion
+application and carries `"scope": "conv"`.
 
 ### Files
 
 | File | Purpose |
 |---|---|
-| `trace/exptrace_failure.ml` | `tac_failure` record with `scope = "tactic"`, `exptrace_guard`, and optional `exptrace_failures_dump ()`. `exptrace_guard` writes one JSON object per line to `<dir>/<tacname>.failures.jsonl` at record time, closes it, and then re-raises unchanged. Only a per-tactic counter is held in memory. The dump only consolidates journals into arrays. Loaded inside HOL Light after `exportTrace.ml`; dependency-free (no Yojson); uses the standard library plus HOL Light's `goal`/`pp_print_goal` and TacticTrace's `ExportTrace` for directory selection. |
-| `tools/patch_wrapper.py` | Rewrites only the application line of each generated tactic wrapper to `exptrace_guard "<tacname>" trace_goal_before (fun () -> <application> (trace_asl,trace_g))`. Leaves the `exptrace_add_tac` emission byte-for-byte intact. Idempotent; fails closed if no tactic wrapper or no tactic name is found; counts conversions left untouched. |
-| `tools/test_write_through.py` | Compiles the real module against stubs for `goal`, `pp_print_goal`, and `ExportTrace`; records one failure; calls no dump; asserts `<tacname>.failures.jsonl` already contains exactly one valid JSON object with the expected fields and `"scope": "tactic"`. Also exercises consolidation and its overwrite refusal. |
-| `tools/trace_conformance.py` | Aligns stock and patched success records by `(tactic, ordinal within file)` and asserts equality on `tactic`, `definition_line_number`, `user_line_number`, `goal_before`, `goals_after`, `num_subgoals`, `arg_names`, `arg_types`, `arg_values`, `arg_exprs`. Normalises JSON key order and whitespace only; values are compared exactly. Prints a per-field diff and exits non-zero on any difference. Skips conversion traces, which are out of scope. |
+| `trace/exptrace_failure.ml` | `tac_failure` record with `scope = "tactic"`, `conv_failure` record with `scope = "conv"`, `exptrace_guard`, `exptrace_guard_conv`, and optional `exptrace_failures_dump : string -> unit`. `exptrace_guard` writes one JSON object per line to `<dir>/<tacname>.failures.jsonl` at record time; `exptrace_guard_conv` writes to `<dir>/<convname>.conv.failures.jsonl`. Both close the file and then re-raise unchanged. Only per-name counters are held in memory. The dump only consolidates journals into arrays. Loaded inside HOL Light after `exportTrace.ml`; dependency-free (no Yojson and no `ExportTrace` use); uses the standard library plus HOL Light's `goal`/`pp_print_goal`/`term`/`string_of_term`. The recording directory is `exptrace_failures_set_dir`, else `TEKMERION_FAILURE_DIR`, else `./tekmerion-failures`. |
+| `tools/patch_wrapper.py` | Rewrites only the application lines of the generated wrappers: tactics become `exptrace_guard "<tacname>" trace_goal_before (fun () -> <application> (trace_asl,trace_g))`, and conversions become `exptrace_guard_conv "<convname>" <input-term> (fun () -> <application>)`. Leaves the `exptrace_add_tac` and `exptrace_add_conv` emissions byte-for-byte intact. Idempotent; fails closed if a wrapper shape or a conversion input term is not found. |
+| `tools/test_write_through.py` | Compiles the real module against stubs for `goal`, `pp_print_goal`, `term`, and `string_of_term`; records one tactic failure and one conversion failure; calls no dump; asserts `<tacname>.failures.jsonl` and `<conv>.conv.failures.jsonl` already contain one valid JSON object each, with the expected fields and scopes. Also exercises consolidation, its overwrite refusal, and both directory fallbacks (`TEKMERION_FAILURE_DIR`, `./tekmerion-failures`). |
+| `tools/run_traces.sh` | Builds or reuses one instrumented proof binary and **executes** it. Removes or creates the success and failure directories immediately before the run, so `exptrace_dump`'s `Sys.mkdir` sees a non-existent success leaf; runs the binary from the s2n-bignum root, where the proof's ELF paths resolve. `--stock` uses the unpatched wrapper, `--inject` inserts a probe at the start of the first proof, `--reuse` is keyed on the proof, injection, mode, wrapper, and success directory. |
+| `tools/run_traces_inject.py` | Narrow text helper for `run_traces.sh --inject`: inserts `<TACTIC> THEN` at the first non-empty tactic line after the first proof goal, or exits non-zero if the file does not look like a `prove` script. |
+| `tools/trace_conformance.py` | Aligns stock and patched success records by `(tactic, ordinal within file)` and asserts equality on `tactic`, `definition_line_number`, `user_line_number`, `goal_before`, `goals_after`, `num_subgoals`, `arg_names`, `arg_types`, `arg_values`, `arg_exprs`. Normalises JSON key order and whitespace only; values are compared exactly. Prints a per-field diff and exits non-zero on any difference. Skips conversion success traces; conversion failure journals are a separate channel. |
 | `trace/fixtures/kernel_wrapper_before.ml` | Faithful generated wrapper excerpt: two tactic wrappers (zero-arg and one-arg) plus one conversion wrapper. |
-| `trace/fixtures/kernel_wrapper_after.ml` | Expected patched output. The conversion wrapper is unchanged. |
+| `trace/fixtures/kernel_wrapper_after.ml` | Expected patched output: both tactic applications are guarded and the conversion application is guarded with `exptrace_guard_conv`. |
 | `trace/fixtures/conformance/stock/REWRITE_TAC.json` | Stock success records used by the conformance self-test. |
 | `trace/fixtures/conformance/patched/REWRITE_TAC.json` | Identical content, standing in for the patched run. |
 | `trace/fixtures/conformance/diverged/REWRITE_TAC.json` | Same content with one `num_subgoals` value changed, so the self-test must fail and name that field. |
@@ -213,55 +216,75 @@ unmistakable.
    tracer make-wrappers proof_inlined.ml proof.ast proof.mli kernel_wrapper.ml
    ```
 
-2. Patch the tactic application expressions. The `exptrace_add_tac` blocks are not touched:
+2. Patch the tactic and conversion application expressions. The `exptrace_add_tac` and
+   `exptrace_add_conv` blocks are not touched:
 
    ```sh
    python3 tools/patch_wrapper.py kernel_wrapper.ml kernel_wrapper.patched.ml
    ```
 
-   The patched form of each application is:
+   The patched form of each tactic application is:
 
    ```ocaml
        let (trace_ga_inst,trace_goals_after,trace_justf) =
          exptrace_guard "<tacname>" trace_goal_before (fun () -> <application> (trace_asl,trace_g)) in
    ```
 
-3. Load the OCaml modules inside HOL Light in this order. `exptrace_failure.ml` uses
-   `ExportTrace.effective_output_dir`, so `exportTrace.ml` must already be loaded:
+   The patched form of each conversion application is:
+
+   ```ocaml
+     let thm_output =
+       exptrace_guard_conv "<convname>" <input-term> (fun () -> <application>) in
+   ```
+
+3. Load the OCaml modules inside HOL Light in this order. `exptrace_failure.ml` is standalone
+   and has no `ExportTrace` dependency; `exportTrace.ml` is loaded first so the same HOL Light
+   session provides `pp_print_goal` and the success channel:
 
    ```ocaml
    loadt "exportTrace.ml";;
    loadt "exptrace_failure.ml";;
    ```
 
-4. Choose the run directory before the proof. This is the same directory TacticTrace uses,
-   and it must not already exist:
+4. Choose the failure-channel directory before the proof. The explicit setter wins; if it is
+   not called, the module reads `TEKMERION_FAILURE_DIR`; if neither is set, it uses
+   `./tekmerion-failures`. The directory is created on the first write, so a run with no raises
+   leaves nothing behind:
 
    ```ocaml
-   exptrace_set_default_dir "/abs/path/to/run-001";;
+   exptrace_failures_set_dir "/abs/path/to/failures-001";;
    ```
 
-5. No failure-path driver hook is required. When a guarded application raises,
-   `exptrace_guard` appends one JSON object to `<dir>/<tacname>.failures.jsonl`, closes the
-   file, and re-raises unchanged. The journal is on disk before the exception can unwind out
-   of the process; a failed proof leaves it there even if nothing else runs.
+   The success channel has its own directory; `exptrace_dump` takes it as an argument and must
+   not find it already existing (step 6).
 
-6. On a **successful** proof, emit the success channel as before:
+5. No failure-path driver hook is required. When a guarded tactic application raises,
+   `exptrace_guard` appends one JSON object to `<dir>/<tacname>.failures.jsonl`; when a guarded
+   conversion raises, `exptrace_guard_conv` appends to
+   `<dir>/<convname>.conv.failures.jsonl`. Both close the file and re-raise unchanged. The
+   journal is on disk before the exception can unwind out of the process; a failed proof
+   leaves it there even if nothing else runs.
+
+6. On a **successful** proof, emit the success channel. `exptrace_dump` is
+   `string -> unit`; the argument is the run directory, and the directory must not already
+   exist because `exptrace_dump` creates it:
 
    ```ocaml
-   exptrace_dump ();;
+   exptrace_dump "/abs/path/to/run-001";;
    ```
 
    The failure journals are already present. No failure-side call is needed to keep the
    evidence.
 
-7. **Optional** consolidation into arrays in TacticTrace's dump style:
+7. **Optional** consolidation into arrays in TacticTrace's dump style. `exptrace_failures_dump`
+   is `string -> unit`; pass the directory the journals were written to:
 
    ```ocaml
-   exptrace_failures_dump ();;
+   exptrace_failures_dump "/abs/path/to/failures-001";;
    ```
 
-   This merges each `<tacname>.failures.jsonl` into `<tacname>.failures.json`, sorted
+   This merges each `<tacname>.failures.jsonl` into `<tacname>.failures.json` and each
+   `<convname>.conv.failures.jsonl` into `<convname>.conv.failures.json`, sorted
    deterministically by canonical journal line, and refuses to overwrite an existing array.
    It is safe never to call it; the `.jsonl` journals remain the raw evidence. On a failed
    proof, if arrays are wanted, call it in the exception path before re-raising:
@@ -269,11 +292,11 @@ unmistakable.
    ```ocaml
    (try run_proof ()
     with e ->
-      exptrace_failures_dump ();
+      exptrace_failures_dump "/abs/path/to/failures-001";
       raise e);;
    ```
 
-   Do not call `exptrace_dump ()` on this path; it is the success channel and its existence
+   Do not call `exptrace_dump` on this path; it is the success channel and its existence
    check is for a fresh run directory.
 
 8. Check conformance between a stock run and a patched run over the same success-only proof
@@ -289,20 +312,38 @@ unmistakable.
    bash tools/selftest.sh
    ```
 
+10. Execute one proof and collect both channels. `tools/run_traces.sh` builds or reuses the
+    instrumented binary, clears the success directory immediately before the run, runs the
+    binary from the s2n-bignum root, and leaves success JSON in `--success-dir` and failure
+    journals in `--failure-dir`:
+
+    ```sh
+    tools/run_traces.sh --success-dir run-001 --failure-dir failures-001 word_max
+    tools/run_traces.sh --stock --success-dir baseline-001 word_max
+    tools/run_traces.sh --success-dir probe-001 --failure-dir probe-failures-001 \
+      --inject 'TRY (FAIL_TAC "probe")' word_max
+    python3 tools/trace_conformance.py baseline-001 run-001
+    ```
+
+    The first command is the patched run, the second the unpatched baseline for conformance,
+    and the third injects a recovered failure whose journal must already exist when the proof
+    ends. `--reuse` is keyed on the proof, injection, mode, wrapper, and success directory, so
+    a stale binary is never reused for a different dump path.
+
 ### Limitations of this scaffold
 
-- **Conversions are not guarded in this version.** `patch_wrapper.py` counts conversion
-  wrappers and leaves them untouched. A conversion that raises is still invisible to the
-  failure channel. The conversion path is a separate generator branch in `tracer.ml`, with a
-  different wrapper shape (`: thm`, `exptrace_add_conv`), and needs its own guard and its own
-  fixture. The conformance tool skips conversion traces, so extending it later is a separate
-  change rather than a modification of the success path.
-- **The OCaml module is compiled against stubs, not against HOL Light.**
+- **Conversions are guarded on the failure side only.** `patch_wrapper.py` wraps each
+  generated conversion application with `exptrace_guard_conv`, which writes
+  `<convname>.conv.failures.jsonl` and re-raises unchanged. The `exptrace_add_conv` success
+  records are byte-for-byte unchanged, and `trace_conformance.py` still skips conversion
+  success traces (it does not compare them).
+- **The offline harness uses stubs; the module is also load-checked against HOL Light.**
   `tools/test_write_through.py` proves the write-through and JSONL shape with `type goal =
-  string`, a stub `pp_print_goal`, and a stub `ExportTrace`. It does not resolve HOL Light's
-  real `goal`/`pp_print_goal`/`ExportTrace`, the generated wrapper's identifiers, or
-  conversion behaviour. Those require a HOL Light run, which this scaffold deliberately does
-  not perform (HOL Light is roughly 20 GB and an hour to build).
+  string`, `type term = string`, and stub `pp_print_goal`/`string_of_term`. Separately, the
+  tracked module has been loaded in the prepared HOL Light session after `exportTrace.ml`
+  and exercised with `exptrace_guard`, `exptrace_guard_conv`, and `exptrace_failures_dump`.
+  The offline harness does not rebuild HOL Light; `tools/run_traces.sh` is the executable path
+  for a real proof.
 - **Write-through survives process exit, not necessarily machine loss.** The journal line is
   flushed by `close_out` before the exception is re-raised, so an ordinary exit preserves it.
   There is no `fsync`, because that would require the Unix library; a power loss or kernel

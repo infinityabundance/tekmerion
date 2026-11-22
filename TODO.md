@@ -101,22 +101,15 @@ Every item below came from an external review or from the programme's own audit.
   *Acceptance:* a real HOL Light run produces a failed attempt whose trajectory replays to the same
   exception and goal state, archived and content-addressed.
 
-- [ ] **C4. Guard conversions.**
-  A conversion that raises currently writes no failure record (211 conversion wrappers; 288 conv trace files skipped).
-  *Acceptance:* conversion path instrumented, or the omission stated in every report that uses the corpus.
+- [x] **C4. Guard conversions.** Implemented in `tools/patch_wrapper.py` (211 conversion wrappers). An injected `BETA_CONV` failure wrote `BETA_CONV.conv.failures.jsonl`; stock and patched success trees are byte-identical (`diff -rq` exit 0).
 
-- [ ] **C6. Make `trace/exptrace_failure.ml` standalone.** It calls `ExportTrace.effective_output_dir`
-  and `get_sampling_config`, which do not exist at pinned TacticTrace `7ea3808`. Use an explicit
-  directory (`TEKMERION_FAILURE_DIR` or a setter) so it compiles against the pin.
-  *Acceptance:* the tracked module compiles against `7ea3808`; the selftest uses the tracked file, not a copy.
+- [x] **C6. Make `trace/exptrace_failure.ml` standalone.** Done: no `ExportTrace.*`; directory order is explicit setter → `TEKMERION_FAILURE_DIR` → `./tekmerion-failures`. Loaded and exercised in a real HOL Light session (`hol_exit=0`), tactic and conversion journals both written and both re-raised.
 
-- [ ] **C7. Fix `research/03-INSTRUMENT.md` §9.** It documents `exptrace_dump ()`; the real function is
-  `string -> unit`. *Acceptance:* the doc matches the source.
+- [x] **C7. Fix `research/03-INSTRUMENT.md` §9.** Corrected to `exptrace_dump : string -> unit`. Note: the `exptrace_dump ()` on line 5 is a **verbatim quotation** of TacticTrace's README, so it stays as written.
 
-- [ ] **C8. Provide a runner that actually executes proofs.** `setup.sh` runs `make build_proofs`, which
-  builds binaries but never runs them, so `.bench/trace-logs` stays empty; `build-proof.sh:88` also
-  pre-creates the dump directory that `exportTrace.ml:192` then `Sys.mkdir`s.
-  *Acceptance:* one command produces success traces on a named theorem, with the pre-created directory resolved.
+- [x] **C8. Provide a runner that actually executes proofs.** `tools/run_traces.sh` produces **266** success JSON files for `word_max` and writes journals under `TEKMERION_FAILURE_DIR`. Conformance **0 / 1,569**. TacticTrace restored clean (`git status` empty, wrapper sha `11943794…`).
+- [ ] **C9. Conversion-journal retention.** Guarding all 211 conversion wrappers produced ~3.7M lines / ~578 MB for one `word_max` run. Correct but unusable at corpus scale. Add a retention policy (cap per wrapper, keep first N and last N, or record only conversions above a size threshold) without dropping the evidence that a conversion raised. *Acceptance:* one run stays under a declared byte budget with no silent loss.
+- [ ] **C10. Wire the runner into `setup.sh`.** It still calls `make build_proofs` and `rm -rf trace-logs`; it never invokes `tools/run_traces.sh`. *Acceptance:* one documented command produces traces, or the README states that tracing requires the runner.
 
 ---
 

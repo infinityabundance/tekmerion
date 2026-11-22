@@ -2,8 +2,10 @@
 # Offline scaffold self-test for the failure-side TacticTrace extension.
 #
 # It does NOT build HOL Light or s2n-bignum. The OCaml module is syntax-checked
-# only; resolving `goal`, `pp_print_goal`, and ExportTrace requires loading it
-# inside HOL Light, which is deliberately out of scope here.
+# only; resolving `goal`, `pp_print_goal`, `term`, and `string_of_term` requires
+# loading it inside HOL Light, which is deliberately out of scope here. The real
+# HOL Light load check and the proof runner are separate commands
+# (research/03-INSTRUMENT.md section 9).
 
 set -u
 set -o pipefail
@@ -25,7 +27,7 @@ cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 
 # ---------------------------------------------------------------------------
-section "1/6 OCaml syntax check (syntax only; type-checking needs HOL Light)"
+section "1/7 OCaml syntax check (syntax only; type-checking needs HOL Light)"
 
 # Compile a copy inside the temp directory so .cmo/.cmi artifacts never land
 # in the repository, wherever ocamlc decides to put them.
@@ -34,14 +36,31 @@ if ( cd "$tmp" && ocamlc -stop-after parsing -c exptrace_failure.ml ); then
   printf '%s\n' \
     "OK: trace/exptrace_failure.ml parses." \
     "NOTE: this is a syntax check only. It does not type-check 'goal'," \
-    "      'pp_print_goal', or 'ExportTrace'; those resolve only inside" \
-    "      HOL Light after exportTrace.ml is loaded."
+    "      'pp_print_goal', 'term', or 'string_of_term'; those resolve only" \
+    "      inside HOL Light after exportTrace.ml is loaded."
 else
   fail "OCaml syntax check failed"
 fi
 
 # ---------------------------------------------------------------------------
-section "2/6 patch_wrapper.py --self-test"
+section "2/7 runner script syntax"
+
+if bash -n tools/run_traces.sh; then
+  printf 'OK: tools/run_traces.sh parses\n'
+else
+  fail "tools/run_traces.sh syntax check failed"
+fi
+
+if python3 -c \
+    'import ast, pathlib; ast.parse(pathlib.Path("tools/run_traces_inject.py").read_text())'
+then
+  printf 'OK: tools/run_traces_inject.py parses\n'
+else
+  fail "tools/run_traces_inject.py syntax check failed"
+fi
+
+# ---------------------------------------------------------------------------
+section "3/7 patch_wrapper.py --self-test"
 if python3 tools/patch_wrapper.py --self-test; then
   printf 'OK: patch_wrapper self-test passed\n'
 else
@@ -49,7 +68,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "3/6 trace_conformance.py --self-test"
+section "4/7 trace_conformance.py --self-test"
 if python3 tools/trace_conformance.py --self-test; then
   printf 'OK: trace_conformance self-test passed\n'
 else
@@ -57,7 +76,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "4/6 write-through self-test (module compiled against stubs, no dump)"
+section "5/7 write-through self-test (module compiled against stubs, no dump)"
 if python3 tools/test_write_through.py; then
   printf 'OK: write-through self-test passed\n'
 else
@@ -65,21 +84,21 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "5/6a existing Rust suite (cargo test --offline)"
+section "6/7a existing Rust suite (cargo test --offline)"
 if cargo test --offline; then
   printf 'OK: cargo test --offline passed\n'
 else
   fail "cargo test --offline failed"
 fi
 
-section "5/6b existing mutation harness (tools/mutate.py)"
+section "6/7b existing mutation harness (tools/mutate.py)"
 if python3 tools/mutate.py; then
   printf 'OK: tools/mutate.py passed\n'
 else
   fail "tools/mutate.py failed"
 fi
 
-section "6/6 lifecycle mutation harness (tools/mutate_lifecycle.py)"
+section "7/7 lifecycle mutation harness (tools/mutate_lifecycle.py)"
 if python3 tools/mutate_lifecycle.py; then
   printf 'OK: tools/mutate_lifecycle.py passed\n'
 else
