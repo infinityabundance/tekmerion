@@ -355,3 +355,39 @@ All claims below have receipts under `research/receipts/`; full tables in
   an exchangeable sample — which is why the fail-closed control is part of the mechanism.
 - **N6 and N11 are PARTIAL** and rest on secondary sources; two arXiv queries returned HTTP 400
   and are logged as incomplete.
+
+---
+
+# PART IV — attempt-level tracing, then the first constructed proof (added 2026-11-22)
+
+Freeze N1–N12 and the novelty register until P1–P5 are done. Infrastructure serves the result.
+
+## I. Instrument defects and attempt-level schema
+
+- [ ] **I1. Attempt-level tracing.** One `attempt_id`, one monotonically ordered stream containing
+  `attempt_start`, `tactic_ok`, `tactic_raised`, `conv_ok`, `conv_raised`, `attempt_end`, with an
+  explicit terminal outcome (`proved` / `failed` / `timeout` / `unknown`). Keep TacticTrace's
+  per-tactic JSON for conformance, but the attempt stream becomes the primary artefact.
+- [ ] **I2. Bounded conversion retention.** Exact counts and a digest for every event; full terms
+  only up to a declared cap per wrapper; a manifest that names what was dropped and why. Sampling
+  must never be presented as a complete record.
+- [ ] **I3. `--proof PATH` is advertised but not parsed** in `tools/run_traces.sh`. Implement it or
+  remove it from usage and error messages.
+- [ ] **I4. Conversion guard evaluation order.** `exptrace_guard_conv` takes an eager `term`; stock
+  records the input after the conversion succeeds. Change it to take `unit -> term`, forced only on
+  failure, and update the patcher and its golden fixture.
+- [ ] **I5. JSON escaping.** `String.escaped` is not a valid JSON encoder for all control characters.
+  Add a standards-compliant encoder for our own writers. **Do not change the success-record writer**
+  that must stay byte-identical to TacticTrace.
+- [ ] **I6. Publish a content-addressed G1 reproduction package.** Exact commands, inputs, raw output,
+  hashes and assertions, small enough for Git; the large corpus stays out.
+
+## P. From observing proofs to constructing them
+
+- [ ] **P1. Reproduce attempt-level tracing on three routines** of increasing difficulty.
+- [ ] **P2. Minimal HOL Light step-level proof controller.**
+- [ ] **P3. Generate and kernel-check one CERTCUT intermediate lemma.**
+- [ ] **P4. Close an original functional-correctness theorem without its reference proof.**
+- [ ] **P5. Matched-budget baseline comparisons.**
+
+Order: I1–I5 → I6 + P1 → P2 → P3 → P4 → P5.
