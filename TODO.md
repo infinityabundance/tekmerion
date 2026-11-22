@@ -200,13 +200,13 @@ otherwise. Nothing below is dropped; each item is one dispatchable unit.
 
 ## V. Frontier facts to verify and freeze (before any claim)
 
-- [ ] **V1.** Verify AlphaProof Code (DeepMind, 2026-11-10): ~6.3M Lean lines, compiled
+- [x] **V1.** Verify AlphaProof Code (DeepMind, 2026-11-10): ~6.3M Lean lines, compiled
   `libsignal`, machine-code level, stated assumptions. Store a receipt.
-- [ ] **V2.** Verify Aria (arXiv 2607.06341): 4,257 Iris lemmas, 318 reglang lemmas, code
+- [x] **V2.** Verify Aria (arXiv 2607.06341): 4,257 Iris lemmas, 318 reglang lemmas, code
   agent + kernel harness, no fixed tactic strategy.
-- [ ] **V3.** Verify Anthropic + Theorem (2026-10-22): 123 libraries / 239 entry points,
+- [x] **V3.** Verify Anthropic + Theorem (2026-10-22): 123 libraries / 239 entry points,
   RISC-V, no-crash properties only, no functional correctness, no constant time.
-- [ ] **V4.** Verify `s2n-bignum/doc/program_equivalence.md` and `arm/proofs/equiv.ml`
+- [x] **V4.** Verify `s2n-bignum/doc/program_equivalence.md` and `arm/proofs/equiv.ml`
   (2,392 lines, 11 ARM proof files).
 - [ ] **V5.** Resolve the corpus-count conflict: paper 2,284 vs poster 2,301 vs leaderboard
   2,622. Pin one SHA, one count, one attempt budget per claim.
@@ -305,3 +305,51 @@ otherwise. Nothing below is dropped; each item is one dispatchable unit.
 4. Pilot A1 on 40 FC tasks, smallest first; record every simulation trace.
 5. M-C and M-A pilots; then M-B and M-D; then preregister the ladder.
 6. M-F on one openssl-rs P-256 kernel.
+
+---
+
+# PART III — research findings (2026-11-22)
+
+All claims below have receipts under `research/receipts/`; full tables in
+`research/05-FRONTIER-FACTS.md` and `research/04-NOVELTY-REGISTER.md`.
+
+## Verified, with caveats that change what we may say
+
+- **AlphaProof Code — VERIFIED, three caveats.** ~6.3M Lean lines for compiled `libsignal` at
+  machine-code level under stated assumptions, **but** the line count includes comments and
+  blank lines; mutation testing is **16/17 at specification level with one witness trace each**;
+  the 17 full binary disproofs are `sorry` stubs. Never cite its mutation suite as end-to-end.
+- **Aria — VERIFIED.** 4,257 Iris lemmas and 318 `reglang` lemmas with a kernel-closing harness
+  and no fixed strategy. It also proved 217 Rust-stdlib and 72 `iris-lean` lemmas, which the v2
+  brief omitted.
+- **Anthropic + Theorem — PARTIAL.** Numbers verified verbatim. "No functional correctness" is
+  **contradicted for the programme**: they separately prove at x86 binary level that kernel zlib
+  implements RFC 1950. "No constant time" is an absence they never claim. Assert neither.
+- **s2n-bignum equivalence — VERIFIED by measurement** at `1d097f6`: `arm/proofs/equiv.ml` =
+  2,392 lines (1,880 code), loaded by **11** ARM proof files. (My own grep matched 12 files
+  containing the string, possibly including `equiv.ml` itself; quote 11 until disambiguated.)
+  Wording fix: 2,392 is `equiv.ml`'s own size, not a total "across 11 files".
+
+## Mechanism corrections — these change the plan
+
+- **M-A must be re-scoped.** De-optimisation is not a new proof strategy; it is the existing
+  s2n-bignum method, prescribed in `doc/program_equivalence.md` with scalar `unopt` objects
+  already in-tree. Only the *agent policy* of inventing a twin is unclaimed. Make M-A an A/B on
+  agent behaviour, not a mechanism claim.
+- **M-F's headline is pre-empted.** AlphaProof Code already verifies stock-`rustc` AArch64 output
+  at machine-code level with the compiler outside the TCB. Delete "nobody has verified rustc
+  output at machine level". What survives: HOL Light, s2n-bignum's own specification, a pinned
+  object digest, and a contamination-free held-out set.
+- **N1 cannot run on HOL Light as written.** LCF exposes `thm` values, not a dependent proof term
+  with typed holes. N1 presupposes an elaborator (Lean/Coq/Agda) or a bespoke term-level search.
+  Treat as a substrate decision before any implementation.
+- **N4 is CONTRADICTED as novel.** Dense verifier-grounded reward is published, and
+  arXiv 2609.32908 is a clean negative control: better one-step ranking, worse kernel-completed
+  solves (282.3 vs 308 of 987).
+- **N12 is CONTRADICTED as novel.** Semantics-preserving mutants as contamination probes appear
+  in CodeMorph, Dynamic Benchmarking, RustMizan and Haroon et al.
+- **N3 is the only `PLAUSIBLY_NOVEL` row.** Conformal abstention for doomed branches. Preregister
+  its caveat: coverage is marginal and exchangeability-dependent, and a temporal hold-out is not
+  an exchangeable sample — which is why the fail-closed control is part of the mechanism.
+- **N6 and N11 are PARTIAL** and rest on secondary sources; two arXiv queries returned HTTP 400
+  and are logged as incomplete.
