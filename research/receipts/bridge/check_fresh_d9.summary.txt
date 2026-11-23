@@ -1,0 +1,25 @@
+# verbatim excerpts from the fresh-process bridge load (check_fresh_d9.ml)
+$ cat research/receipts/bridge/check_fresh_d9.ml | ../hol-light/hol.sh   # from .bench/s2n-bignum
+# AXIOMS before=3 after=3
+#                           HAVE EXP64_SUC hyps=0
+HAVE CARRY_CHAIN_ADD_STEP hyps=0
+HAVE CARRY_CHAIN_ADD_BASE hyps=0
+HAVE CARRY_CHAIN_SUB_STEP hyps=0
+HAVE CARRY_CHAIN_SUB_BASE hyps=0
+HAVE SUB_FLAG_ARITH hyps=0
+HAVE SUB_CHAIN_FLAG hyps=0
+HAVE BIGNUM_BOUND hyps=0
+HAVE FLAG_LE hyps=0
+HAVE ADD_ACC_NUM_0 hyps=0
+HAVE ADD_ACC_NUM hyps=0
+HAVE SBC_ACC_NUM_0 hyps=0
+HAVE SBC_ACC_NUM hyps=0
+HAVE ADC_NUM hyps=0
+HAVE BRIDGE_REAL_BITVAL_NOT hyps=0
+HAVE REAL_EXP64_SUB1 hyps=0
+HAVE VAL_WORD_ALLONES hyps=0
+HAVE ADC_ALLONES_NUM hyps=0
+HAVE VAL_WORD_ADD_BITVAL hyps=0
+HAVE BITVAL_ADD_ZERO hyps=0
+HAVE CSETM_EQ hyps=0
+# BRIDGE_CHECK_DONE seconds=3.096

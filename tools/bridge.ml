@@ -1088,3 +1088,423 @@ let BRIDGE_NEG_REF_TAC expand pth : tactic =
     (REWRITE_TAC eqn THEN
      REWRITE_TAC[rth; SYM thw; ref_neg; LET_DEF; LET_END_DEF] THEN
      BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;
+
+(* ========================================================================= *)
+(* 9. Deriving the simulator's carry and flag facts.                        *)
+(*                                                                           *)
+(* The routines that compare-and-mask (P-384, and the same shape elsewhere)  *)
+(* leave the proof with three obligations that used to be transcribed from   *)
+(* the human proof: a per-limb carry telescope, the meaning of the compare   *)
+(* flag, and the value of the CSETM mask.  The lemmas below are the general  *)
+(* telescope; the tactics read the accumulator equations the simulator emits *)
+(* and instantiate the lemmas at the limb words and carries actually present. *)
+(* No curve constant occurs in any lemma: the modulus is an argument of the  *)
+(* flag tactic and enters only as an *evaluated* instance.                   *)
+(*                                                                           *)
+(* The telescope is stated over `bignum_of_wordlist' because that is how the *)
+(* simulator hands the limb sums back.  `LENGTH (CONS x xs)' is kept in the  *)
+(* conclusion on purpose: the step lemma must compose with the previous      *)
+(* step, whose exponent is `LENGTH' of the list it already built.            *)
+(* ========================================================================= *)
+
+let EXP64_SUC = prove
+ (`!n:num. 2 EXP (64 * SUC n) = 2 EXP 64 * 2 EXP (64 * n)`,
+  GEN_TAC THEN SUBGOAL_THEN `64 * SUC n = 64 * n + 64` SUBST1_TAC THENL
+   [ARITH_TAC; ALL_TAC] THEN REWRITE_TAC[EXP_ADD] THEN ARITH_TAC);;
+
+(* addition: one limb, carrying `b' in and `c' out *)
+let CARRY_CHAIN_ADD_STEP = prove
+ (`!(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
+    (xs:int64 list) (ys:int64 list) (ss:int64 list).
+      val x + val y + bitval b = val s + 2 EXP 64 * bitval c /\
+      bignum_of_wordlist xs + bignum_of_wordlist ys + bitval c =
+        bignum_of_wordlist ss + 2 EXP (64 * LENGTH xs) * bitval cf
+      ==> bignum_of_wordlist (CONS x xs) + bignum_of_wordlist (CONS y ys) +
+            bitval b =
+          bignum_of_wordlist (CONS s ss) +
+            2 EXP (64 * LENGTH (CONS x xs)) * bitval cf`,
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP64_SUC] THEN
+  REPEAT STRIP_TAC THEN ASM_ARITH_TAC);;
+
+let CARRY_CHAIN_ADD_BASE = prove
+ (`!(c:bool) (cf:bool).
+      c = cf
+      ==> bignum_of_wordlist ([]:int64 list) +
+            bignum_of_wordlist ([]:int64 list) + bitval c =
+          bignum_of_wordlist ([]:int64 list) +
+            2 EXP (64 * LENGTH ([]:int64 list)) * bitval cf`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP; MULT_CLAUSES; ADD_CLAUSES] THEN
+  ASM_REWRITE_TAC[]);;
+
+(* subtraction: one limb, borrowing `b' in and `c' out *)
+let CARRY_CHAIN_SUB_STEP = prove
+ (`!(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
+    (xs:int64 list) (ys:int64 list) (ss:int64 list).
+      val x + 2 EXP 64 * bitval c = val y + bitval b + val s /\
+      bignum_of_wordlist xs + 2 EXP (64 * LENGTH xs) * bitval cf =
+        bignum_of_wordlist ys + bignum_of_wordlist ss + bitval c
+      ==> bignum_of_wordlist (CONS x xs) +
+            2 EXP (64 * LENGTH (CONS x xs)) * bitval cf =
+          bignum_of_wordlist (CONS y ys) +
+            bignum_of_wordlist (CONS s ss) + bitval b`,
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP64_SUC] THEN
+  REPEAT STRIP_TAC THEN ASM_ARITH_TAC);;
+
+let CARRY_CHAIN_SUB_BASE = prove
+ (`!(c:bool) (cf:bool).
+      c = cf
+      ==> bignum_of_wordlist ([]:int64 list) +
+            2 EXP (64 * LENGTH ([]:int64 list)) * bitval cf =
+          bignum_of_wordlist ([]:int64 list) +
+            bignum_of_wordlist ([]:int64 list) + bitval c`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP; MULT_CLAUSES; ADD_CLAUSES] THEN
+  ASM_REWRITE_TAC[]);;
+
+(* the borrow produced by a subtract chain is the comparison *)
+let SUB_FLAG_ARITH = prove
+ (`!A B S E:num (cf:bool).
+      A + E * bitval cf = B + S /\ S < E ==> (cf <=> A < B)`,
+  REPEAT GEN_TAC THEN BOOL_CASES_TAC `cf:bool` THEN
+  REWRITE_TAC[BITVAL_CLAUSES; MULT_CLAUSES; ADD_CLAUSES; EQ_CLAUSES] THEN
+  STRIP_TAC THEN ASM_ARITH_TAC);;
+
+let SUB_CHAIN_FLAG = prove
+ (`!(xs:int64 list) (ys:int64 list) (ss:int64 list) (cf:bool).
+      bignum_of_wordlist xs + 2 EXP (64 * LENGTH xs) * bitval cf =
+        bignum_of_wordlist ys + bignum_of_wordlist ss /\
+      LENGTH ss = LENGTH xs /\
+      bignum_of_wordlist ss < 2 EXP (64 * LENGTH xs)
+      ==> (cf <=> bignum_of_wordlist xs < bignum_of_wordlist ys)`,
+  REPEAT STRIP_TAC THEN
+  MATCH_MP_TAC (ISPECL [`bignum_of_wordlist (xs:int64 list)`;
+                        `bignum_of_wordlist (ys:int64 list)`;
+                        `bignum_of_wordlist (ss:int64 list)`;
+                        `2 EXP (64 * LENGTH (xs:int64 list))`] SUB_FLAG_ARITH) THEN
+  ASM_REWRITE_TAC[]);;
+
+let BIGNUM_BOUND = prove
+ (`!l:int64 list k. LENGTH l = k ==> bignum_of_wordlist l < 2 EXP (64 * k)`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  MP_TAC (ISPEC `l:int64 list` BIGNUM_OF_WORDLIST_BOUND_LENGTH) THEN
+  ASM_REWRITE_TAC[]);;
+
+(* the final borrow is a negation of the carry the simulator names *)
+let FLAG_LE = prove
+ (`!b:bool A B:num. (~b <=> A < B) ==> (b <=> B <= A)`,
+  MESON_TAC[NOT_LT]);;
+
+(* numeral normalisation of the simulator's real accumulator equations *)
+let ADD_ACC_NUM_0 = prove
+ (`!(x:int64) (y:int64) (z:int64) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real = &(val x) + &(val y)
+      ==> val x + val y + bitval F = val z + 2 EXP 64 * bitval c`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW; BITVAL_CLAUSES] THEN
+  REWRITE_TAC[REAL_ADD_LID] THEN DISCH_TAC THEN ASM_REAL_ARITH_TAC);;
+
+let ADD_ACC_NUM = prove
+ (`!(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real =
+        &(val x) + &(val y) + &(bitval b)
+      ==> val x + val y + bitval b = val z + 2 EXP 64 * bitval c`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC);;
+
+let SBC_ACC_NUM_0 = prove
+ (`!(x:int64) (y:int64) (z:int64) (c:bool).
+      --(&2 pow 64) * &(bitval c) + &(val z):real =
+        &(val x) - &(val y)
+      ==> val x + 2 EXP 64 * bitval c = val y + bitval F + val z`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW; BITVAL_CLAUSES] THEN
+  REWRITE_TAC[REAL_ADD_RID] THEN DISCH_TAC THEN ASM_REAL_ARITH_TAC);;
+
+let SBC_ACC_NUM = prove
+ (`!(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
+      --(&2 pow 64) * &(bitval c) + &(val z):real =
+        &(val x) - &(val y) - &(bitval b)
+      ==> val x + 2 EXP 64 * bitval c = val y + bitval b + val z`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC);;
+
+let ADC_NUM = prove
+ (`!(x:int64) (z:int64) (b:bool) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real =
+        &(val x) + &(bitval b)
+      ==> val z + 2 EXP 64 * bitval c = val x + bitval b`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC);;
+
+let BRIDGE_REAL_BITVAL_NOT = prove
+ (`!b:bool. &(bitval(~b)):real = &1 - &(bitval b)`,
+  GEN_TAC THEN BOOL_CASES_TAC `b:bool` THEN
+  REWRITE_TAC[BITVAL_CLAUSES; NOT_CLAUSES; REAL_SUB_RZERO; REAL_SUB_REFL]);;
+
+let REAL_EXP64_SUB1 = prove
+ (`&(2 EXP 64 - 1):real = &2 pow 64 - &1`,
+  CONV_TAC SYM_CONV THEN
+  MP_TAC (MATCH_MP REAL_OF_NUM_SUB (ARITH_RULE `1 <= 2 EXP 64`)) THEN
+  REWRITE_TAC[REAL_OF_NUM_POW] THEN DISCH_TAC THEN ASM_REWRITE_TAC[]);;
+
+let VAL_WORD_ALLONES = prove
+ (`val(word (2 EXP 64 - 1):int64) = 2 EXP 64 - 1`,
+  REWRITE_TAC[VAL_WORD; DIMINDEX_64] THEN
+  SUBGOAL_THEN `2 EXP 64 - 1 < 2 EXP 64` ASSUME_TAC THENL
+   [ARITH_TAC; ASM_SIMP_TAC[MOD_LT]]);;
+
+(* an all-ones limb written by ADCS x XZR is a subtract-with-borrow limb *)
+let ADC_ALLONES_NUM = prove
+ (`!(x:int64) (z:int64) (b:bool) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real =
+        &(val x) + &(bitval b)
+      ==> val x + 2 EXP 64 * bitval(~c) =
+          val(word (2 EXP 64 - 1):int64) + bitval(~b) + val z`,
+  REPEAT GEN_TAC THEN REWRITE_TAC[VAL_WORD_ALLONES] THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  REWRITE_TAC[BRIDGE_REAL_BITVAL_NOT; REAL_EXP64_SUB1] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC);;
+
+(* a two-bit CSETM condition and its mask word *)
+let VAL_WORD_ADD_BITVAL = prove
+ (`!a b:bool.
+      val(word_add (word (0 + bitval a):int64) (word (bitval b):int64)) =
+      bitval a + bitval b`,
+  REPEAT GEN_TAC THEN
+  SUBGOAL_THEN `bitval a + bitval b < 2 EXP 64` ASSUME_TAC THENL
+   [MP_TAC (SPEC `a:bool` BITVAL_BOUND) THEN
+    MP_TAC (SPEC `b:bool` BITVAL_BOUND) THEN ARITH_TAC;
+    ASM_SIMP_TAC[VAL_WORD_ADD; VAL_WORD_BITVAL; DIMINDEX_64; MOD_LT;
+                 ADD_CLAUSES]]);;
+
+let BITVAL_ADD_ZERO = prove
+ (`!a b:bool. bitval a + bitval b = 0 <=> ~a /\ ~b`,
+  REPEAT GEN_TAC THEN ASM_CASES_TAC `a:bool` THEN
+  ASM_CASES_TAC `b:bool` THEN
+  ASM_REWRITE_TAC[BITVAL_CLAUSES; ADD_CLAUSES; NOT_CLAUSES; EQ_CLAUSES] THEN
+  ARITH_TAC);;
+
+let CSETM_EQ = prove
+ (`!p:bool. (if p then (word 0:int64) else word 18446744073709551615) =
+            word_neg(word (bitval(~p)))`,
+  GEN_TAC THEN BOOL_CASES_TAC `p:bool` THEN
+  REWRITE_TAC[BITVAL_CLAUSES; word_neg] THEN
+  CONV_TAC WORD_REDUCE_CONV);;
+
+(* ========================================================================= *)
+(* 9b. Parsing the accumulator state.                                        *)
+(* ========================================================================= *)
+
+let PAT_ADD0 = `&2 pow 64 * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) + &(val (y:int64))`;;
+let PAT_ADD1 = `&2 pow 64 * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) + &(val (y:int64)) + &(bitval (b:bool))`;;
+let PAT_SBC0 = `--(&2 pow 64) * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) - &(n:num)`;;
+let PAT_SBC1 = `--(&2 pow 64) * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) - &(n:num) - &(bitval (b:bool))`;;
+let PAT_ADC = `&2 pow 64 * &(bitval (c:bool)) + &(val (z:int64)):real =
+               &(val (x:int64)) + &(bitval (b:bool))`;;
+let PAT_NSUB = `val (x:int64) + 2 EXP 64 * bitval (c:bool) =
+                val (y:int64) + bitval (b:bool) + val (z:int64)`;;
+
+let BRIDGE_MATCH_BIND pat tm names =
+  let (_,tmin,_) = term_match [] pat tm in
+  map (fun v -> rev_assoc v tmin) names;;
+
+(* the limb words the routine actually keeps in registers *)
+let BRIDGE_OUTPUT_REGS asl =
+  let regset = ref [] in
+  List.iter (fun (_,th) ->
+    match concl th with
+    | Comb(Comb(Const("=",_),
+                Comb(Comb(Const("read",_), Const(nm,_)), _)), rhs)
+        when String.length nm > 0 && nm.[0] = 'X' ->
+        if not (List.exists (aconv rhs) !regset) then regset := rhs :: !regset
+    | _ -> ()) asl;
+  !regset;;
+
+(* ========================================================================= *)
+(* 9c. The three tactics.                                                    *)
+(* ========================================================================= *)
+
+(* Fold the per-limb addition equations into the one telescope. *)
+let BRIDGE_CARRY_CONSERVE_TAC : tactic = fun (asl,w) ->
+  let recs = ref [] in
+  List.iter (fun (_,th) ->
+    let t = concl th in
+    try
+      let [c;z;x;y;b] =
+        BRIDGE_MATCH_BIND PAT_ADD1 t
+          [`c:bool`; `z:int64`; `x:int64`; `y:int64`; `b:bool`] in
+      recs := ("A1",th,c,z,x,y,Some b) :: !recs
+    with _ ->
+    try
+      let [c;z;x;y] =
+        BRIDGE_MATCH_BIND PAT_ADD0 t
+          [`c:bool`; `z:int64`; `x:int64`; `y:int64`] in
+      recs := ("A0",th,c,z,x,y,None) :: !recs
+    with _ -> ()) asl;
+  let regset = BRIDGE_OUTPUT_REGS asl in
+  let isreg z = List.exists (aconv z) regset in
+  let rec chain_build remaining prev acc =
+    let cands = List.filter (fun (_,_,_,z,_,_,_) -> isreg z) remaining in
+    let cands = List.filter (fun (_,_,_,_,_,_,b) ->
+        match b with Some bb -> aconv bb prev | None -> false) cands in
+    match cands with
+    | [] -> List.rev acc
+    | [r] -> let (_,_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) remaining) c (r :: acc)
+    | _ -> failwith "BRIDGE_CARRY_CONSERVE_TAC: ambiguous chain" in
+  let start = List.filter (fun (_,_,_,_,_,_,b) -> b = None) !recs in
+  let limbs = match start with
+    | [r] -> let (_,_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) !recs) c [r]
+    | _ -> failwith "BRIDGE_CARRY_CONSERVE_TAC: no unique first limb" in
+  if limbs = [] then failwith "BRIDGE_CARRY_CONSERVE_TAC: empty chain";
+  let numeq (_,th,_,z,x,y,b) =
+    match b with None -> MATCH_MP ADD_ACC_NUM_0 th
+    | Some _ -> MATCH_MP ADD_ACC_NUM th in
+  let arr = Array.of_list limbs in
+  let k = Array.length arr in
+  let lastc = let (_,_,c,_,_,_,_) = arr.(k-1) in c in
+  let base = MP (ISPECL [lastc; lastc] CARRY_CHAIN_ADD_BASE) (REFL lastc) in
+  let rec fold i =
+    if i >= k then base
+    else MATCH_MP CARRY_CHAIN_ADD_STEP (CONJ (numeq arr.(i)) (fold (i+1))) in
+  let th = REWRITE_RULE[BITVAL_CLAUSES; ADD_CLAUSES; LENGTH] (fold 0) in
+  ASSUME_TAC th (asl,w);;
+
+(* Fold the compare equations and read off what the final flag means. *)
+let BRIDGE_CMP_FLAG_TAC (pth:thm) : tactic = fun (asl,w) ->
+  let recs = ref [] in
+  let numeral_word n =
+    let valth = WORD_VAL_CONV
+        (mk_comb(`val:int64->num`, mk_comb(`word:num->int64`, n))) in
+    (mk_comb(`word:num->int64`, n),
+     AP_TERM `real_of_num:num->real` (SYM valth)) in
+  let subtrahend th n =
+    match n with
+    | Comb(Const("val",_),w) -> (w,th)
+    | _ when is_numeral n ->
+        let (y,rw) = numeral_word n in (y, REWRITE_RULE[rw] th)
+    | _ -> failwith "BRIDGE_CMP_FLAG_TAC: unexpected subtrahend" in
+  List.iter (fun (_,th) ->
+    let t = concl th in
+    let addrec kind th c z x y b =
+      recs := (kind,th,c,z,x,y,b) :: !recs in
+    try
+      let [c;z;x;n;b] =
+        BRIDGE_MATCH_BIND PAT_SBC1 t
+          [`c:bool`; `z:int64`; `x:int64`; `n:num`; `b:bool`] in
+      let (y,th') = subtrahend th n in
+      addrec "S" th' c z x y (Some b)
+    with _ ->
+    try
+      let [c;z;x;n] =
+        BRIDGE_MATCH_BIND PAT_SBC0 t
+          [`c:bool`; `z:int64`; `x:int64`; `n:num`] in
+      let (y,th') = subtrahend th n in
+      addrec "S" th' c z x y None
+    with _ ->
+    try
+      let [c;z;x;b] =
+        BRIDGE_MATCH_BIND PAT_ADC t
+          [`c:bool`; `z:int64`; `x:int64`; `b:bool`] in
+      addrec "C" th c z x `word 0` (Some b)
+    with _ -> ()) asl;
+  let nrecs = List.map (fun (kind,th,c,z,x,y,b) ->
+      match kind with
+      | "S" -> (match b with
+                | None -> MATCH_MP SBC_ACC_NUM_0 th
+                | Some _ -> MATCH_MP SBC_ACC_NUM th)
+      | _ -> REWRITE_RULE[NOT_CLAUSES] (MATCH_MP ADC_ALLONES_NUM th)) !recs in
+  let nrecs = List.map (fun th ->
+      let [x;c;y;b;z] =
+        BRIDGE_MATCH_BIND PAT_NSUB (concl th)
+          [`x:int64`; `c:bool`; `y:int64`; `b:bool`; `z:int64`] in
+      (th,c,z,x,y,b)) nrecs in
+  let rec chain_build remaining prev acc =
+    let cands = List.filter (fun (_,_,_,_,_,b) -> aconv b prev) remaining in
+    match cands with
+    | [] -> List.rev acc
+    | [r] -> let (_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) remaining) c (r :: acc)
+    | _ -> failwith "BRIDGE_CMP_FLAG_TAC: ambiguous chain" in
+  let start = List.filter (fun (_,_,_,_,_,b) -> aconv b `F`) nrecs in
+  let limbs = match start with
+    | [r] -> let (_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) nrecs) c [r]
+    | _ -> failwith "BRIDGE_CMP_FLAG_TAC: no unique first limb" in
+  if limbs = [] then failwith "BRIDGE_CMP_FLAG_TAC: empty chain";
+  let arr = Array.of_list limbs in
+  let k = Array.length arr in
+  let lastc = let (_,c,_,_,_,_) = arr.(k-1) in c in
+  let base = MP (ISPECL [lastc; lastc] CARRY_CHAIN_SUB_BASE) (REFL lastc) in
+  let rec fold i =
+    if i >= k then base
+    else MATCH_MP CARRY_CHAIN_SUB_STEP
+           (CONJ (let (th,_,_,_,_,_) = arr.(i) in th) (fold (i+1))) in
+  let cons = REWRITE_RULE[BITVAL_CLAUSES; ADD_CLAUSES] (fold 0) in
+  let tys = `:int64` in
+  let xs = mk_list (List.map (fun (_,_,_,x,_,_) -> x) limbs, tys) in
+  let ys = mk_list (List.map (fun (_,_,_,_,y,_) -> y) limbs, tys) in
+  let ss = mk_list (List.map (fun (_,_,z,_,_,_) -> z) limbs, tys) in
+  let cf = let (_,c,_,_,_,_) = arr.(k-1) in c in
+  let pconst = lhand (concl pth) in
+  let big_conv = BIGNUM_OF_WORDLIST_CONV THENC
+                 DEPTH_CONV WORD_VAL_CONV THENC
+                 REWRITE_CONV[VAL_WORD_ALLONES] THENC
+                 NUM_REDUCE_CONV in
+  let pval = prove(mk_eq(mk_comb(`bignum_of_wordlist`,ys), pconst),
+    REWRITE_TAC[pth] THEN CONV_TAC (LAND_CONV big_conv) THEN
+    CONV_TAC NUM_EQ_CONV) in
+  let lenf = prove(
+    subst [ss, `ll:int64 list`; xs, `mm:int64 list`]
+      `LENGTH (ll:int64 list) = LENGTH (mm:int64 list)`,
+    REWRITE_TAC[LENGTH]) in
+  let ktm = subst [xs, `mm:int64 list`] `LENGTH (mm:int64 list)` in
+  let boundf = MP (ISPECL [ss; ktm] BIGNUM_BOUND) lenf in
+  let lem = ISPECL [xs; ys; ss; cf] SUB_CHAIN_FLAG in
+  let th = MP lem (end_itlist CONJ [cons; lenf; boundf]) in
+  let th = REWRITE_RULE[pval] th in
+  let th = MATCH_MP FLAG_LE th in
+  ASSUME_TAC th (asl,w);;
+
+(* Read the CSETM result back as a mask over the two bits it tested. *)
+let PAT_MASKCOND =
+ `val (word_add (word (0 + bitval (a:bool)):int64) (word (bitval (b:bool)):int64)) = 0`;;
+
+let BRIDGE_MASK_SELECT_TAC : tactic = fun (asl,w) ->
+  let pick = ref None in
+  List.iter (fun (_,th) ->
+    if !pick = None then
+      match concl th with
+      | Comb(Comb(Const("=",_), Comb(Comb(Const("read",_), _), _)), rhs) ->
+          (try
+             let (cnd,_) = dest_cond rhs in
+             if can (BRIDGE_MATCH_BIND PAT_MASKCOND cnd)
+                    [`a:bool`; `b:bool`]
+             then pick := Some (th, cnd)
+           with _ -> ())
+      | _ -> ()) asl;
+  match !pick with
+  | None -> failwith "BRIDGE_MASK_SELECT_TAC: no two-bit CSETM assumption"
+  | Some (th0, cnd) ->
+      let [a;b] = BRIDGE_MATCH_BIND PAT_MASKCOND cnd [`a:bool`; `b:bool`] in
+      let cond_eq = prove(mk_eq(cnd, mk_neg(mk_disj(a,b))),
+        REWRITE_TAC[VAL_WORD_ADD_BITVAL; BITVAL_ADD_ZERO] THEN MESON_TAC[]) in
+      let cth = REWRITE_RULE[NOT_CLAUSES]
+                  (ISPEC (mk_neg(mk_disj(a,b))) CSETM_EQ) in
+      let th = REWRITE_RULE[cond_eq] th0 in
+      ASSUME_TAC (TRANS th cth) (asl,w);;

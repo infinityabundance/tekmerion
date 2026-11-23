@@ -805,6 +805,15 @@ Everything else stays parked until step 7 produces a number.
   that in the *whole context* (not just the goal) fixed the encoding. Measured: local
   close 145.596 s; judge 25.980 s. This is a *reduction* structure the P-256 route does
   not have (compare-and-mask, not carry-select), so it is real extra coverage.
+- [x] **V8.19 (D9). Derive the P-384 simulation facts instead of transcribing them.** The carry
+  telescope, the compare-flag meaning and the CSETM mask are now proved from the accumulator
+  state by `BRIDGE_CARRY_CONSERVE_TAC` / `BRIDGE_CMP_FLAG_TAC` / `BRIDGE_MASK_SELECT_TAC`
+  (`tools/bridge.ml` §9; generic lemmas, 0 curve constants). Judge `OK` again:
+  `.bench/eval-20261123_214053/arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT.judge.txt`,
+  `collect-verdicts.py` -> `OK,1`; replay `closed=1 hyps=0`, axiom list unchanged; 61.225 s
+  in `bench_run`, 100 s wall (native). Receipt `research/receipts/d9-derived-flags.md`; removed
+  glue `research/receipts/d9-removed-glue.diff`. Remaining `DEVELOPMENT_ONLY`: simulation
+  grouping, expansion idiom, post bitval rewrites, two-bit CSETM condition shape.
 
 ## Scope
 
@@ -1116,7 +1125,10 @@ compositional proof checking; online LRAT checking.
   acceptances, not dependency-closed results. TNPS's top grade must not inherit that ambiguity.
 - [ ] **IX.48.** The P-384 answer still contains transcribed simulation glue, a carry equation, a
   comparison lemma and a mask rewrite (`DEVELOPMENT_ONLY`). Automating those is a prerequisite for a
-  native, non-transcribed result.
+  native, non-transcribed result. *Partially addressed in D9/V8.19: the carry telescope, the
+  comparison flag and the mask are now derived by `BRIDGE_CARRY_CONSERVE_TAC` /
+  `BRIDGE_CMP_FLAG_TAC` / `BRIDGE_MASK_SELECT_TAC`; what remains transcribed is the simulation
+  grouping and the expansion/bitval idiom (`research/receipts/d9-derived-flags.md` §6).*
 - [ ] **IX.49.** The Rust engine is an evidence/lifecycle layer, not yet a proof kernel. Treating it
   as one is a real construction task, not a rename.
 
@@ -1124,3 +1136,36 @@ compositional proof checking; online LRAT checking.
 
 - This charter is not aviation, space or security certification, and adopting it certifies nothing.
 - No dimension of the frontier register is claimed as surpassed until the named evidence exists.
+
+---
+
+## R5 · P-384 glue derived, not transcribed (2026-11-23)
+
+The three hand-written facts are replaced by generic, kernel-checked derivations, and the judge still
+returns `OK`:
+
+| former transcription | replacement |
+|---|---|
+| `2 EXP 384 * bitval carry_s12 + bignum_of_wordlist […] = m + n` | `BRIDGE_CARRY_CONSERVE_TAC`, folding per-limb carries with `CARRY_CHAIN_ADD_STEP`/`_BASE`; list-generic and reused unchanged on P-256 |
+| `FLAG_FROM_CARRY_LE` with a hand-chosen `EXISTS_TAC` | `BRIDGE_CMP_FLAG_TAC`, folding the compare chain with `CARRY_CHAIN_SUB_STEP`/`_BASE` and `SUB_CHAIN_FLAG`/`FLAG_LE` |
+| `word_neg(word(bitval(p_384 <= m+n)))` rewrite | `BRIDGE_MASK_SELECT_TAC` from the CSETM assumption with `CSETM_EQ` |
+
+Diff `research/receipts/d9-removed-glue.diff`: **41 lines removed, 4 added**. In the generated answer,
+the three transcriptions are absent; `FLAG_FROM_CARRY_LE` appears only as the **definition** of the
+lemma at line 16890, not as a driver use. Fresh bridge load: 21 new lemmas, axioms 3→3. Replay:
+`closed=1 hyps=0 axioms 2445→2445`; judge `OK`, 61.225 s.
+
+**Still `DEVELOPMENT_ONLY`:** the simulation grouping (`1--13 / 14--22 / [23;24] / 25--38`), the
+bignum expansion pass, the post-`REAL_BITVAL_NOT` rewrites, and the fact that the mask tactic
+recognises the CSETM two-bit shape without decoding the instruction. The mask is stated over
+`carry_s12 \/ (p_384 <= …)`; the link to `m + n` is inside the certified SAT refutation, not a
+standalone lemma. `BRIDGE_CMP_FLAG_TAC` fails closed on other compare shapes.
+
+## R6 · x86 development before the sealed run
+
+- [ ] **IX.50. x86 simulation + flag mapping.** Re-run the step derivation on x86 objects and map
+  flags (x86 `sbb` carry vs ARM's inverted no-borrow). Develop only on x86 tasks that are **not** the
+  nine held-out counterparts (e.g. x86 P-384/P-521 and other families).
+- [ ] **IX.51. Freeze, tag, then run.** After IX.50: write the freeze manifest, commit, **tag and push**
+  the tag, then evaluate the nine untouched x86 counterparts **once** in an isolated filesystem.
+  Tag-after-run does not count as a freeze.
