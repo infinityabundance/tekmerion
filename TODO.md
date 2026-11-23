@@ -665,9 +665,10 @@ Everything else stays parked until step 7 produces a number.
 
 ## Release blocker
 
-- [x] **V7.1. CI must be green.** Both runs died at `apt-get install ocaml-nox` before any check
-  ran. Fixed by pinning `runs-on: ubuntu-22.04`; verify on the real runner after pushing, and do
-  not call the branch releasable until a run is green.
+- [x] **V7.1. CI must be green.** Fixed by pinning `runs-on: ubuntu-22.04`.
+  **Verified green on the real runner:** run `45125493761`, job `Offline checks (no key, no bench)`,
+  conclusion `success`. The two prior runs had failed at `apt-get install ocaml-nox` before any
+  check executed.
 
 ## The bridge design that keeps the modulus out of the lemmas
 
