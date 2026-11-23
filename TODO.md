@@ -658,3 +658,64 @@ loops, and x86. Nothing here is claimable until a sealed full-set run.
 7. The sealed full-set run (K1″).
 
 Everything else stays parked until step 7 produces a number.
+
+---
+
+# PART VII — bridge through a reference function (added 2026-11-23)
+
+## Release blocker
+
+- [x] **V7.1. CI must be green.** Both runs died at `apt-get install ocaml-nox` before any check
+  ran. Fixed by pinning `runs-on: ubuntu-22.04`; verify on the real runner after pushing, and do
+  not call the branch releasable until a run is green.
+
+## The bridge design that keeps the modulus out of the lemmas
+
+- [ ] **V7.2. Bridge through a reference function, not the implementation.** For `add`:
+  `ref x y = let s = x + y in if s >= p then s - p else s`, with `p` a word constant. Split:
+  1. **One generic lemma per operation, proved once for all `p` and widths:**
+     `val x < p /\ val y < p ==> val (ref x y) = (val x + val y) MOD p`.
+  2. **One SAT instance per curve:** the post-simulation output words equal `ref x y` at the
+     concrete `p`, with `x < p` and `y < p` as bit-level comparator hypotheses *inside* the
+     instance. All curve-specific reduction (`+19`, `2^32+977`, masks) lives here, in a purely
+     bit-level problem.
+  3. **`VAL_JOIN`-style lemmas** turning `bignum_of_wordlist [w0..w3]` into one word.
+- [ ] **V7.3. Contamination test for the design itself:** if any bridge lemma mentions a specific
+  curve constant or reduction shape, class-specific templates have crept back in and the held-out
+  failures will return. Enforce mechanically (grep the lemma statements for curve names).
+- [ ] **V7.4. `bridge.ml` is unverified.** It declares lemmas with `prove`, but no committed
+  evidence shows any of them succeeded. Mark unverified until a fresh HOL Light process proves each
+  one and the output is receipted (AGENTS rule 6).
+- [ ] **V7.5. De-hardcode `csat_bridge.ml`.** It still contains P-256 machine-code definitions and
+  a hand-written simulation prefix. Acceptable to validate the bridge; the production path must be
+  driven by the witness and the machine-code analysis.
+
+## Measurement honesty
+
+- [ ] **V7.6. Per-goal SAT times are not end-to-end proof times.** 0.807–5.858 s is per word goal;
+  the receipt also records ~78 s for the probe process and ~167 s for the post-simulation
+  experiment. Do not advertise 120 s timeout headroom without full attempt accounting.
+- [ ] **V7.7. SATISFIABLE on a partially abstracted formula is not a counterexample.** It means the
+  encoding is insufficient. After the bridge, a SAT result *is* a real counterexample on the
+  bit-level problem, which makes the same machinery the cheapest falsifier for a wrong reference
+  function or wrong preconditions.
+- [x] **V7.8. Drop "generated proofs check faster" for linear families.** Human: 1.555 s add,
+  1.174 s sub, 0.522 s neg; one 256-bit SAT close is 2.7–4.7 s. Revisit only for long simulations
+  where the stepping engine dominates.
+
+## Order
+
+- [ ] **V7.9. Prove the generic `ref` lemma for add in a fresh process**, then run P-256 add end to
+  end through the bench judge and get `OK`. Record theorem, proof time, hypotheses, axiom delta.
+- [ ] **V7.10. Then `sub` and `neg`** with the same shape.
+- [ ] **V7.11. Then P-384 addition** — a genuinely different correction structure — as a
+  development target.
+- [ ] **V7.12. Then the nine x86 counterparts**, which are the first clean held-out number.
+- [ ] **V7.13. Freeze and compare** on fresh tasks with a matched baseline and full dependency
+  replay.
+
+## Architecture
+
+- [ ] **V7.14. Keep the certified HOL tactic/conversion machinery in OCaml.** Use Rust for the typed
+  witness compiler, orchestration, immutable evidence and experiment accounting. Do not rewrite the
+  trusted proof interface into Rust.

@@ -16,7 +16,10 @@ permissions:
 jobs:
   offline-checks:
     name: Offline checks (no key, no bench)
-    runs-on: ubuntu-latest
+    # Pinned image: `ocaml-nox` has no installation candidate on the current
+    # ubuntu-latest (24.04) runner, which made both CI runs fail before any
+    # check executed. 22.04 carries it and its ocamlc supports -stop-after.
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     steps:
