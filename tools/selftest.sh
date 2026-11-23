@@ -59,6 +59,42 @@ else
   fail "tools/run_traces_inject.py syntax check failed"
 fi
 
+section "2b/7 attempt_id.py self-test"
+if python3 tools/attempt_id.py --self-test; then
+  printf 'OK: attempt_id self-test passed\n'
+else
+  fail "tools/attempt_id.py --self-test failed"
+fi
+
+section "2c/7 attempt_lifecycle.py self-test"
+if python3 tools/attempt_lifecycle.py --self-test; then
+  printf 'OK: attempt_lifecycle self-test passed\n'
+else
+  fail "tools/attempt_lifecycle.py --self-test failed"
+fi
+
+section "2d/7 run_traces.sh argument parsing"
+output="$(bash tools/run_traces.sh --success-dir "$tmp/s" --bogus 2>&1)"
+if printf '%s' "$output" | grep -q 'unknown option: --bogus'; then
+  printf 'OK: an unknown option is rejected\n'
+else
+  fail "run_traces.sh did not reject --bogus (output: $output)"
+fi
+output="$(bash tools/run_traces.sh --success-dir "$tmp/s" \
+  --proof "$tmp/no-such-proof.ml" 2>&1)"
+if printf '%s' "$output" | grep -q 'proof not found:'; then
+  printf 'OK: --proof is parsed and a missing path is reported\n'
+else
+  fail "run_traces.sh did not parse --proof (output: $output)"
+fi
+output="$(bash tools/run_traces.sh --success-dir "$tmp/s" \
+  --proof "$tmp/no-such-proof.ml" word_max 2>&1)"
+if printf '%s' "$output" | grep -q 'exactly one theorem name or --proof PATH'; then
+  printf 'OK: --proof and a theorem name are mutually exclusive\n'
+else
+  fail "run_traces.sh did not reject --proof plus theorem (output: $output)"
+fi
+
 # ---------------------------------------------------------------------------
 section "3/7 patch_wrapper.py --self-test"
 if python3 tools/patch_wrapper.py --self-test; then

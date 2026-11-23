@@ -15,17 +15,27 @@
 #   --success-dir DIR     where the success-channel <TAC>.json files go (required)
 #   --failure-dir DIR     where the failure journals go
 #                         (default: $TEKMERION_FAILURE_DIR, else <success>.failures)
+#   --attempt-dir DIR     where <attempt_id>.jsonl and its manifest go
+#                         (default: <success>.attempts; patched runs only)
+#   --proof PATH          run this proof file instead of an s2n-bignum theorem
+#   --timeout SECONDS     stop a patched run after SECONDS and record the
+#                         terminal outcome as `timeout` (default: no limit)
 #   --work-dir DIR        build directory (default: .bench/.runner/<arch>-<name>-<mode>)
 #   --reuse               reuse an existing binary only if it was built for the
-#                         same proof, injection, mode, wrapper and success dir
+#                         same proof, injection, mode, wrapper, attempt and
+#                         success dir
 #   --stock               unpatched TacticTrace wrapper, no failure module
 #   --inject TACTIC       insert `<TACTIC> THEN` at the start of the first proof
 #   --force               remove an existing non-empty success/failure directory
 #   -h, --help            show this help
 #
 # Exit status: 0 only when the proof ran to completion and wrote at least one
-# success JSON file. A failed proof exits non-zero and leaves its failure
-# journals in place.
+# success JSON file. A failed proof exits non-zero, ends the attempt stream
+# with outcome `failed`, and leaves its failure journals in place.
+#
+# --proof takes a path to a proof file. Relative paths are resolved against the
+# repository root, the s2n-bignum root, then .bench, exactly like a theorem
+# name that contains a slash.
 
 set -u
 set -o pipefail
@@ -38,9 +48,11 @@ S2N="$BENCH/s2n-bignum"
 INJECT="$ROOT/tools/run_traces_inject.py"
 PATCHER="$ROOT/tools/patch_wrapper.py"
 MODULE="$ROOT/trace/exptrace_failure.ml"
+ATTEMPT_ID_TOOL="$ROOT/tools/attempt_id.py"
+ATTEMPT_LIFECYCLE="$ROOT/tools/attempt_lifecycle.py"
 
 usage() {
-  sed -n '3,28p' "${BASH_SOURCE[0]}"
+  sed -n '3,44p' "${BASH_SOURCE[0]}"
 }
 
 die() {
@@ -53,7 +65,9 @@ theorem=
 proof=
 success_dir=
 failure_dir=
+attempt_dir=
 work_dir=
+timeout_s=0
 reuse=false
 stock=false
 inject_text=
@@ -70,6 +84,15 @@ while [ "$#" -gt 0 ]; do
     --failure-dir)
       [ "$#" -ge 2 ] || die "--failure-dir needs a value"
       failure_dir="$2"; shift 2 ;;
+    --attempt-dir)
+      [ "$#" -ge 2 ] || die "--attempt-dir needs a value"
+      attempt_dir="$2"; shift 2 ;;
+    --proof)
+      [ "$#" -ge 2 ] || die "--proof needs a value"
+      proof="$2"; shift 2 ;;
+    --timeout)
+      [ "$#" -ge 2 ] || die "--timeout needs a value"
+      timeout_s="$2"; shift 2 ;;
     --work-dir)
       [ "$#" -ge 2 ] || die "--work-dir needs a value"
       work_dir="$2"; shift 2 ;;
@@ -91,6 +114,9 @@ done
 
 [ "$arch" = arm ] || [ "$arch" = x86 ] || die "--arch must be arm or x86"
 [ -n "$success_dir" ] || die "--success-dir is required"
+case "$timeout_s" in
+  ''|*[!0-9]*) die "--timeout must be a nonnegative integer" ;;
+esac
 
 resolve_path() {
   candidate="$1"
@@ -139,6 +165,12 @@ fi
 failure_dir="$(realpath -m "$failure_dir")"
 
 if [ "$stock" = true ]; then mode=stock; else mode=patched; fi
+
+if [ -z "$attempt_dir" ]; then
+  attempt_dir="${success_dir}.attempts"
+fi
+attempt_dir="$(realpath -m "$attempt_dir")"
+
 if [ -z "$work_dir" ]; then
   work_dir="$BENCH/.runner/${arch}-${name}-${mode}"
 fi
@@ -154,6 +186,8 @@ mkdir -p "$work_dir" || die "cannot create work directory: $work_dir"
 [ -f "$S2N/$arch/proofs/base.ml" ] || die "missing $S2N/$arch/proofs/base.ml"
 [ -f "$INJECT" ] || die "missing $INJECT"
 [ -f "$PATCHER" ] || die "missing $PATCHER"
+[ -f "$ATTEMPT_ID_TOOL" ] || die "missing $ATTEMPT_ID_TOOL"
+[ -f "$ATTEMPT_LIFECYCLE" ] || die "missing $ATTEMPT_LIFECYCLE"
 
 export HOLLIGHT_DIR="$HOL"
 export TACLOGGER_DIR="$TT"
@@ -194,10 +228,36 @@ wrapper_hash="$(sha256sum "$TT/kernel_wrapper.ml" | awk '{print $1}')"
 module_hash="$(sha256sum "$MODULE" | awk '{print $1}')"
 patcher_hash="$(sha256sum "$PATCHER" | awk '{print $1}')"
 inject_helper_hash="$(sha256sum "$INJECT" | awk '{print $1}')"
+lifecycle_hash="$(sha256sum "$ATTEMPT_LIFECYCLE" | awk '{print $1}')"
+
+case "$proof" in
+  "$S2N"/*) theorem_id="${proof#"$S2N"/}" ;;
+  *) theorem_id="$proof" ;;
+esac
+
+attempt_id=
+if [ "$mode" = patched ]; then
+  attempt_id="$(
+    python3 "$ATTEMPT_ID_TOOL" \
+      --theorem-id "$theorem_id" \
+      --proof "$proof" \
+      --inject "$inject_text" \
+      --wrapper-sha "$wrapper_hash" \
+      --module-sha "$module_hash"
+  )" || die "attempt_id.py failed"
+  case "$attempt_id" in
+    *[!0-9a-f]*|'')
+      die "attempt_id.py produced an unexpected id: $attempt_id" ;;
+  esac
+  [ "${#attempt_id}" -eq 64 ] ||
+    die "attempt_id.py did not produce a 64-character digest: $attempt_id"
+fi
+
 build_key="$(
-  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
     "$proof_hash" "$inject_text" "$mode" "$wrapper_hash" "$module_hash" \
-    "$patcher_hash" "$inject_helper_hash" "$success_dir" |
+    "$patcher_hash" "$inject_helper_hash" "$success_dir" "$attempt_id" \
+    "$attempt_dir" "$timeout_s" "$lifecycle_hash" |
     sha256sum | awk '{print $1}'
 )"
 
@@ -212,12 +272,25 @@ if [ "$reuse_build" = true ]; then
   printf 'reusing binary: %s\n' "$native"
 else
   rm -f -- "$native" "$work_dir/proof.cmx" "$work_dir/wrapped.ml" \
-    "$work_dir/wrapped.org"
+    "$work_dir/wrapped.org" "$work_dir/wrapped.org.scaffolded"
 
   template="$work_dir/template.ml"
   inlined="$work_dir/inlined.ml"
 
-  cat > "$template" <<EOF
+  if [ "$mode" = patched ]; then
+    cat > "$template" <<EOF
+let rt_start = Unix.time();;
+(* TEKMERION_ATTEMPT_START *)
+(* TEKMERION_ATTEMPT_TIMEOUT *)
+loadt "$build_proof";;
+check_axioms ();;
+(* TEKMERION_ATTEMPT_END *)
+Printf.printf "RUN_TRACES_PROOF_OK\\n";;
+let rt_end = Unix.time();;
+Printf.printf "RUN_TRACES_ELAPSED %f s\\n" (rt_end -. rt_start);;
+EOF
+  else
+    cat > "$template" <<EOF
 let rt_start = Unix.time();;
 loadt "$build_proof";;
 check_axioms ();;
@@ -225,6 +298,7 @@ Printf.printf "RUN_TRACES_PROOF_OK\\n";;
 let rt_end = Unix.time();;
 Printf.printf "RUN_TRACES_ELAPSED %f s\\n" (rt_end -. rt_start);;
 EOF
+  fi
 
   printf 'inline-loading %s\n' "$build_proof"
   ( cd "$S2N" && ocaml "$HOL/inline_load.ml" "$template" "$inlined" ) \
@@ -248,6 +322,15 @@ EOF
     { tail -40 "$work_dir/tracer.log" >&2; die "tracer modify failed"; }
   [ -s "$work_dir/wrapped.org" ] || die "tracer modify produced no output"
 
+  if [ "$mode" = patched ]; then
+    python3 "$ATTEMPT_LIFECYCLE" "$work_dir/wrapped.org" \
+      "$work_dir/wrapped.org.scaffolded" > "$work_dir/lifecycle.log" 2>&1 ||
+      { cat "$work_dir/lifecycle.log" >&2; die "attempt_lifecycle.py failed"; }
+    wrapped_org="$work_dir/wrapped.org.scaffolded"
+  else
+    wrapped_org="$work_dir/wrapped.org"
+  fi
+
   if [ "$mode" = stock ]; then
     wrapper="$TT/kernel_wrapper.ml"
   else
@@ -259,7 +342,7 @@ EOF
 
   wrapped="$work_dir/wrapped.ml"
   {
-    head -2 "$work_dir/wrapped.org"
+    head -2 "$wrapped_org"
     echo "(* --- exportTrace.ml --- *)"
     cat "$TT/exportTrace.ml"
     if [ "$mode" = patched ]; then
@@ -269,7 +352,7 @@ EOF
     echo "(* --- kernel_wrapper.ml --- *)"
     cat "$wrapper"
     echo ""
-    tail -n +3 "$work_dir/wrapped.org"
+    tail -n +3 "$wrapped_org"
     echo "exptrace_dump \"$success_dir\";;"
   } > "$wrapped"
 
@@ -291,10 +374,27 @@ fi
 
 prepare_fresh_dir "$success_dir" "success"
 prepare_fresh_dir "$failure_dir" "failure"
+if [ "$mode" = patched ]; then
+  prepare_fresh_dir "$attempt_dir" "attempt"
+fi
 
 printf 'running %s\n' "$native"
-( cd "$S2N" && TEKMERION_FAILURE_DIR="$failure_dir" "$native" ) \
-  > "$work_dir/run.log" 2>&1
+if [ "$mode" = patched ]; then
+  ( cd "$S2N" &&
+    TEKMERION_FAILURE_DIR="$failure_dir" \
+    TEKMERION_ATTEMPT_DIR="$attempt_dir" \
+    TEKMERION_ATTEMPT_ID="$attempt_id" \
+    TEKMERION_THEOREM_ID="$theorem_id" \
+    TEKMERION_PROOF_SHA="$proof_hash" \
+    TEKMERION_INJECTION="$inject_text" \
+    TEKMERION_WRAPPER_SHA="$wrapper_hash" \
+    TEKMERION_MODULE_SHA="$module_hash" \
+    TEKMERION_TIMEOUT_S="$timeout_s" \
+    "$native" ) > "$work_dir/run.log" 2>&1
+else
+  ( cd "$S2N" && TEKMERION_FAILURE_DIR="$failure_dir" "$native" ) \
+    > "$work_dir/run.log" 2>&1
+fi
 run_status=$?
 
 success_count=0
@@ -316,6 +416,18 @@ printf 'success JSON files: %s\n' "$success_count"
 printf 'failure journals:   %s (%s lines)\n' "$journal_count" "$journal_lines"
 printf 'success dir:        %s\n' "$success_dir"
 printf 'failure dir:        %s\n' "$failure_dir"
+if [ "$mode" = patched ]; then
+  stream_path="$attempt_dir/$attempt_id.jsonl"
+  manifest_path="$attempt_dir/$attempt_id.manifest.json"
+  stream_bytes=0
+  if [ -f "$stream_path" ]; then
+    stream_bytes="$(wc -c < "$stream_path")"
+  fi
+  printf 'attempt id:         %s\n' "$attempt_id"
+  printf 'attempt stream:     %s (%s bytes)\n' "$stream_path" "$stream_bytes"
+  printf 'attempt manifest:   %s\n' "$manifest_path"
+  printf 'attempt dir:        %s\n' "$attempt_dir"
+fi
 printf 'run log:            %s\n' "$work_dir/run.log"
 
 if [ "$run_status" -ne 0 ]; then

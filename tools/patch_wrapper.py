@@ -19,7 +19,12 @@ This tool rewrites only the application lines:
       exptrace_guard "<tacname>" trace_goal_before (fun () -> <application> (trace_asl,trace_g)) in
 
   let thm_output =
-    exptrace_guard_conv "<convname>" <term-expression> (fun () -> <application>) in
+    exptrace_guard_conv "<convname>" (fun () -> <term-expression>) (fun () -> <application>) in
+
+The conversion input is passed as a thunk so it is not evaluated before the
+conversion runs. Stock TacticTrace records the input only after a successful
+application; the guarded form force the thunk on failure, and (when an attempt
+recorder is active) after success for the attempt event's digest and size.
 
 The subsequent ``exptrace_add_tac`` / ``exptrace_add_conv`` emissions are left
 byte-for-byte alone, so success records remain bit-identical. The patch is
@@ -58,7 +63,8 @@ ADD_TAC_RE = re.compile(r'^    exptrace_add_tac "([^"]+)" \{$')
 CONV_APPLICATION_RE = re.compile(r"^  let thm_output = (.*) in$")
 CONV_PATCHED_RE = re.compile(r"^  let thm_output =$")
 CONV_GUARD_RE = re.compile(
-    r'^    exptrace_guard_conv "([^"]+)" (.*) \(fun \(\) -> (.*)\) in$'
+    r'^    exptrace_guard_conv "([^"]+)" \(fun \(\) -> (.*)\) '
+    r'\(fun \(\) -> (.*)\) in$'
 )
 ADD_CONV_RE = re.compile(r'^  exptrace_add_conv "([^"]+)" \{$')
 CONV_INPUT_RE = re.compile(r"^    input = (.*);$")
@@ -160,7 +166,7 @@ def patch_text(text: str) -> tuple[str, Stats]:
             application = conv_match.group(1)
             out.append("  let thm_output =")
             out.append(
-                f'    exptrace_guard_conv "{name}" {input_expr} '
+                f'    exptrace_guard_conv "{name}" (fun () -> {input_expr}) '
                 f"(fun () -> {application}) in"
             )
             stats.conv_patched += 1
@@ -277,7 +283,7 @@ def self_test() -> int:
     else:
         if (
             conv_stats.conv_patched == 1
-            and 'exptrace_guard_conv "BETA_CONV" tm '
+            and 'exptrace_guard_conv "BETA_CONV" (fun () -> tm) '
             "(fun () -> BETA_CONV tm) in" in conv_patched
         ):
             print("  ok: conversion-only input is patched")
