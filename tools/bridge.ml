@@ -503,6 +503,103 @@ let INT_SHIFT_TO_JOIN_CONV : conv =
 
 let BRIDGE_SHIFTS_TO_JOINS_CONV = DEPTH_CONV INT_SHIFT_TO_JOIN_CONV;;
 
+(* ------------------------------------------------------------------------- *)
+(* 2b. A bignum digit sum as one word.                                       *)
+(*                                                                           *)
+(* `bignum_of_wordlist' and BIGNUM_DIGITIZE both hand back a flat sum        *)
+(*                                                                           *)
+(*   val w0 + 2^k * val w1 + 2^(2k) * val w2 + ... + 2^(k*(n-1)) * val w{n-1} *)
+(*                                                                           *)
+(* over words w0..w{n-1} of one limb width k.  The reference lemmas are      *)
+(* stated about ONE word, so the sum has to become a word.  Folding the      *)
+(* digits from the most significant end through `word_join' does that:       *)
+(*                                                                           *)
+(*   val(w1)                  = val w1                                        *)
+(*   val(join(acc) w0)        = 2^k * val acc + val w0                       *)
+(*                                                                           *)
+(* by VAL_WORD_JOIN_SIMPLE, whose only side condition is the dimindex one.   *)
+(* The limb width k is read off the words and the limb count from the sum,   *)
+(* so nothing here assumes 64 bits or four limbs.                            *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_word_width ty =
+  match ty with
+  | Tyapp("word",[n]) -> Num.int_of_num (dest_finty n)
+  | _ -> failwith "bridge_word_width: not a word type";;
+
+let bridge_finty k = mk_finty (Num.num_of_int k);;
+
+(* word_join with the result width made explicit: it is a type argument, not  *)
+(* something HOL infers, so it must be supplied (the same reason             *)
+(* INT_JOIN_ZERO_TH supplies `:P').                                          *)
+let BRIDGE_WJOIN (x:term) (y:term) =
+  let mx = bridge_word_width (type_of x)
+  and my = bridge_word_width (type_of y) in
+  mk_comb(mk_comb(mk_const("word_join",
+      [bridge_finty mx, `:M`; bridge_finty my, `:N`;
+       bridge_finty (mx + my), `:P`]), x), y);;
+
+(* |- val(join x y) = 2 EXP k * val x + val y, with k = width of y reduced  *)
+let BRIDGE_VAL_JOIN_STEP (x:term) (y:term) =
+  let mx = bridge_word_width (type_of x)
+  and my = bridge_word_width (type_of y) in
+  let inst = INST_TYPE [bridge_finty mx, `:M`; bridge_finty my, `:N`;
+                        bridge_finty (mx + my), `:P`] VAL_WORD_JOIN_SIMPLE in
+  let th = SPECL [x; y] inst in
+  let side = prove(lhand (concl th),
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+  CONV_RULE (RAND_CONV(LAND_CONV(LAND_CONV(RAND_CONV DIMINDEX_CONV))))
+            (MP th side);;
+
+(* the little-endian word list of a flat digit sum, in either associativity  *)
+let BRIDGE_DIGIT_TERMS tm =
+  let rec addends t =
+    match t with
+    | Comb(Comb(Const("+",_),_),_) -> addends (lhand t) @ addends (rand t)
+    | _ -> [t] in
+  let dest_val t =
+    match t with
+    | Comb(Const("val",_),w) -> w
+    | _ -> failwith "BRIDGE_DIGIT_TERMS: not `val w'" in
+  let dest_pow t =
+    match t with
+    | Comb(Comb(Const("EXP",_),two),n) when aconv two `2` ->
+        (ignore (dest_small_numeral n); ())
+    | _ -> failwith "BRIDGE_DIGIT_TERMS: not `2 EXP k'" in
+  match addends tm with
+  | [] -> failwith "BRIDGE_DIGIT_TERMS: empty"
+  | first :: rest ->
+      let w0 = dest_val first in
+      let ws = map (fun t ->
+          match t with
+          | Comb(Comb(Const("*",_),p),v) -> (dest_pow p; dest_val v)
+          | _ -> failwith "BRIDGE_DIGIT_TERMS: not `2^k * val w'") rest in
+      w0 :: ws;;
+
+let bridge_join_of_words ws =
+  match List.rev ws with
+  | [] -> failwith "bridge_join_of_words: empty"
+  | last :: rest ->
+      List.fold_left (fun acc w -> BRIDGE_WJOIN acc w) last rest;;
+
+(* |- val(join of ws) = flat                                                      *)
+let BRIDGE_VAL_JOIN_FOLD (ws:term list) (flat:term) =
+  let j = bridge_join_of_words ws in
+  let rec steps = function
+    | [] | [_] -> []
+    | w :: (_ :: _ as rest) ->
+        BRIDGE_VAL_JOIN_STEP (bridge_join_of_words rest) w :: steps rest in
+  let sts = steps ws in
+  prove(mk_eq(mk_comb(mk_const("val",
+      [bridge_finty (bridge_word_width (type_of j)), `:N`]), j), flat),
+    REWRITE_TAC sts THEN CONV_TAC NUM_REDUCE_CONV THEN ARITH_TAC);;
+
+(* (the word, |- val word = flat sum)                                            *)
+let BRIDGE_WORD_OF_DIGITS tm =
+  let ws = BRIDGE_DIGIT_TERMS tm in
+  (bridge_join_of_words ws, BRIDGE_VAL_JOIN_FOLD ws tm);;
+
 (* whole-term conversion from any of the three spec types to a word residue *)
 let BRIDGE_TO_WORD_CONV =
   REAL_TO_INT_CONV THENC NUM_TO_INT_CONV THENC INT_DISTRIB_CONV THENC
@@ -533,6 +630,29 @@ let rec BRIDGE_SPLIT_CONDITIONS_TAC (asl,w) =
         CONV_TAC(REWRITE_CONV[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
         BRIDGE_SPLIT_CONDITIONS_TAC in
       (ASM_CASES_TAC c THENL [close truerule; close falserule]) (asl,w);;
+
+(* The same split, but the branch condition is *retained* as a hypothesis.
+   REWRITE_RULE reads a non-equational theorem `|- c' as the rule `c -> T', so
+   the version above rewrites the case hypothesis itself to `true' and the
+   branch information is lost from the assumptions (it survives only where a
+   lemma restates it arithmetically, as ADD_MOD_LT / SUB_LT_SUM do).  A route
+   that carries the condition in the word goal -- the reference route's
+   `ref_add' conditional -- needs the fact itself in the SAT instance. *)
+let rec BRIDGE_SPLIT_CONDITIONS_KEEP_TAC (asl,w) =
+  let conds = bridge_conditions w @
+              List.concat (map (fun (_,th) -> bridge_conditions(concl th)) asl) in
+  match conds with
+  | [] -> ALL_TAC (asl,w)
+  | c::_ ->
+      let close rule fact =
+        RULE_ASSUM_TAC(REWRITE_RULE[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        CONV_TAC(REWRITE_CONV[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        ASSUME_TAC fact THEN
+        BRIDGE_SPLIT_CONDITIONS_KEEP_TAC in
+      (ASM_CASES_TAC c THENL
+        [close (ASSUME c) (ASSUME c);
+         close (EQF_INTRO (ASSUME (mk_neg c))) (ASSUME (mk_neg c))])
+      (asl,w);;
 
 (* ------------------------------------------------------------------------- *)
 (* 5. Eliminate the specification variables from their digit expansions.     *)
@@ -589,6 +709,15 @@ let BRIDGE_PREPARE_TAC (expand:tactic) : tactic =
 let BRIDGE_FINISH_TAC expand : tactic =
   fun g -> (BRIDGE_PREPARE_TAC expand THEN BRIDGE_CSAT_TAC) g;;
 
+(* the same, keeping every branch condition as a hypothesis *)
+let BRIDGE_FINISH_KEEP_TAC expand : tactic =
+  fun g ->
+    (BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV THEN
+     BRIDGE_CSAT_TAC) g;;
+
 (* ------------------------------------------------------------------------- *)
 (* 7. Entry points.  `pth' is the definition theorem of the modulus, so the  *)
 (* numeral replaces the constant before anything is decided.                 *)
@@ -618,6 +747,50 @@ let BRIDGE_ADD_TAC expand pth : tactic =
        ASM_SIMP_TAC[ADD_MOD_GE] THEN CONV_TAC SYM_CONV THEN
        ASM_SIMP_TAC[ADD_GE_SUM] THEN BRIDGE_FINISH_TAC expand]) (asl,w));;
 
+(* add, through the reference function.  The split above decides `(m+n) MOD p'
+   by cases on the modulus; this route carries the MOD inside ADD_REF_VAL_WORD
+   instead, so the only per-curve obligation is a pure word equation
+
+     val(ref_add (word p) x y) = val w
+
+   with `x < p' and `y < p' among the bit-level hypotheses.  `expand' is the
+   caller's bignum expansion (BIGNUM_OF_WORDLIST_CONV), applied first so the
+   written value is a flat digit sum we can fold into one word. *)
+let BRIDGE_ADD_REF_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,wv) = dest_eq w in
+    let (sum,p) = dest_binop `(MOD):num->num->num` lhs in
+    let (bx,by) = dest_binop `(+):num->num->num` sum in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS bx in
+    let (yw,thy) = BRIDGE_WORD_OF_DIGITS by in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS wv in
+    (* the bounds are ambient hypotheses, stated about the digit sums *)
+    let lt tm = mk_comb(mk_comb(`(<):num->num->bool`, tm), p) in
+    let bound tm =
+      try snd(List.find (fun (_,th) -> aconv (concl th) (lt tm)) asl)
+      with Not_found ->
+        failwith "BRIDGE_ADD_REF_TAC: missing `x < p' hypothesis" in
+    let hltx = REWRITE_RULE[GSYM thx] (bound bx)
+    and hlty = REWRITE_RULE[GSYM thy] (bound by) in
+    (* ADD_REF_VAL_WORD at the operand width, with the two bounds discharged *)
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] ADD_REF_VAL_WORD) in
+    let ants = conjuncts (lhand (concl lem)) in
+    if List.length ants <> 4 then
+      failwith "BRIDGE_ADD_REF_TAC: unexpected antecedent shape";
+    let s1 = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+    let s2 = prove(List.nth ants 1,
+      CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC
+               RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
+    (* the two bounds stay as hypotheses of the rewrite: they are exactly the
+       ambient `val x < p' / `val y < p' assumptions, and ASM_REWRITE_TAC
+       below discharges the subgoals they create *)
+    let rth = MP lem (end_itlist CONJ [s1; s2; hltx; hlty]) in
+    let rth = SYM (REWRITE_RULE[thx; thy] rth) in
+    (ASM_REWRITE_TAC[rth; SYM thw; ref_add; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;
+
 (* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
 let BRIDGE_SUB_TAC expand pth : tactic =
   ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
@@ -646,7 +819,14 @@ let BRIDGE_NEG_TAC expand pth : tactic =
     let cond = mk_comb(mk_comb(`(=):num->num->bool`, n), `0`) in
     (BRIDGE_ZERO_LT_TAC p THEN
      ASM_CASES_TAC cond THENL
-      [ASM_SIMP_TAC[NEG_MOD_ZERO] THEN BRIDGE_FINISH_TAC expand;
+      [ASM_SIMP_TAC[NEG_MOD_ZERO] THEN BRIDGE_FINISH_KEEP_TAC expand;
        ASM_SIMP_TAC[NEG_MOD_NZ] THEN
-       ASM_SIMP_TAC[INT_OF_NUM_SUB] THEN BRIDGE_FINISH_TAC expand])
+       (* NEG_MOD_NZ leaves `&(p - n)' with `&' applied to a *num*
+          subtraction.  That atom cannot be wordified (BITBLAST leaves it
+          opaque and the equation comes back SAT, measured 24.728 s), and
+          INT_OF_NUM_SUB rewrites the wrong way -- its statement is
+          `&n - &m = &(n - m)'.  GSYM is the direction that exposes the
+          subtraction to the conversion, with `n <= p' the ambient bound. *)
+       ASM_SIMP_TAC[GSYM INT_OF_NUM_SUB] THEN
+       BRIDGE_FINISH_KEEP_TAC expand])
     (asl,w));;

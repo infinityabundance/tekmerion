@@ -414,3 +414,173 @@ is recorded as the next defect.
 - Benchmark `OK` is valid under the bench rules (`CHEAT_TAC` context); it is
   **not** an axiom-free development. Replay in a full s2n-bignum context is a
   separate result (D8).
+
+# Follow-up 2026-11-23 (second) — reference route wired, `sub`/`neg` judged, P-384 add
+
+This section supersedes §8 above ("still wrong") and items V8.13–V8.15, V8.9.
+`tools/bridge.ml` sha256 `3a32e6b0e5e7f36fd8d49e9a79cac930668beca031416c6c9b992b227115d52f`,
+60 phrases. `tools/csat_lib.ml` unchanged
+(`70439c92d58046a065312fc4faad9e06d53ddd64f89f8e93f676b815cc83e5a8`).
+
+## 1. Fresh process + no-curve check
+
+`check_fresh.ml` on the instrumented copy (`instrument.py`, 60 phrases):
+**60/60 `BRIDGE_CHECK ... OK`**, **axioms 3 -> 3**, load 2.464 s
+(`bridge_fresh.log`, filtered to the per-phrase status lines; the raw REPL echo of
+the huge goal term was 6.8 MB and was dropped).
+
+`curve_check.py tools/bridge.ml`: **statements=32, hits=0** (`curve_check.log`).
+
+## 2. `neg` — the measured blocking fact (V8.13)
+
+Atom dump at the exact point CSAT is called (same code path as `BRIDGE_NEG_TAC`;
+full dump in the ignored `.bench/bridge-dev/neg_diag.log`).
+On the `n <> 0` branch every atom wordifies **except the goal**:
+
+```
+ATOM ok=false  &(val sum_s8) + &(val (word_join sum_s10 (word 0))) +
+               &(val (word_join sum_s11 (word 0))) +
+               &(val (word_join sum_s13 (word 0)))
+             = &(1157920892...097853951 -
+                 (val n_0 + 2 EXP 64 * val n_1 +
+                  2 EXP 128 * val n_2 + 2 EXP 192 * val n_3))
+ATOM ok=true   (the 7 accumulator / bound atoms)
+```
+
+`NEG_MOD_NZ` rewrites `(p - n) MOD p` to `(p - n)`, so `&`'s argument is a *num*
+subtraction. `INT_OF_NUM_SUB` is stated `m <= n ==> &n - &m = &(n - m)`, so
+`ASM_SIMP_TAC[INT_OF_NUM_SUB]` rewrites `&n - &m` -> `&(n - m)` — the opposite of
+what is needed — and the atom stays opaque. `BITBLAST` leaves it as a free
+proposition, so the equation is satisfiable (24.728 s, exit 10).
+
+Fix: `ASM_SIMP_TAC[GSYM INT_OF_NUM_SUB]` (`&(p - n)` -> `&p - &n`, side condition
+`n <= p` from the ambient bound). After the fix, 8/8 atoms wordify on both
+branches and the goal closes.
+
+Second defect found while wiring the reference route: `BRIDGE_SPLIT_CONDITIONS_TAC`
+calls `RULE_ASSUM_TAC(REWRITE_RULE[ASSUME c; ...])`; HOL reads a non-equational
+theorem `|- c` as the rewrite `c -> T`, so the case hypothesis itself becomes
+`true` and the branch fact leaves the assumptions. add/sub did not notice because
+`ADD_MOD_LT` / `SUB_REM_LT` etc. restate the condition arithmetically. A route
+that keeps the condition in the *goal* (`ref_add`'s `if`) needs it. New
+`BRIDGE_SPLIT_CONDITIONS_KEEP_TAC` and `BRIDGE_FINISH_KEEP_TAC` re-add the case
+fact after rewriting; `neg` and the reference add route use them. First measured
+symptom of the loss: the reference add instance came back SAT (18.498 s) with the
+`word_ult/word_ule` condition absent from the residue.
+
+## 3. The reference route (V8.15)
+
+`BRIDGE_ADD_REF_TAC expand pth`, built on `ADD_REF_VAL_WORD`:
+
+```
+ELIM_DIGIT_EQS_TAC; modulus -> numeral; expand the written bignum
+goal  (bx + by) MOD p = W
+  xw, yw, ww  <- BRIDGE_WORD_OF_DIGITS  (flat digit sum -> nested word_join;
+                 width and limb count read off the terms, no 64/4 assumption)
+  ADD_REF_VAL_WORD at the operand width, with
+    0 < p            by NUM_LT_CONV on the numeral
+    p < 2^dimindex   by DIMINDEX_CONV + NUM_REDUCE_CONV + NUM_LT_CONV
+    val xw < p, val yw < p   the ambient bounds, rewritten through
+                             `val xw = bx` (kept as hypotheses and discharged
+                             by ASM_REWRITE_TAC)
+goal  val(ref_add (word p) xw yw) = val ww ; unfold ref_add ; CSAT
+```
+
+The resulting SAT instances are pure word statements: the output word equals
+`ref_add (word p) x y`, with `x < p` and `y < p` among the bit-level hypotheses
+and the accumulator equations as the machine facts. The two conditionals
+(`ref_add`'s own and the machine's carry-select) are split with the *keeping*
+variant, so each instance carries its branch condition.
+
+Cost, same interpreted harness (4 SAT calls each):
+
+| route | per call | total |
+|---|---|---|
+| split (`BRIDGE_ADD_TAC`) | 30.804 / 30.008 / 34.967 / 41.266 | 137.344 s |
+| reference (`BRIDGE_ADD_REF_TAC`) | 32.490 / 29.538 / 39.803 / 28.612 | 130.651 s |
+
+## 4. Judge verdicts (all with the final `tools/bridge.ml`)
+
+Commands: `make_inlined_answer.py ... <mode>`; `combine-answer-and-setup.py <dir> 1`;
+`run-answers.sh <eval> 1`; `collect-verdicts.py <eval> <csv>`.
+
+| problem | eval dir | time | route |
+|---|---|---|---|
+| `arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT` | `eval-20261123_133342` | **22.835 s** | `BRIDGE_ADD_REF_TAC` |
+| `arm.bignum_sub_p256.BIGNUM_SUB_P256_CORRECT` | `eval-20261123_133450` | **18.544 s** | `BRIDGE_SUB_TAC` |
+| `arm.bignum_neg_p256.BIGNUM_NEG_P256_CORRECT` | `eval-20261123_132922` | **9.204 s** | `BRIDGE_NEG_TAC` |
+| `arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT` | `eval-20261123_135102` | **25.980 s** | `BRIDGE_ADD_REF_TAC` |
+
+Each `.judge.txt` (path `<eval>/<problem-id>.judge.txt`) contains `OK`, and
+`collect-verdicts.py` printed `OK,1` for each (copies under `verdicts/`). The
+judge's `bench_run` compares the axiom list before and after and reports
+`CHEATING` otherwise, so `OK` means the axiom set is unchanged; no answer
+introduces a hypothesis.
+
+Previous add run (split route, `eval-20261123_114817`): 23.838 s. Reference route:
+22.835 s.
+
+Local interpreted timings, for the record: add 130.651 s (4 calls), sub 94.877 s
+(unchanged), neg 59.871 s (4 calls: 13.373 / 13.226 / 15.018 / 18.143), P-384 add
+145.596 s.
+
+## 5. P-384 addition (V8.9)
+
+Judge `OK`, 25.980 s. The residue is reached by the generic
+`BRIDGE_ADD_REF_TAC` — six limbs, 384-bit operands, no P-384 constant anywhere in
+`tools/bridge.ml`. The machine's correction structure differs from P-256's: it
+compares the sum against the modulus and builds a mask (`CMP`/`SBCS`, `CSETM`,
+then `AND`/`SUBS`/`SBCS`), rather than the carry-select chain P-256 uses.
+
+Measured obstacle, exactly: two atoms in the prepared residue were unwordifiable,
+both containing `bignum_of_wordlist` — the transcribed carry subgoal
+`2 EXP 384 * bitval carry_s12 + bignum_of_wordlist [...] = m + n` and the
+substituted comparison `p_384 <= bignum_of_wordlist [...]`. `BRIDGE_ADD_REF_TAC`
+expands the written bignum in the *goal*; these live in the assumptions and in the
+goal's split condition. Expanding the whole context
+(`RULE_ASSUM_TAC (CONV_RULE (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV))` before the
+`CONV_TAC`) makes all 16 atoms wordifiable and the close goes through.
+
+## 6. DEVELOPMENT_ONLY (this follow-up)
+
+- P-256 machine-code words, goals and simulation prefixes in
+  `tools/csat_bridge.ml`, `.bench/bridge-dev/*` and the four judge answers:
+  transcribed, not derived from a witness.
+- `sub_middle` (`FLAG_FROM_CARRY_LT`, `DECARRY_RULE`, `BOUNDER_TAC`): transcribed.
+- P-384 simulation glue: the carry subgoal
+  (`2^384 * bitval carry_s12 + ... = m + n`), the `FLAG_FROM_CARRY_LE` comparison
+  `carry_s22 <=> p_384 <= ...`, and the `X3 = word_neg(word(bitval(p_384 <= m+n)))`
+  rewrite — all transcribed from `arm/proofs/bignum_add_p384.ml`.
+- The `p_256` / `p_384` numerals in drivers: curve constants, outside every bridge
+  lemma.
+- The inlined answers: packaging to satisfy the static syntax gate.
+
+## 7. Files changed
+
+- `tools/bridge.ml`: added `BRIDGE_WJOIN`, `BRIDGE_VAL_JOIN_STEP`,
+  `BRIDGE_DIGIT_TERMS`, `bridge_join_of_words`, `BRIDGE_VAL_JOIN_FOLD`,
+  `BRIDGE_WORD_OF_DIGITS`, `BRIDGE_SPLIT_CONDITIONS_KEEP_TAC`,
+  `BRIDGE_FINISH_KEEP_TAC`, `BRIDGE_ADD_REF_TAC`; `BRIDGE_NEG_TAC` now uses
+  `GSYM INT_OF_NUM_SUB` and the keeping finish. No existing lemma statement was
+  changed; no lemma weakened; no axiom added (3 -> 3).
+- `research/receipts/bridge/make_inlined_answer.py`: tactic selector
+  (`add-ref`, `sub`, `neg`, `add-p384`); add now uses `BRIDGE_ADD_REF_TAC`.
+- `research/receipts/bridge/bridge_instrumented.ml`, `bridge_fresh.log`,
+  `curve_check.log`, `REPORT.md`, `verdicts/*.csv`, `TODO.md`.
+
+## 8. Still wrong / caveats
+
+- Benchmark `OK` is under the bench rules (`CHEAT_TAC` context); replay in a full
+  s2n-bignum context is still a separate result (D8).
+- Judge runs need `cadical` on `PATH` (here
+  `/home/one/.elan/toolchains/leanprover--lean4---v4.29.1/bin/cadical`); without it
+  `CSAT_REFUTE_GEN` fails with exit 127. Environment dependency, not a proof fact
+  (V8.16).
+- `BRIDGE_SPLIT_CONDITIONS_TAC` (the lossy original) is still used by the split
+  add/sub routes; they are correct because their lemmas restate the condition, but
+  the function's docstring claims it keeps the condition. Either fix it or fix the
+  docstring before it is used again.
+- `sub` and `neg` use the *split* route, not a reference route: no `ref_sub` /
+  `ref_neg` lemma exists yet, so `BRIDGE_SUB_TAC` / `BRIDGE_NEG_TAC` still carry
+  the arithmetic split. Converting them is the natural next step.
+- P-384 is `arm` only; x86 and the montgomery/ladder targets remain.

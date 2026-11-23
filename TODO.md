@@ -726,9 +726,11 @@ Everything else stays parked until step 7 produces a number.
   `tools/bridge.ml` together with `ADD_REF_VAL_WORD`. Fresh process: 49/49 phrases `OK`, axioms 3 -> 3;
   no-curve check 28 statements, 0 hits. Receipts: `bridge_fresh.log`, `curve_check.log`.
 - [x] **V7.10. Then `sub` and `neg`** with the same shape. `sub` closes through the bridge
-  (94.877 s, 0 hypotheses). `neg` does **not**: CSAT returns SAT (24.728 s). Recorded as V8.12.
-- [ ] **V7.11. Then P-384 addition** — a genuinely different correction structure — as a
-  development target.
+  (94.877 s locally, 0 hypotheses) and is now judge-run: `OK`, 18.544 s, `OK,1`. `neg`
+  closes after the V8.13 fix: judge `OK`, 9.204 s.
+- [x] **V7.11. Then P-384 addition** — a genuinely different correction structure — as a
+  development target. **Achieved 2026-11-23:** judge `OK`, 25.980 s, via
+  `BRIDGE_ADD_REF_TAC`; simulation glue is `DEVELOPMENT_ONLY`. See V8.9.
 - [ ] **V7.12. Then the nine x86 counterparts**, which are the first clean held-out number.
 - [ ] **V7.13. Freeze and compare** on fresh tasks with a matched baseline and full dependency
   replay.
@@ -783,7 +785,26 @@ Everything else stays parked until step 7 produces a number.
 - [x] **V8.8. P-256 add end to end through C-SAT**, then `sub`, then `neg`. Add: judge `OK`
   (`collect-verdicts.py` -> `OK,1`, `.judge.txt` in `.bench/eval-20261123_114817/`). `sub`: local
   close, 0 hypotheses, 94.877 s (not judge-run). `neg`: measured negative, SAT at 24.728 s.
-- [ ] **V8.9. P-384 addition** as the first coverage improvement the old generator cannot reach.
+  *Superseded by V8.13–V8.15: all three are judge-`OK` with the final `tools/bridge.ml`.*
+
+- [ ] **V8.16. Judge runs depend on `cadical` being on `PATH`.** The working binary on this
+  machine is `/home/one/.elan/toolchains/leanprover--lean4---v4.29.1/bin/cadical`; it is not
+  in the repository and not on the non-interactive `PATH`. Every `OK` recorded above was
+  produced with that directory prepended to `PATH`. `CSAT_REFUTE_GEN` shells out to `cadical`,
+  so a judge run without it fails with exit 127, not with a proof failure. This belongs in the
+  environment gate (section F), not in the proof accounting.
+- [x] **V8.9. P-384 addition** as the first coverage improvement the old generator cannot reach.
+  **Judge `OK` 2026-11-23, 25.980 s**,
+  `.bench/eval-20261123_135102/arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT.judge.txt`,
+  `collect-verdicts.py` -> `OK,1`; axioms unchanged, no hypotheses. The close is
+  `BRIDGE_ADD_REF_TAC` (curve-generic: 6 limbs, 384-bit operands) over the residue.
+  The simulation glue (carry subgoal, `FLAG_FROM_CARRY_LE` comparison, the `X3` mask
+  rewrite) is **`DEVELOPMENT_ONLY`**, transcribed from `arm/proofs/bignum_add_p384.ml`.
+  Two atoms initially came back unwordifiable, both containing `bignum_of_wordlist`
+  (the transcribed carry subgoal and the substituted comparison condition); expanding
+  that in the *whole context* (not just the goal) fixed the encoding. Measured: local
+  close 145.596 s; judge 25.980 s. This is a *reduction* structure the P-256 route does
+  not have (compare-and-mask, not carry-select), so it is real extra coverage.
 
 ## Scope
 
@@ -791,17 +812,72 @@ Everything else stays parked until step 7 produces a number.
   existing bridge is worth more than a new subsystem.
 - [ ] **V8.11. Keep CI green before calling anything releasable.**
 
+---
+
+## R3 · first coverage increase (2026-11-23)
+
+All four judge verdicts printed by `collect-verdicts.py`, all with the final `tools/bridge.ml`
+(sha256 `3a32e6b0…15d52f`), all 0 hypotheses, axioms 3→3:
+
+| task | route | end-to-end | verdict |
+|---|---|---|---|
+| `arm.bignum_add_p256` | `BRIDGE_ADD_REF_TAC` | 22.835 s | **OK** |
+| `arm.bignum_sub_p256` | `BRIDGE_SUB_TAC` | 18.544 s | **OK** |
+| `arm.bignum_neg_p256` | `BRIDGE_NEG_TAC` | 9.204 s | **OK** |
+| `arm.bignum_add_p384` | `BRIDGE_ADD_REF_TAC` | 25.980 s | **OK** |
+
+`bridge.ml` fresh load: 60/60 bindings, axioms 3→3, 2.464 s. Curve-constant check: 32 statements,
+0 hits. Regression `bridge_flag_wordify.ml`: 3/3.
+
+**Why P-384 matters:** the old template generator failed P-384 addition. It now closes through the
+same curve-generic reference tactic, with no P-384 constant in any bridge lemma. That is the first
+theorem the previous generator could not produce.
+
+**Scope:** training curves only; the simulation glue and the P-384 carry subgoal are
+`DEVELOPMENT_ONLY`; benchmark `OK` is under `CHEAT_TAC` context, not an axiom-free development; not
+yet a held-out result.
+
+- [ ] **V8.17.** `BRIDGE_SPLIT_CONDITIONS_TAC` is lossy (rewrites the branch condition to `true`)
+  while its docstring claims it keeps the condition. Fix the tactic or the docstring before reuse.
+- [ ] **V8.18.** Write `ref_sub` / `ref_neg` so sub and neg stop using the split route.
+- [ ] **V8.19. Freeze and run the whole ARM `add`/`sub`/`neg` family.** Pre-declare the task IDs from
+  `problems.json`, freeze `bridge.ml`/`csat_bridge.ml`/`csat_lib.ml`/`emit_proof.py` by sha256, run
+  once, and report OK/N with the per-curve split. The nine R2 tasks are development-visible; say so.
+- [ ] **V8.20. x86 W1 + the nine x86 counterparts** — the first genuinely fresh held-out number.
+- [ ] **V8.21. `cadical` on `PATH` is an environment dependency.** `CSAT_REFUTE_GEN` fails with exit
+  127, not a proof failure, when the binary is absent. Pin or document it, and make the failure
+  message say so.
+
 ## New defects from the 2026-11-23 run
 
 - [x] **V8.12. `BRIDGE_CSAT_TAC` never discharged its goal.** `MP_TAC th THEN ASM_REWRITE_TAC[]`
   removes the antecedents but leaves the conclusion, so four successful SAT refutations left four
   goals. Fixed by chaining `MP` with the assumption theorems and `ACCEPT_TAC` the result.
-- [ ] **V8.13. `neg` still fails.** `BRIDGE_NEG_TAC` reaches a residue that CSAT returns SAT on
-  (24.728 s, `csat_bridge_subneg.log`). Diagnose like V8.4: print the wordified atoms and check for
-  another unencoded split literal before changing any lemma.
-- [ ] **V8.14. `sub` through the judge.** It closes locally with 0 hypotheses; a judge run needs a
-  sub answer. Note `sub_middle` uses `FLAG_FROM_CARRY_LT`/`DECARRY_RULE`/`BOUNDER_TAC` transcribed
-  from the human proof, so it is `DEVELOPMENT_ONLY`.
-- [ ] **V8.15. Wire the reference route.** `ADD_REF_VAL` is proved and loaded but the judge answer
-  still drives the split-based `BRIDGE_ADD_TAC`. A `BRIDGE_*_REF_TAC` would use the lemma and make
-  the SAT instance all joins and adders.
+- [x] **V8.13. `neg` still fails.** `BRIDGE_NEG_TAC` reached a residue CSAT returned SAT
+  on (24.728 s). **Diagnosed and fixed 2026-11-23.** The atom dump (V8.4 style) showed
+  exactly one unwordifiable atom per branch, the goal itself: `NEG_MOD_NZ` produces
+  `&(p - n)` with `&` applied to a *num* subtraction, and `ASM_SIMP_TAC[INT_OF_NUM_SUB]`
+  rewrites the *wrong direction* (`&n - &m = &(n - m)`), so nothing changed. `BITBLAST`
+  left the atom opaque and the equation came back SAT. Fix: `GSYM INT_OF_NUM_SUB`
+  (`&(p - n)` -> `&p - &n`, with `n <= p` the ambient bound). After the fix all 8 atoms
+  wordify; local close 59.871 s over 4 SAT calls (13.373 / 13.226 / 15.018 / 18.143),
+  0 hypotheses, axioms 3 -> 3. Judge: `OK`, 9.204 s,
+  `.bench/eval-20261123_132922/arm.bignum_neg_p256.BIGNUM_NEG_P256_CORRECT.judge.txt`,
+  `collect-verdicts.py` -> `OK,1`. Second defect found en route: `BRIDGE_SPLIT_CONDITIONS_TAC`
+  rewrites the branch condition to `true` (it reads `|- c` as the rule `c -> T`), so the
+  branch fact is lost from the assumptions. Harmless for add/sub (their lemmas restate it
+  arithmetically) and fatal for a route that carries the condition in the goal; new
+  `BRIDGE_SPLIT_CONDITIONS_KEEP_TAC` / `BRIDGE_FINISH_KEEP_TAC` retain it.
+- [x] **V8.14. `sub` through the judge.** Judge: `OK`, **18.544 s**,
+  `.bench/eval-20261123_133450/arm.bignum_sub_p256.BIGNUM_SUB_P256_CORRECT.judge.txt`,
+  `collect-verdicts.py` -> `OK,1`; axioms unchanged (judge reports `CHEATING` otherwise),
+  no hypotheses. `sub_middle` is `DEVELOPMENT_ONLY` (transcribed).
+- [x] **V8.15. Wire the reference route.** `BRIDGE_ADD_REF_TAC` built from
+  `ADD_REF_VAL_WORD`: the goal `(bx + by) MOD p = W` is rewritten (via the lemma, with
+  `val x < p` / `val y < p` discharged from the ambient bounds) to one word equation
+  `val(ref_add (word p) x y) = val w`, where `x`, `y`, `w` are the input/output words
+  recovered from their digit sums by `BRIDGE_WORD_OF_DIGITS` (a generic flat-sum ->
+  nested `word_join` fold; width and limb count read off the terms). The judge answer now
+  drives this route. Judge: `OK`, **22.835 s** (split route: 23.838 s);
+  `.bench/eval-20261123_133342/arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT.judge.txt`,
+  `collect-verdicts.py` -> `OK,1`. Same interpreted harness: 130.651 s vs 137.344 s.

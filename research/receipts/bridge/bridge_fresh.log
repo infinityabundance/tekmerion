@@ -1,5 +1,3 @@
-Printf.printf "AXIOMS before=%d after=%d\n" ax0 (List.length (axioms (ter=%d\n" ax0 (List.length (axioms ()                                <())(axioms ()))(List.length (axioms ()));;Printf.printf "AXIOMS before=%d after=%d\n" ax0 (List.length (axioms ()));;
-Printf.printf "BRIDGE_CHECK_DONE seconds=%.3f\n%!" (Unix.gettimeofday onds=%.3f\n%!" (Unix.gettimeofday (                                  <)() -. bt0)(Unix.gettimeofday () -. bt0);;Printf.printf "BRIDGE_CHECK_DONE seconds=%.3f\n%!" (Unix.gettimeofday () -. bt0);;
 BRIDGE_CHECK ADD_MOD_LT OK
 BRIDGE_CHECK ADD_MOD_GE OK
 BRIDGE_CHECK ADD_GE_SUM OK
@@ -36,18 +34,29 @@ BRIDGE_CHECK INT_JOIN_ZERO_TH OK
 BRIDGE_CHECK bits_of_num OK
 BRIDGE_CHECK INT_SHIFT_TO_JOIN_CONV OK
 BRIDGE_CHECK BRIDGE_SHIFTS_TO_JOINS_CONV OK
+BRIDGE_CHECK bridge_word_width OK
+BRIDGE_CHECK bridge_finty OK
+BRIDGE_CHECK BRIDGE_WJOIN OK
+BRIDGE_CHECK BRIDGE_VAL_JOIN_STEP OK
+BRIDGE_CHECK BRIDGE_DIGIT_TERMS OK
+BRIDGE_CHECK bridge_join_of_words OK
+BRIDGE_CHECK BRIDGE_VAL_JOIN_FOLD OK
+BRIDGE_CHECK BRIDGE_WORD_OF_DIGITS OK
 BRIDGE_CHECK BRIDGE_TO_WORD_CONV OK
 BRIDGE_CHECK bridge_conditions OK
 BRIDGE_CHECK BRIDGE_SPLIT_CONDITIONS_TAC OK
+BRIDGE_CHECK BRIDGE_SPLIT_CONDITIONS_KEEP_TAC OK
 BRIDGE_CHECK BRIDGE_HAS_VAL OK
 BRIDGE_CHECK ELIM_DIGIT_EQS_TAC OK
 BRIDGE_CHECK BRIDGE_CSAT_TAC OK
 BRIDGE_CHECK BRIDGE_PREPARE_TAC OK
 BRIDGE_CHECK BRIDGE_FINISH_TAC OK
+BRIDGE_CHECK BRIDGE_FINISH_KEEP_TAC OK
 BRIDGE_CHECK BRIDGE_ZERO_LT_TAC OK
 BRIDGE_CHECK BRIDGE_REWRITE_MODULUS OK
 BRIDGE_CHECK BRIDGE_ADD_TAC OK
+BRIDGE_CHECK BRIDGE_ADD_REF_TAC OK
 BRIDGE_CHECK BRIDGE_SUB_TAC OK
 BRIDGE_CHECK BRIDGE_NEG_TAC OK
 # AXIOMS before=3 after=3
-# BRIDGE_CHECK_DONE seconds=2.249
+# BRIDGE_CHECK_DONE seconds=2.464
