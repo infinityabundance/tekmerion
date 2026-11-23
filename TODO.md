@@ -501,9 +501,35 @@ unchanged in all three (`REPLAY_AXIOMS_UNCHANGED`). Evidence: `research/receipts
 not a frontier claim. The absolute axiom counts are high because the benchmark inlines preceding
 theorems as `CHEAT_TAC`; the invariant that matters is that the proof adds none.
 
-- [ ] **R2. Freeze and evaluate LOCO.** Generalise only on training curves (P-384/P-521), freeze the
-  pipeline by digest, then evaluate **once** on held-out curves (`25519`, `secp256k1`, `sm2`). No
-  tuning after seeing the result. This is the first claimable number (K1′).
+- [~] **R2. Freeze and evaluate LOCO — dry run only.** Frozen `2026-11-23T01:28:28Z` (hashes in
+  `research/receipts/r2-freeze-manifest.md`); held-out ARM result **4 accepted / 9**, `CHEATING` 0,
+  0 hypotheses, no axiom growth on each accepted proof. Accepted: `add_sm2`, `sub_sm2`, `neg_sm2`,
+  `neg_p256k1`. Failed: `add_p25519`, `add_p256k1`, `neg_p25519`, `sub_p25519`, `sub_p256k1`.
+  **Not a clean claim, for three reasons:** (1) a pre-guard repository grep exposed digitize lines
+  from seven held-out proof files, so the run is not fully blind (disclosed in
+  `r2-heldout-eval.md` §8); (2) the denominator is 9, not the published 898, so 4/9 is not
+  comparable to 5/898; (3) training generalisation is incomplete — P-384 `add` and the whole P-521
+  family fail or emit nothing. Training: P-256 3/3, P-384 `sub`/`neg` OK, P-384 `add` FAIL,
+  P-521 FAIL/FAIL/none.
+- [ ] **R3. Structural isolation for held-out evaluation.** The path guard is not enough: an
+  ordinary repository search still reached held-out proof text. Build a development checkout with
+  held-out proof files removed or stubbed, and a search wrapper that cannot traverse them. A run is
+  blind only if exposure is structurally impossible, not if it is discouraged.
+- [ ] **R4. Closer coverage for the non-P-256 shapes.** P-384 `add` (wrong flag comparison), P-521
+  `add` (adds 1 then conditionally subtracts 2^521 or 1), P-521 `sub` (521-bit mask-aware), and the
+  special-prime folds in `p25519` (`+19`) and `p256k1` (`+4294968273`). Develop only on training
+  curves.
+- [ ] **R5. Clean re-run with a new freeze.** After R3 and R4: freeze again, then evaluate once in the
+  isolated checkout. This, not R2, is the number that may be called K1′.
+  **2026-11-23 result:** frozen at `8dc7a22` + working tree; training `OK,5 / FAIL,3`
+  (P-521 neg not emitted); held-out ARM **4/9 accepted** (`add_sm2`, `sub_sm2`,
+  `neg_sm2`, `neg_p256k1`), 0 CHEATING; x86 held-out (9 tasks) not evaluated
+  (ARM-only pipeline). The 4/9 is **not** comparable to the published 5/898 and
+  **not a clean K1′**: a pre-evaluation grep exposed held-out digitize-tactic
+  lines. Receipts: `research/receipts/r2-freeze-manifest.md`,
+  `r2-heldout-eval.md`, `r2-heldout-verdicts.csv`, `r2-heldout-failures.md`,
+  `r2-training-verdicts.csv`. A clean claim needs a re-run by a process that has
+  not seen held-out proof text.
 
 ## Claims (judgements, not measurements)
 

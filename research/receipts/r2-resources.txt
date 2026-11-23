@@ -1,0 +1,8 @@
+239M	.bench/eval-20261123_012847
+257M	.bench/eval-20261123_013522
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme1n1p1  1.3T  1.3T   27G  98% /mnt/1tb_kingston
+               total        used        free      shared  buff/cache   available
+Mem:             125          39          71           1          14          86
+Swap:            125          60          65
+16

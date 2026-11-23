@@ -326,7 +326,7 @@ def build_witness(op: str, steps, query: str, *, theorem_name: str,
             principle="INT_REM_UNIQ",
             kind="int_rem",
             width=width_bits,
-            witness=f"&(bignum_from_memory ({result},4) s)",
+            witness=f"&(bignum_from_memory ({result},{digits}) s)",
             modulus=modulus,
             quotient=quotient,
             orientation="sym_int_rem",
@@ -344,13 +344,13 @@ def build_witness(op: str, steps, query: str, *, theorem_name: str,
 
     # The invariant is the postcondition equality itself.
     if concl["kind"] == "nat_mod":
-        invariant = (f"bignum_from_memory ({result},4) s = "
+        invariant = (f"bignum_from_memory ({result},{digits}) s = "
                      f"({concl['sum']}) MOD {modulus}")
     elif concl["kind"] == "nat_mod_self":
-        invariant = (f"bignum_from_memory ({result},4) s = "
+        invariant = (f"bignum_from_memory ({result},{digits}) s = "
                      f"({concl['minuend']} - {concl['subtrahend']}) MOD {modulus}")
     else:
-        invariant = (f"&(bignum_from_memory ({result},4) s) = "
+        invariant = (f"&(bignum_from_memory ({result},{digits}) s) = "
                      f"(&{concl['minuend']} - &{concl['subtrahend']}) rem &{modulus}")
 
     return Witness(
