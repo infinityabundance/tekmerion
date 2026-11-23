@@ -840,9 +840,16 @@ yet a held-out result.
 - [ ] **V8.17.** `BRIDGE_SPLIT_CONDITIONS_TAC` is lossy (rewrites the branch condition to `true`)
   while its docstring claims it keeps the condition. Fix the tactic or the docstring before reuse.
 - [ ] **V8.18.** Write `ref_sub` / `ref_neg` so sub and neg stop using the split route.
-- [ ] **V8.19. Freeze and run the whole ARM `add`/`sub`/`neg` family.** Pre-declare the task IDs from
-  `problems.json`, freeze `bridge.ml`/`csat_bridge.ml`/`csat_lib.ml`/`emit_proof.py` by sha256, run
-  once, and report OK/N with the per-curve split. The nine R2 tasks are development-visible; say so.
+- [x] **V8.19. Freeze and run the whole ARM `add`/`sub`/`neg` family.** Frozen at
+  `2026-11-23T13:57:05Z`, base `672cc0b`, ten file hashes matched before and after (combined
+  `a6cc2a4d…e2ba9f`). Declared set: 18 tasks = 6 curves × {add, sub, neg}. **Result: 10 OK / 18
+  declared** (17 judged; `neg_p521` emitted no answer). Per curve: P-256 3/3, P-384 3/3, SM2 3/3,
+  secp256k1 1/3, P-25519 0/3, P-521 0/3. Max per-task 25.656 s vs 120 s; no timeouts. All accepted:
+  0 hypotheses, axiom delta 0. **Scope: coverage run, not blind** — all 18 were development-visible;
+  the denominator is 18, not 898 or 9. Receipt: `research/receipts/r3-coverage-run.md`.
+- The seven failures are all the same class: `BOUNDER_TAC[]` on a derived flag subgoal for curves
+  that fold a special-prime correction (`+19`, `2^32+977`, P-521 masking), plus `neg_p25519` failing
+  in `REAL_INTEGER_TAC` on the `2^255-19` numeral. This is Wall 1, now measured on a complete family.
 - [ ] **V8.20. x86 W1 + the nine x86 counterparts** — the first genuinely fresh held-out number.
 - [ ] **V8.21. `cadical` on `PATH` is an environment dependency.** `CSAT_REFUTE_GEN` fails with exit
   127, not a proof failure, when the binary is absent. Pin or document it, and make the failure

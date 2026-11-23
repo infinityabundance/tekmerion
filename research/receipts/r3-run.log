@@ -1,0 +1,37 @@
+/home/one/.elan/toolchains/leanprover--lean4---v4.29.1/bin/cadical
+2.1.2
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_sm2.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_sm2.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p256.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p256.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p256k1.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p256k1.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p384.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p384.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p384.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p384.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p25519.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p25519.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p25519.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_neg_p25519.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p521.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p521.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p384.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p384.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p256k1.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p256k1.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_p256_montjdouble.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_p256_montjdouble.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p25519.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_p25519.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p256.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p256.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_sm2.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_sub_sm2.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_sm2.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_sm2.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p521.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p521.ml: Running
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p256k1.ml: Compiling
+/mnt/1tb_kingston/Tekmerion/.bench/eval-20261123_135737/ml_files_arm_bignum_add_p256k1.ml: Running
+RUN_WALL_SECONDS=733 rc=0
