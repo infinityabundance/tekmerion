@@ -756,11 +756,14 @@ Everything else stays parked until step 7 produces a number.
   `judge-work/` (1.4 MB) and the 6–7 MB debug logs, kept `REPORT.md` and the decisive logs, and
   narrowed the harness to ignore `research/`, `*.log`, `.bench`, `target` with `symlinks=True`.
   *Acceptance:* mutation harness green locally (16/16 and 5/5) and a green runner run after push.
+  **Verified green on the runner:** run `45153255724`, conclusion `success`. The preceding run
+  `45153092405` had failed on the symlink.
 - [ ] **V8.2. Commit/receipt consistency.** The bridge report says no commit was made, but the work
   was committed. Correct the report. Scratch artefacts never enter Git; receipts are `REPORT.md`
   plus decisive logs, with hashes and compact reproduction instructions.
-- [ ] **V8.3. 18 of 38 bindings are theorems.** The other 20 are conversions and tactics that only
-  type-check. Every report must state that distinction; type-checking is not proof of behaviour.
+- [x] **V8.3. 18 of 38 bindings are theorems.** Recorded: the other 20 are conversions and tactics
+  that only type-check. Every report must state that distinction; type-checking is not proof of
+  behaviour.
 
 ## Finish the reference route, not the IWORDIFY conversion
 
