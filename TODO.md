@@ -158,7 +158,7 @@ Every item below came from an external review or from the programme's own audit.
 - [x] **F1. Build HOL Light + TacticTrace + s2n-bignum.** ARM exit 0 (6,331 s, 348 objects). x86 terminated at the 3 GB disk floor after 335/342 binaries; corpus unaffected. See `research/receipts/g1-failure-trace.md`.
 - [x] **F2. `collect-problems.py`; record actual counts by category.** **2,622 confirmed** at this pin: generic 686, program_state 601, FC-arm 463, bit_vector 437, FC-x86 435. 2,301 and 2,284 are not produced by this commit.
 - [x] **F3. Harness validation without a model.** Real proof → `OK` ×4; `CHEAT_TAC` → `CHEATING`; `ALL_TAC` → `FAIL`. **Correction: this revision has no `SYNTAX_ERROR` verdict**; malformed answers produce a compile error and no judge file. Use `ERROR`/pre-check failure instead.
-- [x] **F4. Reproducing 6.35% and 10.26% is blocked.** No model credentials in this environment. Stated the blocker; no model was substituted.
+- [!] **F4. Reproducing 6.35% and 10.26% is blocked.** A recorded blocker is not a cleared one. No model credentials exist, so no frontier arm has run. This stays `[!]` until an arm actually executes.
 
 ---
 
@@ -391,3 +391,105 @@ Freeze N1–N12 and the novelty register until P1–P5 are done. Infrastructure 
 - [ ] **P5. Matched-budget baseline comparisons.**
 
 Order: I1–I5 → I6 + P1 → P2 → P3 → P4 → P5.
+
+---
+
+# PART V — Programme v3: witness compilation (added 2026-11-22)
+
+Supersedes the ordering in PART II/IV. Keeps their corrections. The unit of search changes from
+a tactic script to a small typed **witness**; a deterministic compiler emits the script.
+
+## Ledger corrections from external review
+
+- [x] **F4 is `[!]`, not `[x]`.** A recorded blocker is not a cleared one.
+- [ ] **I7. Re-run G1 with the committed module.** The G1 receipt was produced with a modified
+  copy; `trace/exptrace_failure.ml` has since been made standalone (C6). Re-run and re-issue the
+  receipt so the evidence matches the code in Git.
+- [ ] **I8. Package C3 so it is rerunnable.** Full sha256 (not `e5a9f4ce…`), exact commands,
+  inputs, raw output and assertions, small enough to commit; the large corpus stays out.
+- [ ] **I9. Move C9 onto the critical path.** For conversions, record per-step numeric counters
+  (term size, elapsed time, abbreviation count) and keep full goal journals only on failure or at
+  sampled steps. The M-E channel lives exactly where the journal currently explodes.
+
+## V3.0 — verify the measurements before citing them
+
+- [ ] **Recount FC at the bench pin** `s2n-bignum 5e0fc782`, using the bench's own rule
+  (`_CORRECT`, `ensures` in goal, exclude `SUBROUTINE`/`_EQUIV`). Confirm **898** total
+  (463 ARM + 435 x86), the straight-line share, the loop long tail, and the family counts.
+  The v3 figures (917; 73% straight-line; 323 family theorems) are from HEAD `0f792fe` and must
+  not be cited until reproduced at the pin. Commit the counting script.
+- [ ] **Held-out guard.** A script that refuses to open proof files for held-out curves
+  (25519, secp256k1, SM2) while development tooling runs.
+
+## W — mechanisms
+
+- [ ] **W1. Simulation compiler.** Derive accumulate sets from carry dataflow; emit the stepping
+  script; support digitize/abbreviate. Gate: reproduces the human post-simulation goal exactly.
+- [ ] **W2. Witness enumerator** per operation family, **no model**: templates for congruence
+  witnesses and flag meanings across sibling routines.
+- [ ] **W3. Executable-model falsifier** gates every witness and invariant before the kernel.
+- [ ] **W4. Certified arithmetic closer**: external linear/Gröbner search, cofactors checked by
+  in-kernel ring normalisation; bounds via `BOUNDER_TAC`.
+- [ ] **W5. LLM witness proposer** for what W2 misses and for loop invariants (needs credentials).
+- [ ] **W6. DSFB as the L1 scheduler**: per-step term-size series; a slew triggers abbreviation or
+  digitization. This is control, not early abort.
+- [ ] **W7. Cross-ISA transport of witnesses**, not scripts.
+- [ ] **W8. Twin / de-optimisation** as an A/B agent policy only (already re-scoped).
+- [ ] **W9. rustc P-256 object against s2n-bignum's spec** (S3 held-out).
+
+## Witness record (the only thing a proposer emits)
+
+`accumulate`, `congruence`, `flag_meaning`, `case_split`, `bounds`, `invariant` — a typed record
+of roughly 3–20 terms, not a script.
+
+## Arms
+
+- [ ] **Z** = W1+W2+W3+W4, **zero model calls** (this is K1′).
+- [ ] **Z+6** = Z + W6 scheduler.
+- [ ] **M** = Z + W5.
+- [ ] **A1** = code agent writing full scripts (v2 floor).
+- [ ] **M vs A1** at equal budget: do witnesses beat scripts?
+- [ ] **L-x** leave-one-out over W1/W3/W4/W6.
+- [ ] **B0–B6** from the second review: B0 one-shot, B1 five-attempt, B2 no-model tactic portfolio,
+  B3 stateful agent, B4 +invariant generator, B5 +certificates, B6 +residual scheduling.
+
+## Splits and contamination
+
+- [ ] **LOCO** leave-one-curve-out (develop P-256/384/521; evaluate 25519/secp256k1/SM2).
+- [ ] **LOIO** leave-one-ISA-out (develop ARM; evaluate x86; report the reverse too under an equal
+  compute overlap).
+- [ ] **S2** temporal: files added after the compiler is frozen.
+- [ ] **S3** openssl-rs rustc objects.
+- [ ] Freeze the witness grammar and compiler by digest before evaluation; freeze the self-produced
+  lemma bank; no retrieval of human proof text; development examples (`word_max`, `word_clz`,
+  `bignum_add`, `bignum_sub`, `bignum_copy`, `montmul_p256`) are **not** blind held-out.
+
+## Axiom-closure caveat (must appear in every claim)
+
+- [ ] The benchmark replaces preceding proofs with `CHEAT_TAC`; an official `OK` is valid under
+  benchmark rules but is **not** an axiom-free development. Report the inherited-axiom closure
+  separately, and for any production claim replay the generated proof in a complete, genuinely
+  proved s2n-bignum context.
+
+## Claims (judgements, not measurements)
+
+- **K1′** Arm Z beats 5/898 FC with zero model calls on LOCO/LOIO (P≈0.65).
+- **K2′** M beats A1 at equal budget (P≈0.55).
+- **K3′** W6 cuts check time or timeouts (P≈0.4).
+- **K4′** One rustc P-256 operation proved against the spec (P≈0.4).
+
+## Order of work (v3)
+
+1. V3.0 recount at the pin + held-out guard; commit the counter.
+2. W1 on `add`/`sub`/`neg` mod p, ARM, **training curves only**: reproduce the human simulation
+   step exactly (identical post-simulation goal).
+3. W4 + W2 on the same family; the closer emits a script the bench marks `OK` on training theorems.
+4. W3 falsifier in front of W2.
+5. Freeze, then evaluate LOCO. **This is the first claimable number.**
+6. Widen family by family, then W6; W5 only once credentials exist.
+
+## Stop doing until step 5 produces a number
+
+- No N1–N12 implementation, no dual-kernel work, no new Rust kernel, no proof-term-hole calculus,
+  no GPU replay, no speculative-constant-time model, no expansion of the novelty register.
+- No synthetic evidence-lifecycle statistic presented as a frontier argument.
