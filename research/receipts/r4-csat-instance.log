@@ -1,0 +1,25 @@
+# Residual certified-SAT instance for arm.bignum_sub_p25519 (one of four branches).
+# DEVELOPMENT_ONLY harness: .bench/ref-dev/bridge_dbg.ml = tools/bridge.ml with a print
+# inserted in BRIDGE_CSAT_TAC.  Same answer bytes, same tactic; nothing else changed.
+# The goal is the ref_sub borrow branch over unsigned words; the two `<` hypotheses are
+# the range assumptions x < p and y < p; the rest are the machine's accumulator equations
+# (carries related to word values) and the split condition word_ult x y.
+
+CSAT_INSTANCE hyps=17 nsmall_rels=0 goal=&(val (word_join (word_join (word_join (word_and sum_s14 (word 9223372036854775807)) sum_s13) sum_s12) sum_s11)) = &(val (word_add (word_sub (word_join (word_join (word_join m_3 m_2) m_1) m_0) (word_join (word_join (word_join n_3 n_2) n_1) n_0)) (word 57896044618658097711785492504343953926634992332820282019728792003956564819949)))
+CSAT_HYP carry_s8
+CSAT_HYP true
+CSAT_HYP word_ult (word_join (word_join (word_join m_3 m_2) m_1) m_0) (word_join (word_join (word_join n_3 n_2) n_1) n_0)
+CSAT_HYP true
+CSAT_HYP &(val n_0) + &(val (word_join n_1 (word 0))) + &(val (word_join n_2 (word 0))) + &(val (word_join n_3 (word 0))) < &57896044618658097711785492504343953926634992332820282019728792003956564819949
+CSAT_HYP &(val m_0) + &(val (word_join m_1 (word 0))) + &(val (word_join m_2 (word 0))) + &(val (word_join m_3 (word 0))) < &57896044618658097711785492504343953926634992332820282019728792003956564819949
+CSAT_HYP -- &(val (word_join (word (bitval carry_s14)) (word 0))) + &(val sum_s14) = &(val sum_s8) - &0 - &(bitval carry_s13)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s13)) (word 0))) + &(val sum_s13) = &(val sum_s7) - &0 - &(bitval carry_s12)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s12)) (word 0))) + &(val sum_s12) = &(val sum_s4) - &0 - &(bitval carry_s11)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s11)) (word 0))) + &(val sum_s11) = &(val sum_s3) - &(val (word 19))
+CSAT_HYP -- &(val (word_join (word 1) (word 0))) + &(val sum_s8) = &(val m_3) - &(val n_3) - &(bitval carry_s7)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s7)) (word 0))) + &(val sum_s7) = &(val m_2) - &(val n_2) - &(bitval carry_s4)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s4)) (word 0))) + &(val sum_s4) = &(val m_1) - &(val n_1) - &(bitval carry_s3)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s3)) (word 0))) + &(val sum_s3) = &(val m_0) - &(val n_0)
+CSAT_HYP true
+CSAT_HYP true
+CSAT_HYP nonoverlapping_modulo (2 EXP 64) (pc,72) (val z,8 * 4)

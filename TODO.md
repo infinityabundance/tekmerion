@@ -839,7 +839,31 @@ yet a held-out result.
 
 - [ ] **V8.17.** `BRIDGE_SPLIT_CONDITIONS_TAC` is lossy (rewrites the branch condition to `true`)
   while its docstring claims it keeps the condition. Fix the tactic or the docstring before reuse.
-- [ ] **V8.18.** Write `ref_sub` / `ref_neg` so sub and neg stop using the split route.
+- [x] **V8.18. Write `ref_sub` / `ref_neg`, and route every `add`/`sub`/`neg` task through the
+  reference.** Done 2026-11-23. Section 8 of `tools/bridge.ml` defines `ref_sub` (subtract, add
+  `pw` back on borrow), `ref_neg` (`0` at zero, else `pw - x`), nine generic lemmas
+  (`SUB_REF_VAL`, `SUB_REF_VAL_WORD`, `NEG_REF_VAL`, `NEG_REF_VAL_WORD`, `SUB_INT_REM_MOD`,
+  `MOD_ADD_SELF`, `SUB_REARRANGE`, `REF_SUB_KEEP`, `REF_SUB_BORROW`) and the two tactics
+  `BRIDGE_SUB_REF_TAC` / `BRIDGE_NEG_REF_TAC`. Fresh process: `ref_check.log` (statements + axioms
+  3 -> 3); whole file 81/81 bindings `OK`, axioms 3 -> 3; no-curve check `statements=45 hits=0`.
+  Declared 18 re-run unchanged: **16 OK / 18** (was 10/18). `sub` 6/6, `neg` 6/6, `add` 4/6.
+  `neg_p521` — which previously emitted no answer — is `OK, 19.527 s` with no carry-chain
+  assumption, because a routine with no add/sub chain is simulated with plain `ARM_STEPS_TAC`.
+  **Lost `add_p384`** relative to R3: its earlier `OK` came from a transcribed real-arithmetic
+  flag subgoal, which the reference route does not carry. Receipt:
+  `research/receipts/r4-reference-route.md`. Scope: development, all 18 were visible.
+- [ ] **V8.22. Encode flag-only `ADCS`/`SBCS XZR` instructions.** This is the whole remaining
+  failure class (`add_p256k1`, `add_p384`): both select the correction with the **Z flag of a
+  chain of flag-only instructions** (`CMN`/`CMP` + `SBCS XZR`/`ADCS XZR`, then `CSEL`/`CSETM NE`).
+  `derive_steps` excludes `XZR` destinations and `ACCUMULATE_ARITH_TAC` needs a register read
+  equation, so that flag is a free boolean and `cadical` returns exit 10 (SATISFIABLE) on a
+  residual instance that is otherwise the pure `output = ref_add` word equation. Needs an
+  accumulator relation per flag-only instruction (a `word_carry`-style hypothesis), still
+  bit-level and curve-free. Do not "fix" it by reinstating a transcribed real-arithmetic flag
+  subgoal.
+- [ ] **V8.23. `add_p521` headroom.** 95.864 s of the 120 s per-task budget (0.80) on the
+  reference route; `sub_p521` is 35.088 s. Cheap headroom would be a shorter bit-blast for the
+  576-bit chains, not a longer timeout.
 - [x] **V8.19. Freeze and run the whole ARM `add`/`sub`/`neg` family.** Frozen at
   `2026-11-23T13:57:05Z`, base `672cc0b`, ten file hashes matched before and after (combined
   `a6cc2a4d…e2ba9f`). Declared set: 18 tasks = 6 curves × {add, sub, neg}. **Result: 10 OK / 18
@@ -854,6 +878,32 @@ yet a held-out result.
 - [ ] **V8.21. `cadical` on `PATH` is an environment dependency.** `CSAT_REFUTE_GEN` fails with exit
   127, not a proof failure, when the binary is absent. Pin or document it, and make the failure
   message say so.
+
+## R4 · reference route across the family (2026-11-23)
+
+Same 18 declared tasks, same set (`diff` empty), re-run after `ref_sub`/`ref_neg`:
+
+| curve | add | sub | neg | OK/N | R3 |
+|---|---|---|---|---:|---|
+| P-25519 | OK | OK | OK | **3/3** | 0/3 |
+| P-256 | OK | OK | OK | **3/3** | 3/3 |
+| secp256k1 | FAIL | OK | OK | **2/3** | 1/3 |
+| P-384 | FAIL | OK | OK | **2/3** | 3/3 |
+| P-521 | OK | OK | OK | **3/3** | 0/3 |
+| SM2 | OK | OK | OK | **3/3** | 3/3 |
+| **total** | **4/6** | **6/6** | **6/6** | **16/18** | 10/18 |
+
+`collect-verdicts.py` → `OK,16 / FAIL,2`; 16 accepted with 0 hypotheses and unchanged axioms; max
+95.864 s of the 120 s budget. `neg_p521` is fixed: it is a pure complement with no add/sub chain, so
+it needs no accumulating step at all — the old no-answer was generator coverage, not mathematics.
+
+**Measured loss, recorded rather than hidden:** `add_p384` was `OK` in R3 only because the split route
+used a **transcribed** real-arithmetic flag subgoal. The pure reference route drops it and now returns
+SAT. The flag-only chains (`CMN`/`CMP` + `SBCS/ADCS XZR` + `CSEL/CSETM NE`) select the correction with
+the Z flag, and `derive_steps` excludes `XZR` destinations, so that flag is unconstrained.
+
+- [x] **V8.18** closed here: `ref_sub`/`ref_neg` proved for all `p`/widths, both reference tactics in
+  use, fresh load axioms 3→3, curve check 0 hits.
 
 ## New defects from the 2026-11-23 run
 

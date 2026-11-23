@@ -830,3 +830,261 @@ let BRIDGE_NEG_TAC expand pth : tactic =
        ASM_SIMP_TAC[GSYM INT_OF_NUM_SUB] THEN
        BRIDGE_FINISH_KEEP_TAC expand])
     (asl,w));;
+
+(* ========================================================================= *)
+(* 8. Reference route for `sub` and `neg`.                                   *)
+(*                                                                           *)
+(* Same shape as `ref_add': the whole modular specification of the operation *)
+(* is one word function, and a single generic lemma carries the MOD (or the  *)
+(* int `rem'), so every per-task SAT instance is a pure word equation        *)
+(*                                                                           *)
+(*   val(<written words>) = val(ref_sub (word p) x y)                        *)
+(*   val(<written words>) = val(ref_neg (word p) x)                          *)
+(*                                                                           *)
+(* with `val x < p', `val y < p' (`val x <= p' for neg) among the hypotheses *)
+(* and the machine's own accumulator equations (including the flag word's    *)
+(* defining equation) among the assumptions.  No flag *meaning* is derived,  *)
+(* so no curve-specific comparison has to be proved in real arithmetic: the  *)
+(* hardware carry and the reference's word comparison are related inside the *)
+(* bit-level instance.                                                       *)
+(*                                                                           *)
+(* Note on HOL Light parsing: `-` binds tighter than `+', so `a + p - b' is  *)
+(* `a + (p - b)'.  Every statement below is written in that form on purpose; *)
+(* SUB_REARRANGE is the bridge between it and the `(a + p) - b' form the     *)
+(* subtraction lemmas produce.                                               *)
+(* ========================================================================= *)
+
+(* sub: subtract, and add pw back exactly when the subtraction borrowed.    *)
+let ref_sub = new_definition
+ `ref_sub (pw:W word) (x:W word) (y:W word) =
+    let d = word_sub x y in
+    if word_ult x y then word_add d pw else d`;;
+
+let MOD_ADD_SELF = prove
+ (`!a p:num. (a + p) MOD p = a MOD p`,
+  REPEAT GEN_TAC THEN MATCH_MP_TAC MOD_EQ THEN
+  EXISTS_TAC `1` THEN REWRITE_TAC[MULT_CLAUSES]);;
+
+let SUB_REARRANGE = prove
+ (`!m n p:num. n <= p ==> (m + p) - n = m + (p - n)`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN ASM_ARITH_TAC);;
+
+(* without borrow the machine keeps x - y, which is already the residue *)
+let REF_SUB_KEEP = prove
+ (`!a b p:num. b <= a /\ a < p ==> a - b = (a + p - b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(a + p - b) = (a - b) + p` SUBST1_TAC THENL
+   [ASM_ARITH_TAC; ALL_TAC] THEN
+  REWRITE_TAC[MOD_ADD_SELF] THEN
+  CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC);;
+
+(* with borrow the machine writes (x - y mod 2^k) + p, which wraps to x+p-y *)
+let REF_SUB_BORROW = prove
+ (`!a b p t s:num.
+     a < b /\ b < p /\ p < t /\ s = a + (t - b)
+     ==> (s + p) MOD t = (a + p - b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(s + p) = (a + p - b) + t` SUBST1_TAC THENL
+   [ASM_ARITH_TAC; ALL_TAC] THEN
+  REWRITE_TAC[MOD_ADD_SELF] THEN
+  SUBGOAL_THEN `(a + p - b) < p` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  SUBGOAL_THEN `(a + p - b) < t` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  ASM_SIMP_TAC[MOD_LT]);;
+
+(* The one lemma that carries MOD for subtraction; every width, every pw. *)
+let SUB_REF_VAL = prove
+ (`!(pw:W word) (x:W word) (y:W word).
+       0 < val pw /\ val x < val pw /\ val y < val pw
+       ==> val(ref_sub pw x y) = (val x + val pw - val y) MOD val pw`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN
+   `val(pw:W word) < 2 EXP dimindex(:W) /\
+    val(x:W word) < 2 EXP dimindex(:W) /\
+    val(y:W word) < 2 EXP dimindex(:W)`
+    STRIP_ASSUME_TAC THENL [REWRITE_TAC[VAL_BOUND]; ALL_TAC] THEN
+  REWRITE_TAC[ref_sub; LET_DEF; LET_END_DEF] THEN BETA_TAC THEN
+  REWRITE_TAC[WORD_ULT] THEN
+  ASM_CASES_TAC `val(x:W word) < val(y:W word)` THENL
+   [ SUBGOAL_THEN `~(val(y:W word) <= val(x:W word))` ASSUME_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[VAL_WORD_ADD] THEN
+     MATCH_MP_TAC REF_SUB_BORROW THEN REPEAT CONJ_TAC THENL
+      [ ASM_REWRITE_TAC[]; ASM_REWRITE_TAC[]; ASM_REWRITE_TAC[];
+        ASM_SIMP_TAC[VAL_WORD_SUB_CASES] ];
+     SUBGOAL_THEN `val(y:W word) <= val(x:W word)` ASSUME_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_SIMP_TAC[VAL_WORD_SUB_CASES] THEN
+     MATCH_MP_TAC REF_SUB_KEEP THEN ASM_REWRITE_TAC[]]);;
+
+let SUB_REF_VAL_WORD = prove
+ (`!p (x:W word) (y:W word).
+       0 < p /\ p < 2 EXP dimindex(:W) /\ val x < p /\ val y < p
+       ==> val(ref_sub (word p : W word) x y) = (val x + p - val y) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `val(word p : W word) = p` ASSUME_TAC THENL
+   [REWRITE_TAC[VAL_WORD] THEN MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[];
+    ALL_TAC] THEN
+  FIRST_ASSUM(fun th ->
+    MATCH_MP_TAC (REWRITE_RULE[th]
+      (SPECL [`(word p : W word)`; `(x:W word)`; `(y:W word)`] SUB_REF_VAL))) THEN
+  ASM_REWRITE_TAC[]);;
+
+(* neg: zero if the input is zero, pw - x otherwise. *)
+let ref_neg = new_definition
+ `ref_neg (pw:W word) (x:W word) =
+    if x = word(0:num) then word(0:num) else word_sub pw x`;;
+
+let NEG_REF_VAL = prove
+ (`!(pw:W word) (x:W word).
+       0 < val pw /\ val x <= val pw
+       ==> val(ref_neg pw x) = (val pw - val x) MOD val pw`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN
+   `val(pw:W word) < 2 EXP dimindex(:W) /\
+    val(x:W word) < 2 EXP dimindex(:W)`
+    STRIP_ASSUME_TAC THENL [REWRITE_TAC[VAL_BOUND]; ALL_TAC] THEN
+  REWRITE_TAC[ref_neg; GSYM VAL_EQ_0] THEN
+  ASM_CASES_TAC `val(x:W word) = 0` THENL
+   [ ASM_REWRITE_TAC[VAL_WORD_0; SUB_0] THEN REWRITE_TAC[MOD_REFL];
+     ASM_SIMP_TAC[VAL_WORD_SUB_CASES] THEN
+     CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC]);;
+
+let NEG_REF_VAL_WORD = prove
+ (`!p (x:W word).
+       0 < p /\ p < 2 EXP dimindex(:W) /\ val x <= p
+       ==> val(ref_neg (word p : W word) x) = (p - val x) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `val(word p : W word) = p` ASSUME_TAC THENL
+   [REWRITE_TAC[VAL_WORD] THEN MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[];
+    ALL_TAC] THEN
+  FIRST_ASSUM(fun th ->
+    MATCH_MP_TAC (REWRITE_RULE[th]
+      (SPECL [`(word p : W word)`; `(x:W word)`] NEG_REF_VAL))) THEN
+  ASM_REWRITE_TAC[]);;
+
+(* the int `rem' specification of sub, brought to the ref_sub residue *)
+let SUB_INT_REM_MOD = prove
+ (`!p m n:num. 0 < p /\ m < p /\ n < p
+    ==> ((&m:int) - &n) rem &p = &((m + p - n) MOD p)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `n <= p` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  ASM_CASES_TAC `m < n` THENL
+   [ ASM_SIMP_TAC[SUB_REM_LT] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+     ASM_SIMP_TAC[SUB_REARRANGE] THEN
+     CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC;
+     ASM_SIMP_TAC[SUB_REM_GE] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+     SUBGOAL_THEN `m + p - n = (m - n) + p` SUBST1_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     REWRITE_TAC[MOD_ADD_SELF] THEN
+     CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC]);;
+
+let BRIDGE_REF2_LEMMAS =
+  [MOD_ADD_SELF; SUB_REARRANGE; REF_SUB_KEEP; REF_SUB_BORROW; SUB_REF_VAL;
+   SUB_REF_VAL_WORD; NEG_REF_VAL; NEG_REF_VAL_WORD; SUB_INT_REM_MOD];;
+let BRIDGE_SPEC_LEMMAS = BRIDGE_SPEC_LEMMAS @ BRIDGE_REF2_LEMMAS;;
+
+(* A numeral can reach the goal in two shapes: the tagged form the parser and
+   `mk_numeral` build, `NUMERAL(BIT1(BIT0(...)))`, and the same bit chain with
+   the tag stripped.  Both print as the decimal literal, so the mismatch is
+   invisible in a log and `aconv` alone misses the range hypothesis (measured:
+   `neg_p25519`, hypothesis present, `aconv` false, `p` not `is_numeral`).
+   Compare modulo the tag. *)
+let rec BRIDGE_STRIP_NUMERAL tm =
+  match tm with
+  | Comb(Const("NUMERAL",_),x) -> BRIDGE_STRIP_NUMERAL x
+  | _ -> tm;;
+
+let rec BRIDGE_TERM_EQ (s:term) (t:term) =
+  let s = BRIDGE_STRIP_NUMERAL s and t = BRIDGE_STRIP_NUMERAL t in
+  aconv s t ||
+  (try dest_numeral s = dest_numeral t with Failure _ -> false) ||
+  (is_comb s && is_comb t &&
+   BRIDGE_TERM_EQ (rator s) (rator t) && BRIDGE_TERM_EQ (rand s) (rand t));;
+
+(* Find `tm < p` (or `tm <= p`) in the context.  Returns the hypothesis, the
+   modulus term actually written there (a tagged numeral) and, when the goal's
+   copy of the modulus is the untagged shape, the equation that puts the tagged
+   one into the goal.  The word-level lemma's side conditions are arithmetic on
+   the numeral, so the tagged form is the one to work with. *)
+let BRIDGE_FIND_BOUND tag rel p tm asl =
+  let pat = mk_comb(mk_comb(rel, tm), p) in
+  let th =
+    try snd(List.find (fun (_,th) -> BRIDGE_TERM_EQ (concl th) pat) asl)
+    with Not_found ->
+      failwith (tag^": missing hypothesis "^(string_of_term pat)) in
+  let ph = rand (concl th) in
+  let eqs =
+    if aconv ph p then [] else [prove(mk_eq(p, ph), REWRITE_TAC[NUMERAL])] in
+  (th, ph, eqs);;
+
+let BRIDGE_BOUND_HYP tag p tm asl =
+  BRIDGE_FIND_BOUND tag `(<):num->num->bool` p tm asl;;
+
+let BRIDGE_LE_HYP tag p tm asl =
+  BRIDGE_FIND_BOUND tag `(<=):num->num->bool` p tm asl;;
+
+(* zero and width side conditions of the word-level ref lemmas *)
+let BRIDGE_REF_SIDES tag p (lem:thm) : thm * thm =
+  let ants = conjuncts (lhand (concl lem)) in
+  if List.length ants < 2 then
+    failwith (tag^": unexpected ref-lemma shape");
+  let pos = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+  let width = prove(List.nth ants 1,
+    CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC
+             RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
+  (pos,width);;
+
+(* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
+let BRIDGE_SUB_REF_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (_,rhs) = dest_eq w in
+    let (diff,pt) = dest_binop `(rem):int->int->int` rhs in
+    let (mt,nt) = dest_binop `(-):int->int->int` diff in
+    let m = rand mt and n = rand nt and p0 = rand pt in
+    let (hm,pm,eqm) = BRIDGE_BOUND_HYP "BRIDGE_SUB_REF_TAC" p0 m asl
+    and (hn,pn,eqn) = BRIDGE_BOUND_HYP "BRIDGE_SUB_REF_TAC" p0 n asl in
+    if not (aconv pm pn) then
+      failwith "BRIDGE_SUB_REF_TAC: bounds use different moduli";
+    let p = pm in
+    let lem = SPECL [p; m; n] SUB_INT_REM_MOD in
+    let ants = conjuncts (lhand (concl lem)) in
+    if List.length ants <> 3 then
+      failwith "BRIDGE_SUB_REF_TAC: unexpected spec-lemma shape";
+    let zpos = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+    let sth = MP lem (end_itlist CONJ [zpos; hm; hn]) in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS m in
+    let (yw,thy) = BRIDGE_WORD_OF_DIGITS n in
+    let (lhs,_) = dest_eq w in
+    let wv = rand lhs in
+    let (_,thw) = BRIDGE_WORD_OF_DIGITS wv in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem2 = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] SUB_REF_VAL_WORD) in
+    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_SUB_REF_TAC" p lem2 in
+    let hx = REWRITE_RULE[GSYM thx] hm and hy = REWRITE_RULE[GSYM thy] hn in
+    let rth = MP lem2 (end_itlist CONJ [a0; a1; hx; hy]) in
+    let rth = SYM (REWRITE_RULE[thx; thy] rth) in
+    (REWRITE_TAC(eqm @ eqn) THEN
+     ASM_REWRITE_TAC[sth; INT_OF_NUM_EQ; rth; SYM thw; ref_sub;
+                     LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;
+
+(* neg: the spec is `bignum_from_memory (...) s = (p - n) MOD p' *)
+let BRIDGE_NEG_REF_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,rhs) = dest_eq w in
+    let (dif,pt) = dest_binop `(MOD):num->num->num` rhs in
+    let n = rand dif and p0 = rand pt in
+    let (hn,p,eqn) = BRIDGE_LE_HYP "BRIDGE_NEG_REF_TAC" p0 n asl in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS n in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS lhs in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw] (INST_TYPE [wt,`:W`] NEG_REF_VAL_WORD) in
+    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_NEG_REF_TAC" p lem in
+    let hx = REWRITE_RULE[GSYM thx] hn in
+    let rth = MP lem (end_itlist CONJ [a0; a1; hx]) in
+    let rth = SYM (REWRITE_RULE[thx] rth) in
+    (REWRITE_TAC eqn THEN
+     REWRITE_TAC[rth; SYM thw; ref_neg; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;

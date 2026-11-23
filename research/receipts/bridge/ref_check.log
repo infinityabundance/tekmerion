@@ -1,0 +1,28 @@
+AXIOMS before=3
+AXIOMS after=3
+REF_LEMMA MOD_ADD_SELF : forall a p. (a + p) MOD p = a MOD p
+REF_LEMMA SUB_REARRANGE : forall m n p. n <= p ==> (m + p) - n = m + p - n
+REF_LEMMA REF_SUB_KEEP : forall a b p. b <= a /\ a < p ==> a - b = (a + p - b) MOD p
+REF_LEMMA REF_SUB_BORROW : forall a b p t s.
+   a < b /\ b < p /\ p < t /\ s = a + t - b
+   ==> (s + p) MOD t = (a + p - b) MOD p
+REF_LEMMA ref_sub : forall pw x y.
+   ref_sub pw x y =
+   (let d = word_sub x y in if word_ult x y then word_add d pw else d)
+REF_LEMMA SUB_REF_VAL : forall pw x y.
+   0 < val pw /\ val x < val pw /\ val y < val pw
+   ==> val (ref_sub pw x y) = (val x + val pw - val y) MOD val pw
+REF_LEMMA SUB_REF_VAL_WORD : forall p x y.
+   0 < p /\ p < 2 EXP dimindex (:W) /\ val x < p /\ val y < p
+   ==> val (ref_sub (word p) x y) = (val x + p - val y) MOD p
+REF_LEMMA ref_neg : forall pw x. ref_neg pw x = (if x = word 0 then word 0 else word_sub pw x)
+REF_LEMMA NEG_REF_VAL : forall pw x.
+   0 < val pw /\ val x <= val pw
+   ==> val (ref_neg pw x) = (val pw - val x) MOD val pw
+REF_LEMMA NEG_REF_VAL_WORD : forall p x.
+   0 < p /\ p < 2 EXP dimindex (:W) /\ val x <= p
+   ==> val (ref_neg (word p) x) = (p - val x) MOD p
+REF_LEMMA SUB_INT_REM_MOD : forall p m n.
+   0 < p /\ m < p /\ n < p ==> (&m - &n) rem &p = &((m + p - n) MOD p)
+REF_HYPS ref_sub=0 SUB_REF_VAL=0 SUB_REF_VAL_WORD=0 NEG_REF_VAL=0 NEG_REF_VAL_WORD=0 SUB_INT_REM_MOD=0
+REF_CHECK_DONE seconds=2.726
