@@ -1,29 +1,40 @@
 (* ========================================================================= *)
-(* bridge.ml -- generic bridge lemmas from a num/MOD (or int/rem) spec to a   *)
-(* word-level circuit statement that certified SAT can discharge.            *)
+(* bridge.ml -- generic bridge lemmas from a num/MOD (or int/rem, real/&)    *)
+(* specification to a word-level circuit statement that certified SAT can    *)
+(* discharge.                                                                *)
 (*                                                                           *)
-(* Parameterisation: the modulus `p` is an argument, the limb width is the   *)
-(* 64 of the target ISA, and the limb count enters only through the powers   *)
-(* of two that the bit-blaster sees.  There is no P-256 constant, no P-256   *)
-(* limb list, and no transposed human tactic fragment in this file.          *)
+(* Parameterisation: the modulus `p` is an argument of every lemma, the limb *)
+(* width (64) enters only through the numerals that appear in the shifts,    *)
+(* and the number of limbs enters only through the nesting depth of the      *)
+(* joins.  There is no P-256 constant, no P-256 limb list and no transposed  *)
+(* human tactic fragment in this file: the arithmetic below is the general   *)
+(* statement that `(m + n) MOD p`, `(&m - &n) rem &p` and `(p - n) MOD p`    *)
+(* are what the machine's written residue is, for any `p`.                   *)
 (*                                                                           *)
 (* Provenance of the mathematics used:                                       *)
-(*   MOD_LT / MOD_EQ / MOD_REFL                  (core arith)                *)
-(*   INT_REM_UNIQ / INT_OF_NUM_LT / INT_ARITH    (core int)                  *)
-(*   VAL_WORD_JOIN / VAL_WORD_ADD / VAL_WORD_0 / VAL_WORD_BITVAL             *)
-(*   INT_OF_NUM_* / INT_OF_NUM_POW                (core int)                 *)
+(*   MOD_ADD_CASES / MOD_LT / MOD_REFL / EXP_ADD / LT_MULT_LCANCEL  (arith)  *)
+(*   INT_REM_UNIQ / INT_OF_NUM_* / INT_POW_ADD / INT_*_DISTRIB      (int)    *)
+(*   VAL_WORD_JOIN_SIMPLE / VAL_WORD_0 / VAL_BOUND / VAL_WORD_BITVAL (words) *)
 (*                                                                           *)
 (* Kernel trust: every SAT refutation is replayed by the LCF kernel inside   *)
-(* CSAT_REFUTE (csat_lib.ml); no solver certificate is trusted.              *)
+(* CSAT_REFUTE (csat_lib.ml); no solver certificate is trusted and no         *)
+(* compiler enters the trusted base.                                         *)
+(*                                                                           *)
+(* DEVELOPMENT_ONLY (not lemmas; recorded so they cannot hide):             *)
+(*   BRIDGE_ADD_TAC / BRIDGE_SUB_TAC / BRIDGE_NEG_TAC are *shape dispatch*.  *)
+(*   They inspect the postcondition shape (sum MOD p, difference rem p,      *)
+(*   complement MOD p), split at the single conditional that shape admits,   *)
+(*   and call the generic lemmas above.  The old human tail (DECARRY_RULE,   *)
+(*   DESUM_RULE, BOUNDER_TAC, EQUAL_FROM_CONGRUENT_MOD_MOD,                 *)
+(*   REAL_INTEGER_TAC) is not used anywhere in this file.                    *)
 (* ========================================================================= *)
 
 (* ------------------------------------------------------------------------- *)
-(* 1. The modular specification in "sum form".                               *)
+(* 1. The modular specification, split at its single conditional correction. *)
 (*                                                                           *)
-(* Each lemma states the spec-side identity in terms of the value the        *)
-(* machine actually writes, split at the single conditional correction.  The *)
-(* machine-side obligations are then pure *sum* equalities, which is what    *)
-(* makes the residue bit-blastable (no subtraction, no MOD).                 *)
+(* Each lemma states the spec side in terms of the value the machine writes, *)
+(* so the machine-side obligation that reaches SAT is a pure *sum* identity: *)
+(* no MOD, no rem, no subtraction.                                           *)
 (* ------------------------------------------------------------------------- *)
 
 (* add: (m + n) MOD p, at most one correction because m < p and n < p. *)
@@ -31,7 +42,7 @@ let ADD_MOD_LT = prove
  (`!p m n. m < p /\ n < p /\ m + n < p ==> (m + n) MOD p = m + n`,
   REPEAT GEN_TAC THEN STRIP_TAC THEN
   SUBGOAL_THEN `(m + n) MOD p = (if m + n < p then m + n else (m + n) - p)`
-    SUBST1_TAC THENL
+    (fun th -> REWRITE_TAC[th]) THENL
    [MATCH_MP_TAC MOD_ADD_CASES THEN ASM_REWRITE_TAC[];
     ASM_REWRITE_TAC[]]);;
 
@@ -39,12 +50,12 @@ let ADD_MOD_GE = prove
  (`!p m n. m < p /\ n < p /\ p <= m + n ==> (m + n) MOD p = (m + n) - p`,
   REPEAT GEN_TAC THEN STRIP_TAC THEN
   SUBGOAL_THEN `(m + n) MOD p = (if m + n < p then m + n else (m + n) - p)`
-    SUBST1_TAC THENL
+    (fun th -> REWRITE_TAC[th]) THENL
    [MATCH_MP_TAC MOD_ADD_CASES THEN ASM_REWRITE_TAC[];
     SUBGOAL_THEN `~(m + n < p)` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
     ASM_REWRITE_TAC[]]);;
 
-(* `t = (m + n) - p' to sum form, removing the subtraction *)
+(* `t = (m + n) - p' in sum form, so that the residue has no subtraction *)
 let ADD_GE_SUM = prove
  (`!p m n t. p <= m + n ==> ((t = (m + n) - p) <=> (t + p = m + n))`,
   REPEAT GEN_TAC THEN DISCH_TAC THEN
@@ -55,7 +66,7 @@ let ADD_GE_SUM = prove
     DISCH_TAC THEN UNDISCH_TAC `((m + n) - p) + p = m + n` THEN
     ASM_ARITH_TAC]);;
 
-(* the same bridge, stated once in the shape the pipeline applies *)
+(* the same bridge, stated once in the shape a caller applies *)
 let ADD_MOD_SPLIT = prove
  (`!p m n s t.
        0 < p /\ m < p /\ n < p /\
@@ -160,259 +171,153 @@ let NEG_MOD_SPLIT = prove
     ASM_SIMP_TAC[NEG_MOD_NZ] THEN CONV_TAC SYM_CONV THEN
     ASM_SIMP_TAC[NEG_NZ_SUM] THEN ASM_ARITH_TAC]);;
 
+let BRIDGE_SPEC_LEMMAS =
+  [ADD_MOD_LT; ADD_MOD_GE; ADD_GE_SUM; ADD_MOD_SPLIT;
+   SUB_REM_LT; SUB_REM_GE; SUB_LT_SUM; SUB_GE_SUM; SUB_REM_SPLIT;
+   NEG_MOD_ZERO; NEG_MOD_NZ; NEG_NZ_SUM; NEG_MOD_SPLIT];;
+
 (* ------------------------------------------------------------------------- *)
-(* 2. Word-level encoding of `2^(64*j) * (val x)' and `2^(64*j) * bitval b'. *)
+(* 2. Power-of-two scaling as a word join.                                   *)
 (*                                                                           *)
 (* `word_join' is free under bit-blasting (BIT_WORD_JOIN); a product by a    *)
-(* power of two expands into a full multiplier instead, which dominates the  *)
-(* cost.  Rewriting the shifts to joins is what makes the residue cheap.     *)
+(* power of two is instead expanded by WORDIFY_CONV into a full multiplier,  *)
+(* which dominates the SAT cost.  Rewriting the shifts to joins is what      *)
+(* makes the residue cheap, and it is also what removes the unconstrained-   *)
+(* width problem: `word_join' has a free result type, so the width must be   *)
+(* supplied here (`mk_word_ty').                                            *)
 (* ------------------------------------------------------------------------- *)
 
-(* A reusable power-of-two bound: multiplying a bound by 2^j preserves it. *)
 let EXP2_NZ = prove
  (`!j:num. ~(2 EXP j = 0)`,
   GEN_TAC THEN REWRITE_TAC[EXP_EQ_0] THEN ARITH_TAC);;
 
-let POW2_MULT_LT = prove
- (`!v:num j k. v < 2 EXP k ==> 2 EXP j * v < 2 EXP j * 2 EXP k`,
-  REPEAT GEN_TAC THEN DISCH_TAC THEN
+let LT_EXP_MULT = prove
+ (`!x j k:num. x < 2 EXP k ==> 2 EXP j * x < 2 EXP (j + k)`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN REWRITE_TAC[EXP_ADD] THEN
   REWRITE_TAC[LT_MULT_LCANCEL] THEN
-  REWRITE_TAC[EXP2_NZ] THEN ASM_REWRITE_TAC[]);;
+  REWRITE_TAC[EXP_EQ_0; ARITH] THEN ASM_REWRITE_TAC[]);;
 
-let VAL_JOIN_J1 = prove
- (`!x:int64. val(word_join x (word 0:int64):128 word) = 2 EXP 64 * val x`,
-  GEN_TAC THEN CONV_TAC(LAND_CONV(ONCE_DEPTH_CONV VAL_WORD_JOIN)) THEN
-  CONV_TAC(DEPTH_CONV DIMINDEX_CONV) THEN
-  REWRITE_TAC[VAL_WORD_0; ADD_0] THEN
-  MATCH_MP_TAC MOD_LT THEN
-  SUBGOAL_THEN `2 EXP 128 = 2 EXP 64 * 2 EXP 64`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [REWRITE_TAC[ARITH_RULE `128 = 64 + 64`; EXP_ADD];
-    MATCH_MP_TAC POW2_MULT_LT THEN
-    MP_TAC(ISPEC `x:int64` VAL_BOUND) THEN REWRITE_TAC[DIMINDEX_64] THEN
-    DISCH_TAC THEN ASM_REWRITE_TAC[]]);;
+(* val(join x 0) = 2^w * val x, i.e. shifting left by a zero word. *)
+let VAL_JOIN_ZERO = prove
+ (`!x:M word. dimindex(:M) + dimindex(:N) = dimindex(:P)
+              ==> val((word_join:M word->N word->P word) x (word 0)) =
+                  2 EXP dimindex(:N) * val x`,
+  REPEAT STRIP_TAC THEN
+  ASM_SIMP_TAC[VAL_WORD_JOIN_SIMPLE; VAL_WORD_0; ADD_0]);;
 
-let VAL_JOIN_J1_BITS = prove
- (`!b:bool. val(word_join (word(bitval b):1 word) (word 0:int64):65 word) =
-            2 EXP 64 * bitval b`,
-  GEN_TAC THEN CONV_TAC(LAND_CONV(ONCE_DEPTH_CONV VAL_WORD_JOIN)) THEN
-  CONV_TAC(DEPTH_CONV DIMINDEX_CONV) THEN
-  REWRITE_TAC[VAL_WORD_0; ADD_0; VAL_WORD_BITVAL] THEN
-  MATCH_MP_TAC MOD_LT THEN
-  SUBGOAL_THEN `2 EXP 65 = 2 EXP 64 * 2 EXP 1`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [CONV_TAC NUM_REDUCE_CONV;
-    MATCH_MP_TAC POW2_MULT_LT THEN
-    MP_TAC(ISPEC `b:bool` BITVAL_BOUND) THEN
-    REWRITE_TAC[EXP_ONE] THEN ARITH_TAC]);;
+(* the same statement one type level up, in the shape the residue has *)
+let INT_JOIN_ZERO = prove
+ (`!x:M word. dimindex(:M) + dimindex(:N) = dimindex(:P)
+              ==> (&2:int) pow dimindex(:N) * &(val x) =
+                  &(val((word_join:M word->N word->P word) x (word 0)))`,
+  REPEAT STRIP_TAC THEN
+  ASM_SIMP_TAC[VAL_JOIN_ZERO; GSYM INT_OF_NUM_MUL; INT_OF_NUM_POW]);;
 
-let VAL_JOIN_J2 = prove
- (`!x:int64.
-     val(word_join (word_join x (word 0:int64):128 word) (word 0:int64):192 word) =
-     2 EXP 128 * val x`,
-  GEN_TAC THEN CONV_TAC(LAND_CONV(ONCE_DEPTH_CONV VAL_WORD_JOIN)) THEN
-  CONV_TAC(DEPTH_CONV DIMINDEX_CONV) THEN
-  REWRITE_TAC[VAL_WORD_0; ADD_0; VAL_JOIN_J1] THEN
-  SUBGOAL_THEN `2 EXP 128 * val(x:int64) = 2 EXP 64 * (2 EXP 64 * val x)`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [SUBGOAL_THEN `2 EXP 128 = 2 EXP 64 * 2 EXP 64`
-      (fun th -> REWRITE_TAC[th]) THENL
-     [CONV_TAC NUM_REDUCE_CONV; REWRITE_TAC[MULT_ASSOC]];
-    ALL_TAC] THEN
-  MATCH_MP_TAC MOD_LT THEN
-  SUBGOAL_THEN `2 EXP 192 = 2 EXP 64 * 2 EXP (64 + 64)`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [CONV_TAC NUM_REDUCE_CONV; ALL_TAC] THEN
-  SUBGOAL_THEN `2 EXP 64 * val(x:int64) < 2 EXP (64 + 64)` ASSUME_TAC THENL
-   [REWRITE_TAC[EXP_ADD] THEN MATCH_MP_TAC POW2_MULT_LT THEN
-    MP_TAC(ISPEC `x:int64` VAL_BOUND) THEN REWRITE_TAC[DIMINDEX_64] THEN
-    DISCH_TAC THEN ASM_REWRITE_TAC[];
-    ALL_TAC] THEN
-  MATCH_MP_TAC POW2_MULT_LT THEN ASM_REWRITE_TAC[]);;
-
-let VAL_JOIN_J3 = prove
- (`!x:int64.
-     val(word_join (word_join (word_join x (word 0:int64):128 word)
-                              (word 0:int64):192 word) (word 0:int64):256 word) =
-     2 EXP 192 * val x`,
-  GEN_TAC THEN CONV_TAC(LAND_CONV(ONCE_DEPTH_CONV VAL_WORD_JOIN)) THEN
-  CONV_TAC(DEPTH_CONV DIMINDEX_CONV) THEN
-  REWRITE_TAC[VAL_WORD_0; ADD_0] THEN
-  SUBGOAL_THEN
-   `val(word_join (word_join x (word 0:int64):128 word) (word 0:int64):192 word) =
-    2 EXP 64 * (2 EXP 64 * val(x:int64))`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [REWRITE_TAC[VAL_JOIN_J2] THEN
-    SUBGOAL_THEN `2 EXP 128 = 2 EXP 64 * 2 EXP 64`
-      (fun th -> REWRITE_TAC[th]) THENL
-     [CONV_TAC NUM_REDUCE_CONV; REWRITE_TAC[MULT_ASSOC]];
-    ALL_TAC] THEN
-  SUBGOAL_THEN
-   `2 EXP 192 * val(x:int64) = 2 EXP 64 * (2 EXP 64 * (2 EXP 64 * val x))`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [SUBGOAL_THEN `2 EXP 192 = 2 EXP 64 * (2 EXP 64 * 2 EXP 64)`
-      (fun th -> REWRITE_TAC[th]) THENL
-     [CONV_TAC NUM_REDUCE_CONV; REWRITE_TAC[MULT_ASSOC]];
-    ALL_TAC] THEN
-  MATCH_MP_TAC MOD_LT THEN
-  SUBGOAL_THEN `2 EXP 256 = 2 EXP 64 * 2 EXP (64 + (64 + 64))`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [CONV_TAC NUM_REDUCE_CONV; ALL_TAC] THEN
-  SUBGOAL_THEN `2 EXP 64 * (2 EXP 64 * val(x:int64)) < 2 EXP (64 + (64 + 64))`
-    ASSUME_TAC THENL
-   [REWRITE_TAC[EXP_ADD] THEN
-    SUBGOAL_THEN `2 EXP 64 * val(x:int64) < 2 EXP (64 + 64)` ASSUME_TAC THENL
-     [REWRITE_TAC[EXP_ADD] THEN MATCH_MP_TAC POW2_MULT_LT THEN
-      MP_TAC(ISPEC `x:int64` VAL_BOUND) THEN REWRITE_TAC[DIMINDEX_64] THEN
-      DISCH_TAC THEN ASM_REWRITE_TAC[];
-      ALL_TAC] THEN
-    MATCH_MP_TAC POW2_MULT_LT THEN ASM_REWRITE_TAC[];
-    ALL_TAC] THEN
-  MATCH_MP_TAC POW2_MULT_LT THEN ASM_REWRITE_TAC[]);;
-
-let VAL_JOIN_J1_BITS_256 = prove
- (`!b:bool.
-     val(word_join (word(bitval b):1 word) (word 0:256 word):257 word) =
-     2 EXP 256 * bitval b`,
-  GEN_TAC THEN CONV_TAC(LAND_CONV(ONCE_DEPTH_CONV VAL_WORD_JOIN)) THEN
-  CONV_TAC(DEPTH_CONV DIMINDEX_CONV) THEN
-  REWRITE_TAC[VAL_WORD_0; ADD_0; VAL_WORD_BITVAL] THEN
-  MATCH_MP_TAC MOD_LT THEN
-  SUBGOAL_THEN `2 EXP 257 = 2 EXP 256 * 2 EXP 1`
-    (fun th -> REWRITE_TAC[th]) THENL
-   [CONV_TAC NUM_REDUCE_CONV;
-    MATCH_MP_TAC POW2_MULT_LT THEN
-    MP_TAC(ISPEC `b:bool` BITVAL_BOUND) THEN
-    REWRITE_TAC[EXP_ONE] THEN ARITH_TAC]);;
-
-(* integer forms, matching the shape produced by lifting a num goal to int *)
-let INT_JOIN_VAL1 = prove
- (`!x:int64. (&2:int) pow 64 * &(val x) =
-             &(val(word_join x (word 0:int64):128 word))`,
-  GEN_TAC THEN REWRITE_TAC[GSYM INT_OF_NUM_POW; GSYM INT_OF_NUM_MUL] THEN
-  AP_TERM_TAC THEN REWRITE_TAC[VAL_JOIN_J1]);;
-
-let INT_JOIN_BIT1 = prove
- (`!b:bool. (&2:int) pow 64 * &(bitval b) =
-            &(val(word_join (word(bitval b):1 word) (word 0:int64):65 word))`,
-  GEN_TAC THEN REWRITE_TAC[GSYM INT_OF_NUM_POW; GSYM INT_OF_NUM_MUL] THEN
-  AP_TERM_TAC THEN REWRITE_TAC[VAL_JOIN_J1_BITS]);;
-
-let INT_JOIN_VAL2 = prove
- (`!x:int64. (&2:int) pow 128 * &(val x) =
-             &(val(word_join (word_join x (word 0:int64):128 word) (word 0:int64):192 word))`,
-  GEN_TAC THEN REWRITE_TAC[GSYM INT_OF_NUM_POW; GSYM INT_OF_NUM_MUL] THEN
-  AP_TERM_TAC THEN REWRITE_TAC[VAL_JOIN_J2]);;
-
-let INT_JOIN_VAL3 = prove
- (`!x:int64.
-     (&2:int) pow 192 * &(val x) =
-     &(val(word_join (word_join (word_join x (word 0:int64):128 word)
-                                (word 0:int64):192 word) (word 0:int64):256 word))`,
-  GEN_TAC THEN REWRITE_TAC[GSYM INT_OF_NUM_POW; GSYM INT_OF_NUM_MUL] THEN
-  AP_TERM_TAC THEN REWRITE_TAC[VAL_JOIN_J3]);;
-
-let INT_JOIN_BIT4 = prove
- (`!b:bool. (&2:int) pow 256 * &(bitval b) =
-            &(val(word_join (word(bitval b):1 word) (word 0:256 word):257 word))`,
-  GEN_TAC THEN REWRITE_TAC[GSYM INT_OF_NUM_POW; GSYM INT_OF_NUM_MUL] THEN
-  AP_TERM_TAC THEN REWRITE_TAC[VAL_JOIN_J1_BITS_256]);;
-
-let BRIDGE_JOIN_LEMMAS =
-  [INT_JOIN_BIT1; INT_JOIN_VAL1; INT_JOIN_VAL2; INT_JOIN_VAL3; INT_JOIN_BIT4];;
+let BITVAL_AS_VAL = prove
+ (`!b. bitval b = val(word(bitval b):1 word)`,
+  GEN_TAC THEN CONV_TAC SYM_CONV THEN
+  MATCH_ACCEPT_TAC (INST_TYPE [`:1`, `:N`] VAL_WORD_BITVAL));;
 
 (* ------------------------------------------------------------------------- *)
 (* 3. Conversions.                                                           *)
 (* ------------------------------------------------------------------------- *)
 
-(* real accumulator equation -> integer equation (atoms `&(val w)',
-   `&(bitval b)').  int subtraction is total, so negative differences keep    *)
-(* their meaning and nothing has to be reoriented.                           *)
+(* real equation over integer-valued atoms -> integer equation *)
 let REAL_TO_INT_CONV =
   GEN_REWRITE_CONV DEPTH_CONV
-   [GSYM int_of_num_th; GSYM int_neg_th; GSYM int_add_th;
-    GSYM int_sub_th; GSYM int_mul_th; GSYM int_pow_th; GSYM int_eq];;
+   [GSYM int_of_num_th; GSYM int_neg_th; GSYM int_add_th; GSYM int_sub_th;
+    GSYM int_mul_th; GSYM int_pow_th; GSYM int_eq];;
 
 (* num equation -> int equation, with `&' pushed inside sum/product/power *)
 let NUM_TO_INT_CONV =
-  GEN_REWRITE_CONV DEPTH_CONV
+  GEN_REWRITE_CONV TOP_DEPTH_CONV
    [GSYM INT_OF_NUM_EQ; GSYM INT_OF_NUM_LT; GSYM INT_OF_NUM_LE;
     INT_OF_NUM_ADD; INT_OF_NUM_MUL; INT_OF_NUM_POW];;
 
-(* products by powers of two -> word joins *)
-let INT_SHIFT_TO_JOIN_CONV =
-  GEN_REWRITE_CONV DEPTH_CONV BRIDGE_JOIN_LEMMAS;;
+(* (a + b) * c = a * c + b * c, needed because bignum_of_wordlist nests     *)
+(* its shifts around a sum, not around a single digit.                       *)
+let INT_DISTRIB_CONV =
+  GEN_REWRITE_CONV TOP_DEPTH_CONV [INT_ADD_LDISTRIB; INT_ADD_RDISTRIB];;
+
+(* (&2) pow k * &(val x) -> &(val(join x 0)) at the width this x forces.     *)
+(* Bottom-up application gives 2^(64*(j+1)) for j nested shifts for free.    *)
+let INT_JOIN_ZERO_TH x k =
+  (* `dest_word_ty' is shadowed by Library/bitmatch.ml once the ARM base is
+     loaded, so the width is read off the type constructor directly. *)
+  let m = Num.int_of_num
+    (dest_finty(match type_of x with
+                | Tyapp("word",[n]) -> n
+                | _ -> failwith "INT_JOIN_ZERO_TH: not a word")) in
+  let inst = INST_TYPE
+    [mk_finty(Num.num_of_int m), `:M`;
+     mk_finty(Num.num_of_int k), `:N`;
+     mk_finty(Num.num_of_int(m + k)), `:P`] INT_JOIN_ZERO in
+  let th1 = SPEC x inst in
+  let cond = lhand(concl th1) in
+  let side =
+    prove(cond,
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+  (* reduce dimindex(:N) on the left so the rule is syntactically applicable *)
+  CONV_RULE (LAND_CONV(RAND_CONV DIMINDEX_CONV)) (MP th1 side);;
+
+let INT_SHIFT_TO_JOIN_CONV : conv =
+  let conv tm =
+    match tm with
+      Comb(Comb(Const("*",_),p),q) when type_of tm = `:int` ->
+        (match p with
+           Comb(Comb(Const("pow",_),two),n)
+             when aconv two `(&2):int` && is_numeral n ->
+             let k = dest_small_numeral n in
+             (match q with
+                Comb(Const("int_of_num",_),Comb(Const("val",_),x)) ->
+                  INT_JOIN_ZERO_TH x k
+              | Comb(Const("int_of_num",_),Comb(Const("bitval",_),_)) ->
+                  let bth = GEN_REWRITE_CONV I [BITVAL_AS_VAL] q in
+                  let q' = rand(concl bth) in
+                  let x = rand(rand q') in
+                  TRANS (AP_TERM (rator(rator tm)) bth)
+                        (INT_JOIN_ZERO_TH x k)
+              | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: operand")
+           | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: multiplier")
+    | _ -> failwith "INT_SHIFT_TO_JOIN_CONV" in
+  conv;;
+
+let BRIDGE_SHIFTS_TO_JOINS_CONV = DEPTH_CONV INT_SHIFT_TO_JOIN_CONV;;
+
+(* whole-term conversion from any of the three spec types to a word residue *)
+let BRIDGE_TO_WORD_CONV =
+  REAL_TO_INT_CONV THENC NUM_TO_INT_CONV THENC INT_DISTRIB_CONV THENC
+  BRIDGE_SHIFTS_TO_JOINS_CONV;;
 
 (* ------------------------------------------------------------------------- *)
-(* 4. Certified-SAT close.                                                   *)
+(* 4. Case splitting on the conditionals the simulator leaves behind.        *)
 (*                                                                           *)
-(* BITBLAST_THEN consumes only *word equation* assumptions, and DEPTH_CONV   *)
-(* silently leaves unconvertible atoms alone (so an unconverted atom becomes  *)
-(* a free proposition and the residue is reported SAT).  The residue is      *)
-(* therefore presented to it as one closed implication: arithmetic           *)
-(* hypotheses are conjoined into the antecedent and the goal stack is        *)
-(* emptied first.  Dropping hypotheses is sound; it strengthens the goal.    *)
+(* The conditions may sit in the goal (the selected limb of the written      *)
+(* value) or in an accumulator equation (a selected mask word).  Both are    *)
+(* reduced by the same recursive split, and the condition itself stays as a *)
+(* bit-blastable hypothesis, so SAT can see that the branch is consistent.   *)
 (* ------------------------------------------------------------------------- *)
 
-let BRIDGE_ARITH_BLACKLIST =
-  ["read"; "MAYCHANGE"; "nonoverlapping_modulo"; "aligned_bytes_loaded";
-   "eventually"; "ensures"; "bignum_from_memory"; "bytes"; "memory";
-   "PC"; "events"];;
-
-let bridge_is_arith th =
-  let tm = concl th in
-  let cs = find_terms is_const tm in
-  let bad = exists (fun c -> mem (fst (dest_const c)) BRIDGE_ARITH_BLACKLIST) cs in
-  let tys = map (fun v -> snd (dest_var v)) (frees tm) in
-  let okty ty = ty = `:num` || ty = `:int` || ty = `:bool` in
-  not bad && forall okty tys;;
-
-let BRIDGE_KEEP_ARITH_TAC : tactic =
-  POP_ASSUM_LIST (fun ths ->
-    MAP_EVERY ASSUME_TAC (filter bridge_is_arith ths));;
-
-let BRIDGE_CSAT_TAC : tactic =
-  fun (asl,w) ->
-    let hyps = map concl asl in
-    let imp = if hyps = [] then w else list_mk_imp(hyps,w) in
-    let th = prove(imp, CSAT_TAC) in
-    (MATCH_MP_TAC th THEN ASM_REWRITE_TAC[]) (asl,w);;
-
-(* everything that precedes the SAT call *)
-let BRIDGE_ASSUM_TO_INT_CONV = REAL_TO_INT_CONV THENC NUM_TO_INT_CONV;;
-
-let BRIDGE_GOAL_TO_INT_CONV =
-  NUM_TO_INT_CONV THENC
-  GEN_REWRITE_CONV DEPTH_CONV [GSYM INT_BITVAL_NOT] THENC
-  INT_SHIFT_TO_JOIN_CONV;;
-
-(* Expand `bignum_of_wordlist [..]' to the flat sum of shifted digits, so    *)
-(* that the shifts are the units the join lemmas match.  Passed in because  *)
-(* the conversion lives in s2n-bignum's common/bignum.ml (the harness), not  *)
-(* in HOL Light core.  `ALL_TAC' disables it.                                *)
-let BRIDGE_PREPARE_TAC (expand:tactic) : tactic =
-  fun g ->
-    (BRIDGE_KEEP_ARITH_TAC THEN
-     expand THEN
-     RULE_ASSUM_TAC (CONV_RULE BRIDGE_ASSUM_TO_INT_CONV) THEN
-     RULE_ASSUM_TAC (REWRITE_RULE (GSYM INT_BITVAL_NOT :: BRIDGE_JOIN_LEMMAS)) THEN
-     CONV_TAC BRIDGE_GOAL_TO_INT_CONV) g;;
-
-(* ------------------------------------------------------------------------- *)
-(* 5. Case splitting on the conditionals the simulator leaves in the goal.   *)
-(* ------------------------------------------------------------------------- *)
+let bridge_conditions tm =
+  map (fun t -> rand(rator(rator t))) (find_terms is_cond tm);;
 
 let rec BRIDGE_SPLIT_CONDITIONS_TAC (asl,w) =
-  let conds = map (fun t -> rand(rator t)) (find_terms is_cond w) in
+  let conds = bridge_conditions w @
+              List.concat (map (fun (_,th) -> bridge_conditions(concl th)) asl) in
   match conds with
   | [] -> ALL_TAC (asl,w)
   | c::_ ->
-      (ASM_CASES_TAC c THEN
-       ASM_REWRITE_TAC[COND_CLAUSES; BITVAL_CLAUSES] THEN
-       BRIDGE_SPLIT_CONDITIONS_TAC) (asl,w);;
+      let truerule = ASSUME c
+      and falserule = EQF_INTRO (ASSUME (mk_neg c)) in
+      let close rule =
+        RULE_ASSUM_TAC(REWRITE_RULE[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        CONV_TAC(REWRITE_CONV[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        BRIDGE_SPLIT_CONDITIONS_TAC in
+      (ASM_CASES_TAC c THENL [close truerule; close falserule]) (asl,w);;
 
 (* ------------------------------------------------------------------------- *)
-(* 6. Eliminate the specification variables from their digit expansions.     *)
+(* 5. Eliminate the specification variables from their digit expansions.     *)
 (* ------------------------------------------------------------------------- *)
 
 let BRIDGE_HAS_VAL tm =
@@ -433,23 +338,49 @@ let rec ELIM_DIGIT_EQS_TAC (asl,w) =
   | Some th -> (SUBST_ALL_TAC th THEN ELIM_DIGIT_EQS_TAC) (asl,w);;
 
 (* ------------------------------------------------------------------------- *)
-(* 7. Entry points.  `pth' is the definition theorem of the modulus, so that *)
-(* the numeral replaces the constant before bit-blasting.                    *)
+(* 6. Certified-SAT close of the word residue.                               *)
+(*                                                                           *)
+(* BITBLAST_THEN consumes only word-level content; any atom it cannot expand *)
+(* becomes a free proposition and the residue comes back SAT, so everything  *)
+(* that is not word-level must be gone before the call.  The residue is      *)
+(* presented as one closed implication so that no hypothesis is lost.        *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_CSAT_TAC : tactic =
+  fun (asl,w) ->
+    let hyps = map (fun (_,th) -> concl th) asl in
+    let imp = itlist (fun a b -> mk_imp(a,b)) hyps w in
+    let th = prove(imp, CSAT_TAC) in
+    (MATCH_MP_TAC th THEN ASM_REWRITE_TAC[]) (asl,w);;
+
+(* everything that precedes the SAT call, on the goal *)
+let BRIDGE_PREPARE_TAC (expand:tactic) : tactic =
+  fun g ->
+    (BRIDGE_SPLIT_CONDITIONS_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV) g;;
+
+let BRIDGE_FINISH_TAC expand : tactic =
+  fun g -> (BRIDGE_PREPARE_TAC expand THEN BRIDGE_CSAT_TAC) g;;
+
+(* ------------------------------------------------------------------------- *)
+(* 7. Entry points.  `pth' is the definition theorem of the modulus, so the  *)
+(* numeral replaces the constant before anything is decided.                 *)
 (* ------------------------------------------------------------------------- *)
 
 let BRIDGE_ZERO_LT_TAC p : tactic =
   SUBGOAL_THEN (mk_comb(mk_comb(`(<):num->num->bool`, `0`), p))
    (fun th -> ASSUME_TAC th) THENL [ARITH_TAC; ALL_TAC];;
 
-let BRIDGE_FINISH_TAC expand : tactic =
-  fun g ->
-    (BRIDGE_SPLIT_CONDITIONS_TAC THEN
-     BRIDGE_PREPARE_TAC expand THEN
-     BRIDGE_CSAT_TAC) g;;
+(* the modulus constant has to be replaced in the assumptions as well as in   *)
+(* the goal: the range hypotheses are stated about the constant.            *)
+let BRIDGE_REWRITE_MODULUS pth : tactic =
+  RULE_ASSUM_TAC(REWRITE_RULE[pth]) THEN REWRITE_TAC[pth];;
 
 (* add: the spec is `(m + n) MOD p = <written value>' *)
 let BRIDGE_ADD_TAC expand pth : tactic =
-  ELIM_DIGIT_EQS_TAC THEN REWRITE_TAC[pth] THEN
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
   (fun (asl,w) ->
     let (lhs,_) = dest_eq w in
     let (sum,p) = dest_binop `(MOD):num->num->num` lhs in
@@ -462,11 +393,11 @@ let BRIDGE_ADD_TAC expand pth : tactic =
        ASM_SIMP_TAC[ADD_MOD_GE] THEN CONV_TAC SYM_CONV THEN
        ASM_SIMP_TAC[ADD_GE_SUM] THEN BRIDGE_FINISH_TAC expand]) (asl,w));;
 
-(* sub: the spec is `&<written value> = (&m - &n) rem &p' (int) *)
+(* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
 let BRIDGE_SUB_TAC expand pth : tactic =
-  ELIM_DIGIT_EQS_TAC THEN REWRITE_TAC[pth] THEN
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
   (fun (asl,w) ->
-    let (_,rhs) = dest_eq w in
+    let (lhs,rhs) = dest_eq w in
     let (diff,p) = dest_binop `(rem):int->int->int` rhs in
     let (m,n) = dest_binop `(-):int->int->int` diff in
     let cond = mk_comb(mk_comb(`(<):num->num->bool`, rand m), rand n) in
@@ -478,16 +409,19 @@ let BRIDGE_SUB_TAC expand pth : tactic =
        ASM_SIMP_TAC[SUB_GE_SUM] THEN BRIDGE_FINISH_TAC expand])
     (asl,w));;
 
-(* neg: the spec is `<written value> = (p - n) MOD p' *)
+(* neg: the spec is `&<written value> = &((p - n) MOD p)' *)
 let BRIDGE_NEG_TAC expand pth : tactic =
-  ELIM_DIGIT_EQS_TAC THEN REWRITE_TAC[pth] THEN
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
+  CONV_TAC REAL_TO_INT_CONV THEN
   (fun (asl,w) ->
     let (_,rhs) = dest_eq w in
-    let (diff,p) = dest_binop `(MOD):num->num->num` rhs in
+    let modtm = rand rhs in
+    let (diff,p) = dest_binop `(MOD):num->num->num` modtm in
     let n = rand diff in
     let cond = mk_comb(mk_comb(`(=):num->num->bool`, n), `0`) in
     (BRIDGE_ZERO_LT_TAC p THEN
      ASM_CASES_TAC cond THENL
       [ASM_SIMP_TAC[NEG_MOD_ZERO] THEN BRIDGE_FINISH_TAC expand;
        ASM_SIMP_TAC[NEG_MOD_NZ] THEN
-       ASM_SIMP_TAC[NEG_NZ_SUM] THEN BRIDGE_FINISH_TAC expand]) (asl,w));;
+       ASM_SIMP_TAC[INT_OF_NUM_SUB] THEN BRIDGE_FINISH_TAC expand])
+    (asl,w));;
