@@ -428,19 +428,20 @@ a tactic script to a small typed **witness**; a deterministic compiler emits the
 
 ## W — mechanisms
 
-- [~] **W1. Simulation compiler.** Derivation implemented (`tools/derive_steps.py`: stdlib-only, no
-  I/O, no-peek enforced structurally). **add** and **neg** reproduce the human post-simulation goal
-  exactly (same SHA-256 and HOL MD5). **sub** matches the conclusion but not the assumption multiset:
-  the human uses blanket ranges `(1--8) ∪ (10--17)`, which add three duplicate carry relations; the
-  derived set is the minimal carry chain and the conclusion closes with `HYP 0`. Therefore the gate
-  is **semantic**: identical conclusion plus closure under the derived list, with exact assumption
-  equality required only where the human list is minimal. Remaining: digitize/abbreviate support and
-  p384/p521 extension.
-- [ ] **W2. Witness enumerator** per operation family, **no model**: templates for congruence
-  witnesses and flag meanings across sibling routines.
+- [x] **W1. Simulation compiler.** Derivation implemented (`tools/derive_steps.py`: stdlib-only, no
+  I/O, no-peek enforced structurally). `add` and `neg` reproduce the human post-simulation goal
+  exactly (same SHA-256 and HOL MD5); `sub` matches the conclusion and closes with `HYP 0` but not
+  the assumption multiset, because the human uses blanket ranges `(1--8) ∪ (10--17)` which add three
+  duplicate carry relations. Gate is therefore **semantic**: identical conclusion plus closure under
+  the derived list. Digitize/abbreviate and p384/p521 extension remain open.
+- [~] **W2. Witness enumerator** per operation family, **no model**. Implemented for `add`, `sub`,
+  `neg`; the congruence term and flag meaning are derived from the postcondition and derived steps.
+  The tactic *skeleton* of the close is transcribed from the human proofs and labelled
+  `DEVELOPMENT_ONLY` in code, witness and receipt.
 - [ ] **W3. Executable-model falsifier** gates every witness and invariant before the kernel.
-- [ ] **W4. Certified arithmetic closer**: external linear/Gröbner search, cofactors checked by
-  in-kernel ring normalisation; bounds via `BOUNDER_TAC`.
+- [~] **W4. Certified arithmetic closer.** Deterministic closer emits a script the official judge
+  accepts for `add`/`sub`/`neg` on P-256 ARM. No external solver was needed in this version; the
+  Gröbner/cofactor path remains unexercised.
 - [ ] **W5. LLM witness proposer** for what W2 misses and for loop invariants (needs credentials).
 - [ ] **W6. DSFB as the L1 scheduler**: per-step term-size series; a slew triggers abbreviation or
   digitization. This is control, not early abort.
@@ -481,6 +482,28 @@ of roughly 3–20 terms, not a script.
   benchmark rules but is **not** an axiom-free development. Report the inherited-axiom closure
   separately, and for any production claim replay the generated proof in a complete, genuinely
   proved s2n-bignum context.
+
+## R1 · first generated benchmark `OK` (2026-11-23)
+
+Zero model calls. Pipeline: derive steps → witness → closer → emit → official judge.
+
+| task | verdict |
+|---|---|
+| `arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT` | **OK** |
+| `arm.bignum_sub_p256.BIGNUM_SUB_P256_CORRECT` | **OK** |
+| `arm.bignum_neg_p256.BIGNUM_NEG_P256_CORRECT` | **OK** |
+
+`collect-verdicts.py` → `OK,3`; `CHEATING` = 0. Fresh-process replay: 0 hypotheses, axiom count
+unchanged in all three (`REPLAY_AXIOMS_UNCHANGED`). Evidence: `research/receipts/w2-verdicts.csv`,
+`w2-witnesses.{md,json}`; judge files under `.bench/eval-20261123_010304/`.
+
+**Scope:** P-256 ARM only, training curve; the close skeleton is `DEVELOPMENT_ONLY`; not held-out;
+not a frontier claim. The absolute axiom counts are high because the benchmark inlines preceding
+theorems as `CHEAT_TAC`; the invariant that matters is that the proof adds none.
+
+- [ ] **R2. Freeze and evaluate LOCO.** Generalise only on training curves (P-384/P-521), freeze the
+  pipeline by digest, then evaluate **once** on held-out curves (`25519`, `secp256k1`, `sm2`). No
+  tuning after seeing the result. This is the first claimable number (K1′).
 
 ## Claims (judgements, not measurements)
 
