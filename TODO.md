@@ -573,13 +573,19 @@ loops, and x86. Nothing here is claimable until a sealed full-set run.
 
 ## Wall 1 — C-SAT: close the arithmetic with certified SAT, not templates
 
-- [ ] **C1.** One generic bridge lemma per linear operation shape, from the `num`/`MOD`
-  specification to a word-level circuit statement. Modulus-agnostic: proved once.
-- [ ] **C2.** `BITBLAST_THEN` to a propositional goal, `CADICAL_PROVE`, and **kernel LRAT
-  replay**. `Examples/bitblast.ml` defines `BITBLAST_CADICAL` only inside a commented-out
-  block; s2n-bignum uses BDD `BITBLAST` in 55 files and CaDiCaL in none. Connect them.
-- [ ] **C3.** Measure close time per theorem against `timeout-map.json` **before** any claim.
-  If 256-bit replay is too slow, split per limb with the carry as the interface.
+- [ ] **C1. Generic bridge lemma — now the measured blocker.** The residual post-simulation goal is
+  stated in `num`/`real` with `MOD`, `rem`, `bignum_of_wordlist` and `&` equations; pure SAT cannot
+  expand those atoms, so CaDiCaL returns SAT in 3–38 ms at every stage. C-SAT closes word-level
+  tautologies only. Implement one generic, modulus-agnostic lemma per linear operation shape that
+  relates the `num`/`MOD` specification to the word-level circuit statement, then let C-SAT close
+  the remainder. This is the next task, not a re-tuning of the template.
+- [x] **C2.** `BITBLAST_THEN` + CaDiCaL + **kernel LRAT replay** is now connected (`tools/csat_lib.ml`,
+  `CSAT_TAC`). `Examples/bitblast.ml` indeed defines `BITBLAST_CADICAL` only inside a commented-out
+  block. Working binary: CaDiCaL 2.1.2 emitting LRAT natively; `lrat-trim` is absent, which matters
+  only if the pinned `CADICAL_PROVE` must be used verbatim.
+- [x] **C3.** Measured: 64-bit carry 0.81 s, 128-bit 1.41 s, 256-bit 2.67 s, 256-bit carry 4.67 s,
+  320-bit carry 5.86 s, against a 120 s timeout. Replay is **not** the bottleneck; the per-limb split
+  is unnecessary.
 - [ ] **C4.** Record the trust difference: the LCF kernel replays LRAT, so no compiler enters
   the trusted base (unlike `bv_decide`, which verifies by reflection).
 - [ ] **C5.** Scope: linear families only (`add`, `sub`, `neg`, `double`, `half`, `optneg`,
@@ -606,10 +612,10 @@ loops, and x86. Nothing here is claimable until a sealed full-set run.
 
 ## Defects and protocol from review
 
-- [ ] **D1. Carry-liveness bug in `derive_steps.py`.** `_carry_in_is_live()` stops at a carry
-  *reader*; reading does not kill the flag, so an intervening `ADC` can wrongly exclude a later
-  `ADCS`. Fix the reaching-definition analysis and add a regression test (`ADDS; ADC; ADCS`).
-  Later: condition-specific NZCV dependencies (CS/CC/HI/LS use C; EQ/NE use Z).
+- [x] **D1. Carry-liveness bug in `derive_steps.py`.** Fixed: only writers ground a definition;
+  readers are transparent. Regression tests `ADDS; ADC; ADCS` (derives `[1,2,3]`) and
+  `ADDS; CMP; ADCS` (derives `[3]`). W1 gate re-run: derived lists unchanged on P-256, so the old
+  bug never fired on those routines.
 - [ ] **D2. `w2_witnesses.py` invariant field is the postcondition**, not an inductive loop
   invariant. Do not advertise loop verification until L-FIT actually synthesises one.
 - [ ] **D3. Modulus class as a typed witness field** (NIST/Solinas, pseudo-Mersenne,
@@ -619,8 +625,9 @@ loops, and x86. Nothing here is claimable until a sealed full-set run.
 - [ ] **D5. Residue/quotient certificate (RQ) alternative.** For non-linear families, or where
   bit-blasting is too slow: derive `input = output + p*q` from machine equations and prove
   `0 <= output < p` separately. Untrusted algebra proposes; the kernel checks.
-- [ ] **D6. GitHub CI** for the generator and regression tests (currently all Python/OCaml
-  checks are manual).
+- [x] **D6. GitHub CI** for the generator and regression tests. `.github/workflows/ci.yml` runs
+  `cargo test`, `clippy -D warnings`, `pytest`, both mutation harnesses and `selftest.sh`; all pass
+  locally. Rust pinned to 1.98.0.
 - [ ] **D7. Independent proof reconstruction.** Remove the `DEVELOPMENT_ONLY` skeleton
   incrementally; measure which fragments can be selected mechanically from the witness and
   residual goal rather than copied from example proofs.

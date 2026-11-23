@@ -187,14 +187,17 @@ def _source_operands(step: Step, sem: InstructionSemantics) -> Tuple[str, ...]:
 def _carry_in_is_live(sem: Sequence[InstructionSemantics], i: int) -> bool:
     """Is the incoming flag of step i produced by an earlier flag write?
 
-    Walking backwards, a flag writer makes the carry-in live; a flag reader
-    that does not write flags cannot produce one, so the chain is ungrounded.
+    This is a backward reaching-definition search for the C flag.  A flag
+    **writer** starts a new definition and therefore grounds the carry-in; a
+    flag **reader** does not write the flag, so it is *transparent* to the
+    definition and the search continues past it.  This matters for
+    ``ADDS; ADC; ADCS``: the intervening ``ADC`` reads and preserves C, so the
+    final ``ADCS`` legitimately depends on the ``ADDS`` definition.  Only
+    running off the start of the program leaves the carry-in ungrounded.
     """
     for j in range(i - 1, -1, -1):
         if _is_flag_writer(sem[j]):
             return True
-        if sem[j].reads_flags or sem[j].reads_carry:
-            return False
     return False
 
 

@@ -1,0 +1,78 @@
+name: CI
+
+# Offline checks only. This workflow never runs HOL Light, never touches the
+# 20 GB s2n-bignum bench, and never needs a model API key. The single step that
+# uses the network is "Prime crate cache", which populates the local cargo
+# registry so that every check below can run with --offline.
+
+on:
+  push:
+    branches: [staging, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-checks:
+    name: Offline checks (no key, no bench)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.98.0 with clippy
+        # Pinned to the toolchain this workflow was verified with, so a future
+        # clippy release cannot silently turn a green run red.
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy
+          rustup default 1.98.0
+          rustc --version
+          cargo --version
+          cargo clippy --version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python test dependency
+        run: python3 -m pip install --quiet pytest
+
+      # tools/selftest.sh syntax-checks an OCaml module; it needs ocamlc but does
+      # not load HOL Light or the bench.
+      - name: Install OCaml (syntax check only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ocaml-nox
+          ocamlc -version
+
+      # Bootstrap only. Every check below runs with --offline and therefore
+      # needs no further network access.
+      - name: Prime crate cache
+        run: cargo fetch --locked
+
+      - name: cargo test (offline)
+        run: cargo test --offline
+
+      # No continue-on-error: the job must fail if a lint appears. Verified green
+      # locally before adding this file (clippy 0.1.98, rust 1.98.0).
+      - name: cargo clippy (offline, warnings are errors)
+        run: cargo clippy --offline --all-targets -- -D warnings
+
+      # Bench-dependent tests skip themselves when .bench is absent.
+      - name: Python tool tests (offline)
+        run: python3 -m pytest tools/ -q
+
+      - name: Refusal-site mutation harness (offline)
+        run: python3 tools/mutate.py
+
+      - name: Lifecycle mutation harness (offline)
+        run: python3 tools/mutate_lifecycle.py
+
+      # selftest.sh re-runs cargo test and both mutation harnesses as part of its
+      # 7 sections; it does not require HOL Light.
+      - name: Scaffold self-test (offline)
+        run: bash tools/selftest.sh

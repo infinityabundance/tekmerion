@@ -11,7 +11,7 @@ python3 tools/heldout_guard.py /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm
 cd .bench/s2n-bignum && W1_OUT=<work>/capture.out W1_LISTS=<work>/w1_lists.ml sh -c 'cat ../verify/w1/w1_capture.ml | ../hol-light/hol.sh'
 ```
 
-HOL Light session wall time: 177.7 s.
+HOL Light session wall time: 177.86 s.
 
 ## Inputs
 

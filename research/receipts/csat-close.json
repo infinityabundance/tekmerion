@@ -1,0 +1,176 @@
+{
+  "cadical": "/home/one/.elan/toolchains/leanprover--lean4---v4.29.1/bin/cadical",
+  "derived": {
+    "add": [
+      3,
+      4,
+      7,
+      8,
+      10,
+      12,
+      13,
+      15,
+      16
+    ],
+    "neg": [
+      8,
+      10,
+      11,
+      13
+    ],
+    "sub": [
+      3,
+      4,
+      7,
+      8,
+      10,
+      12,
+      13,
+      15
+    ]
+  },
+  "guards": [
+    {
+      "guard": "allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_add_p256.ml sha256=8ee8cfd8e87b83da1eb253e563eeb6de717a0cd3d9313ca813d16b75eb059ea5 lines=122",
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_add_p256.ml"
+    },
+    {
+      "guard": "allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_sub_p256.ml sha256=114715a8b94e75fec78e0fc966fcc22de23162aae7d99e60e2d5b7ac45791739 lines=139",
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_sub_p256.ml"
+    },
+    {
+      "guard": "allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_neg_p256.ml sha256=85733612878268164ed2f291826505c6cd71c67a9822a0f07b4a99d62a00df0b lines=107",
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_neg_p256.ml"
+    }
+  ],
+  "post": {
+    "command": "cat /mnt/1tb_kingston/Tekmerion/tools/csat_hol.ml | ../hol-light/hol.sh",
+    "cwd": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum",
+    "log": "/mnt/1tb_kingston/Tekmerion/.bench/verify/csat/csat_hol.log",
+    "results": [
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.038,
+        "tag": "add.raw"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.003,
+        "tag": "add.ensures"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.007,
+        "tag": "add.expand"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.036,
+        "tag": "sub.raw"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.003,
+        "tag": "sub.ensures"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.006,
+        "tag": "sub.expand"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.036,
+        "tag": "neg.raw"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.003,
+        "tag": "neg.ensures"
+      },
+      {
+        "closed": false,
+        "reason": "CSAT: cadical did not report UNSAT, exit 10",
+        "seconds": 0.003,
+        "tag": "neg.expand"
+      }
+    ],
+    "returncode": 0,
+    "seconds": 166.771,
+    "stage_failures": [],
+    "timed_out": false
+  },
+  "probe": {
+    "command": "cat /mnt/1tb_kingston/Tekmerion/tools/csat_probe.ml | ../hol-light/hol.sh",
+    "cwd": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum",
+    "log": "/mnt/1tb_kingston/Tekmerion/.bench/verify/csat/csat_probe.log",
+    "results": [
+      {
+        "closed": true,
+        "reason": "",
+        "seconds": 0.807,
+        "tag": "word64_carry"
+      },
+      {
+        "closed": true,
+        "reason": "",
+        "seconds": 1.41,
+        "tag": "word128_add_comm"
+      },
+      {
+        "closed": true,
+        "reason": "",
+        "seconds": 2.674,
+        "tag": "word256_add_comm"
+      },
+      {
+        "closed": true,
+        "reason": "",
+        "seconds": 4.673,
+        "tag": "word256_carry"
+      },
+      {
+        "closed": true,
+        "reason": "",
+        "seconds": 5.858,
+        "tag": "word320_carry"
+      }
+    ],
+    "returncode": 0,
+    "seconds": 77.637,
+    "stage_failures": [],
+    "timed_out": false
+  },
+  "tactic_sequence": [
+    "BITBLAST_THEN (CONV_TAC o K CSAT_PROVE)",
+    "CSAT_PROVE = CADICAL_PROVE with CSAT_REFUTE_GEN substituted",
+    "CSAT_REFUTE_GEN: dimacs_of_hol -> cadical --no-binary --lrat -> LRAT_REFUTE_GEN (kernel replay)"
+  ],
+  "timeouts": {
+    "add": {
+      "human_prove_secs": 1.555,
+      "task": "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT",
+      "timeout_sec": 120
+    },
+    "neg": {
+      "human_prove_secs": 0.522,
+      "task": "arm.bignum_neg_p256.BIGNUM_NEG_P256_CORRECT",
+      "timeout_sec": 120
+    },
+    "sub": {
+      "human_prove_secs": 1.174,
+      "task": "arm.bignum_sub_p256.BIGNUM_SUB_P256_CORRECT",
+      "timeout_sec": 120
+    }
+  },
+  "tool": "tools/csat_close.py",
+  "verdict": "not closed: every post-simulation stage left CaDiCaL SATISFIED (num/real/MOD content is not bit-blasted)"
+}

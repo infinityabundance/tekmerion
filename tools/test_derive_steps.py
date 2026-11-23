@@ -114,6 +114,39 @@ def test_ungrounded_carry_in_is_excluded():
     assert derive_accumulate(exec_steps) == []
 
 
+def test_reader_is_transparent_adds_adc_adcs():
+    """D1 regression: an intervening ADC reads but does not kill C.
+
+    ``ADDS`` defines C, ``ADC`` reads and preserves it, so the final ``ADCS``
+    still depends on the ``ADDS`` definition.  Before the fix the backward
+    search stopped at the ``ADC`` reader and wrongly dropped step 3.
+    """
+    exec_steps = steps([
+        ("adds", "x4 x4 x6"),    # 1: defines C
+        ("adc", "x5 x5 x7"),     # 2: reads C, leaves it unchanged
+        ("adcs", "x8 x8 x9"),    # 3: reads the same C, writes a new one
+        ("csetm", "x10 cc"),     # 4: consumes the final carry
+    ])
+    assert derive_accumulate(exec_steps) == [1, 2, 3]
+
+
+def test_writer_kills_carry_out_chain():
+    """Negative case: a flag *writer* genuinely kills an earlier carry-out.
+
+    ``ADDS`` defines C, but ``CMP`` overwrites the flags before anything reads
+    them, so ``ADDS``'s carry-out is dead.  The final ``ADCS`` is live, but it
+    is grounded by the ``CMP``, not by the ``ADDS`` -- which is why only step 3
+    accumulates.
+    """
+    exec_steps = steps([
+        ("adds", "x4 x4 x6"),    # 1: C is overwritten by 2 before any reader
+        ("cmp", "x2 #0x0"),      # 2: a genuine writer, kills 1's carry-out
+        ("adcs", "x8 x8 x9"),    # 3: carry-in from 2
+        ("csetm", "x10 cc"),     # 4: consumes 3's carry-out
+    ])
+    assert derive_accumulate(exec_steps) == [3]
+
+
 def test_no_accumulate_instructions_yields_empty():
     exec_steps = steps([
         ("ldp", "x4 x5 [x1]"),
