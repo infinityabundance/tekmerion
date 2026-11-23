@@ -1,0 +1,347 @@
+BEGIN add-human COUNT 1
+GOAL 0 ASMS 35
+ASM read PC s22 = word (pc + 88)
+ASM read (memory :> bytes64 (word_add z (word 16))) s22 = (if carry_s16 then sum_s7 else sum_s13)
+ASM read (memory :> bytes64 (word_add z (word 24))) s22 = (if carry_s16 then sum_s8 else sum_s15)
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X4] ,, MAYCHANGE [X5] ,, MAYCHANGE [events] ,, MAYCHANGE [X8] ,, MAYCHANGE [X9] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [X6] ,, MAYCHANGE [X7] ,, MAYCHANGE [X10] ,, MAYCHANGE [X11] ,, MAYCHANGE [X3] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s22
+ASM read X7 s22 = (if carry_s16 then sum_s8 else sum_s15)
+ASM read X5 s22 = (if carry_s16 then sum_s4 else sum_s12)
+ASM read X3 s22 = sum_s16
+ASM read NF s22 <=> ival (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))) < &0
+ASM read ZF s22 <=> val (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))) = 0
+ASM read CF s22 <=> ~carry_s16
+ASM read VF s22 <=> ~(ival (word (0 + bitval carry_s8)) - (&0 + &(bitval carry_s15)) = ival (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))))
+ASM read X9 s22 = sum_s12
+ASM read X8 s22 = sum_s10
+ASM read X2 s22 = y
+ASM read X1 s22 = x
+ASM read X0 s22 = z
+ASM read X10 s22 = sum_s13
+ASM read X11 s22 = sum_s15
+ASM read X4 s22 = (if carry_s16 then sum_s3 else sum_s10)
+ASM read X6 s22 = (if carry_s16 then sum_s7 else sum_s13)
+ASM read (memory :> bytes64 (word_add z (word 8))) s22 = (if carry_s16 then sum_s4 else sum_s12)
+ASM read (memory :> bytes64 z) s22 = (if carry_s16 then sum_s3 else sum_s10)
+ASM aligned_bytes_loaded s22 (word pc) bignum_add_p256_mc
+ASM --(&2 pow 64) * &(bitval carry_s16) + &(val sum_s16) = &(val (word (0 + bitval carry_s8))) - &0 - &(bitval carry_s15)
+ASM --(&2 pow 64) * &(bitval carry_s15) + &(val sum_s15) = &(val sum_s8) - &18446744069414584321 - &(bitval carry_s13)
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) = &(val sum_s7) - &0 - &(bitval carry_s12)
+ASM --(&2 pow 64) * &(bitval carry_s12) + &(val sum_s12) = &(val sum_s4) - &4294967295 - &(bitval (~carry_s10))
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &1
+ASM &2 pow 64 * &(bitval carry_s8) + &(val sum_s8) = &(val m_3) + &(val n_3) + &(bitval carry_s7)
+ASM &2 pow 64 * &(bitval carry_s7) + &(val sum_s7) = &(val m_2) + &(val n_2) + &(bitval carry_s4)
+ASM &2 pow 64 * &(bitval carry_s4) + &(val sum_s4) = &(val m_1) + &(val n_1) + &(bitval carry_s3)
+ASM &2 pow 64 * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) + &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,92) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 88) /\ (m < p_256 /\ n < p_256 ==> read (memory :> bytes (z,8 * 4)) s' = (m + n) MOD p_256)) /\ (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8; X9; X10; X11] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s22
+DIGEST 72fd9b871bbc604cb841fc79cf1d8474
+END add-human
+BEGIN add-derived COUNT 1
+GOAL 0 ASMS 35
+ASM read PC s22 = word (pc + 88)
+ASM read (memory :> bytes64 (word_add z (word 16))) s22 = (if carry_s16 then sum_s7 else sum_s13)
+ASM read (memory :> bytes64 (word_add z (word 24))) s22 = (if carry_s16 then sum_s8 else sum_s15)
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X4] ,, MAYCHANGE [X5] ,, MAYCHANGE [events] ,, MAYCHANGE [X8] ,, MAYCHANGE [X9] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [X6] ,, MAYCHANGE [X7] ,, MAYCHANGE [X10] ,, MAYCHANGE [X11] ,, MAYCHANGE [X3] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s22
+ASM read X7 s22 = (if carry_s16 then sum_s8 else sum_s15)
+ASM read X5 s22 = (if carry_s16 then sum_s4 else sum_s12)
+ASM read X3 s22 = sum_s16
+ASM read NF s22 <=> ival (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))) < &0
+ASM read ZF s22 <=> val (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))) = 0
+ASM read CF s22 <=> ~carry_s16
+ASM read VF s22 <=> ~(ival (word (0 + bitval carry_s8)) - (&0 + &(bitval carry_s15)) = ival (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))))
+ASM read X9 s22 = sum_s12
+ASM read X8 s22 = sum_s10
+ASM read X2 s22 = y
+ASM read X1 s22 = x
+ASM read X0 s22 = z
+ASM read X10 s22 = sum_s13
+ASM read X11 s22 = sum_s15
+ASM read X4 s22 = (if carry_s16 then sum_s3 else sum_s10)
+ASM read X6 s22 = (if carry_s16 then sum_s7 else sum_s13)
+ASM read (memory :> bytes64 (word_add z (word 8))) s22 = (if carry_s16 then sum_s4 else sum_s12)
+ASM read (memory :> bytes64 z) s22 = (if carry_s16 then sum_s3 else sum_s10)
+ASM aligned_bytes_loaded s22 (word pc) bignum_add_p256_mc
+ASM --(&2 pow 64) * &(bitval carry_s16) + &(val sum_s16) = &(val (word (0 + bitval carry_s8))) - &0 - &(bitval carry_s15)
+ASM --(&2 pow 64) * &(bitval carry_s15) + &(val sum_s15) = &(val sum_s8) - &18446744069414584321 - &(bitval carry_s13)
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) = &(val sum_s7) - &0 - &(bitval carry_s12)
+ASM --(&2 pow 64) * &(bitval carry_s12) + &(val sum_s12) = &(val sum_s4) - &4294967295 - &(bitval (~carry_s10))
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &1
+ASM &2 pow 64 * &(bitval carry_s8) + &(val sum_s8) = &(val m_3) + &(val n_3) + &(bitval carry_s7)
+ASM &2 pow 64 * &(bitval carry_s7) + &(val sum_s7) = &(val m_2) + &(val n_2) + &(bitval carry_s4)
+ASM &2 pow 64 * &(bitval carry_s4) + &(val sum_s4) = &(val m_1) + &(val n_1) + &(bitval carry_s3)
+ASM &2 pow 64 * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) + &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,92) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 88) /\ (m < p_256 /\ n < p_256 ==> read (memory :> bytes (z,8 * 4)) s' = (m + n) MOD p_256)) /\ (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8; X9; X10; X11] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s22
+DIGEST 72fd9b871bbc604cb841fc79cf1d8474
+END add-derived
+BEGIN add-diag COUNT 1
+GOAL 0 ASMS 44
+ASM read PC s22 = word (pc + 88)
+ASM read (memory :> bytes64 (word_add z (word 16))) s22 = (if carry_s16 then sum_s7 else sum_s13)
+ASM read (memory :> bytes64 (word_add z (word 24))) s22 = (if carry_s16 then sum_s8 else sum_s15)
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X4] ,, MAYCHANGE [X5] ,, MAYCHANGE [events] ,, MAYCHANGE [X8] ,, MAYCHANGE [X9] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [X6] ,, MAYCHANGE [X7] ,, MAYCHANGE [X10] ,, MAYCHANGE [X11] ,, MAYCHANGE [X3] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s22
+ASM read X7 s22 = (if carry_s16 then sum_s8 else sum_s15)
+ASM read X5 s22 = (if carry_s16 then sum_s4 else sum_s12)
+ASM read X3 s22 = sum_s16
+ASM read NF s22 <=> ival (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))) < &0
+ASM read CF s22 <=> ~carry_s16
+ASM read VF s22 <=> ~(ival (word (0 + bitval carry_s8)) - (&0 + &(bitval carry_s15)) = ival (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15))))
+ASM read (rvalue (word_sub sum_s7 (word (0 + bitval carry_s12)))) s22 = sum_s14
+ASM read X9 s22 = sum_s12
+ASM read X8 s22 = sum_s10
+ASM read X2 s22 = y
+ASM read X1 s22 = x
+ASM read X0 s22 = z
+ASM read (rvalue (word_add (word_add m_1 n_1) (word (bitval carry_s3)))) s22 = sum_s5
+ASM read (rvalue (word_add (word_add m_3 n_3) (word (bitval carry_s7)))) s22 = sum_s9
+ASM read (rvalue (word_add sum_s3 (word 1))) s22 = sum_s11
+ASM read X10 s22 = sum_s13
+ASM read X11 s22 = sum_s15
+ASM read X4 s22 = (if carry_s16 then sum_s3 else sum_s10)
+ASM read (rvalue (word_sub (word (0 + bitval carry_s8)) (word (0 + bitval carry_s15)))) s22 = sum_s17
+ASM read X6 s22 = (if carry_s16 then sum_s7 else sum_s13)
+ASM read (memory :> bytes64 (word_add z (word 8))) s22 = (if carry_s16 then sum_s4 else sum_s12)
+ASM read (memory :> bytes64 z) s22 = (if carry_s16 then sum_s3 else sum_s10)
+ASM aligned_bytes_loaded s22 (word pc) bignum_add_p256_mc
+ASM --(&2 pow 64) * &(bitval carry_s17) + &(val sum_s17) = &(val (word (0 + bitval carry_s8))) - &0 - &(bitval carry_s15)
+ASM --(&2 pow 64) * &(bitval carry_s16) + &(val sum_s16) = &(val (word (0 + bitval carry_s8))) - &0 - &(bitval carry_s15)
+ASM --(&2 pow 64) * &(bitval carry_s15) + &(val sum_s15) = &(val sum_s8) - &18446744069414584321 - &(bitval carry_s13)
+ASM --(&2 pow 64) * &(bitval carry_s14) + &(val sum_s14) = &(val sum_s7) - &0 - &(bitval carry_s12)
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) = &(val sum_s7) - &0 - &(bitval carry_s12)
+ASM --(&2 pow 64) * &(bitval carry_s12) + &(val sum_s12) = &(val sum_s4) - &4294967295 - &(bitval (~carry_s10))
+ASM &2 pow 64 * &(bitval carry_s11) + &(val sum_s11) = &(val sum_s3) + &1
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &1
+ASM &2 pow 64 * &(bitval carry_s9) + &(val sum_s9) = &(val m_3) + &(val n_3) + &(bitval carry_s7)
+ASM &2 pow 64 * &(bitval carry_s8) + &(val sum_s8) = &(val m_3) + &(val n_3) + &(bitval carry_s7)
+ASM &2 pow 64 * &(bitval carry_s7) + &(val sum_s7) = &(val m_2) + &(val n_2) + &(bitval carry_s4)
+ASM &2 pow 64 * &(bitval carry_s5) + &(val sum_s5) = &(val m_1) + &(val n_1) + &(bitval carry_s3)
+ASM &2 pow 64 * &(bitval carry_s4) + &(val sum_s4) = &(val m_1) + &(val n_1) + &(bitval carry_s3)
+ASM &2 pow 64 * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) + &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,92) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 88) /\ (m < p_256 /\ n < p_256 ==> read (memory :> bytes (z,8 * 4)) s' = (m + n) MOD p_256)) /\ (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8; X9; X10; X11] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s22
+DIGEST 6625d2f5339b2073fc6dc7f86818f015
+END add-diag
+BEGIN sub-human COUNT 1
+GOAL 0 ASMS 36
+ASM read PC s17 = word (pc + 68)
+ASM read (memory :> bytes64 (word_add z (word 16))) s17 = sum_s13
+ASM read (memory :> bytes64 (word_add z (word 24))) s17 = sum_s15
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X5] ,, MAYCHANGE [X6] ,, MAYCHANGE [events] ,, MAYCHANGE [X4] ,, MAYCHANGE [X3] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [X7] ,, MAYCHANGE [X8] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s17
+ASM read X8 s17 = sum_s15
+ASM read X7 s17 = sum_s13
+ASM read NF s17 <=> ival (word_add sum_s7 (word (bitval carry_s12))) < &0
+ASM read CF s17 <=> carry_s13
+ASM read VF s17 <=> ~(ival sum_s7 + &0 + &(bitval carry_s12) = ival (word_add sum_s7 (word (bitval carry_s12))))
+ASM read (rvalue (word_add sum_s3 (word_neg (word (bitval (m < n)))))) s17 = sum_s11
+ASM read X3 s17 = word_neg (word (bitval (m < n)))
+ASM read (rvalue (word_sub m_1 (word_add n_1 (word (bitval carry_s3))))) s17 = sum_s5
+ASM read X0 s17 = z
+ASM read X1 s17 = x
+ASM read X2 s17 = y
+ASM read X5 s17 = sum_s10
+ASM read X6 s17 = sum_s12
+ASM read X4 s17 = word_and (word_neg (word (bitval (m < n)))) (word 18446744069414584321)
+ASM read (rvalue (word_add sum_s7 (word (bitval carry_s12)))) s17 = sum_s14
+ASM read (memory :> bytes64 (word_add z (word 8))) s17 = sum_s12
+ASM read (memory :> bytes64 z) s17 = sum_s10
+ASM aligned_bytes_loaded s17 (word pc) bignum_sub_p256_mc
+ASM &2 pow 64 * &(bitval carry_s15) + &(val sum_s15) = &(val sum_s8) + &(val (word_and (word_neg (word (bitval (m < n)))) (word 18446744069414584321))) + &(bitval carry_s13)
+ASM &2 pow 64 * &(bitval carry_s14) + &(val sum_s14) = &(val sum_s7) + &(bitval carry_s12)
+ASM &2 pow 64 * &(bitval carry_s13) + &(val sum_s13) = &(val sum_s7) + &(bitval carry_s12)
+ASM &2 pow 64 * &(bitval carry_s12) + &(val sum_s12) = &(val sum_s4) + &(val (word_and (word_neg (word (bitval (m < n)))) (word 4294967295))) + &(bitval carry_s10)
+ASM &2 pow 64 * &(bitval carry_s11) + &(val sum_s11) = &(val sum_s3) + &(val (word_neg (word (bitval (m < n)))))
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &(val (word_neg (word (bitval (m < n)))))
+ASM --(&2 pow 64) * &(bitval (m < n)) + &(val sum_s8) = &(val m_3) - &(val n_3) - &(bitval carry_s7)
+ASM --(&2 pow 64) * &(bitval carry_s7) + &(val sum_s7) = &(val m_2) - &(val n_2) - &(bitval carry_s4)
+ASM --(&2 pow 64) * &(bitval carry_s5) + &(val sum_s5) = &(val m_1) - &(val n_1) - &(bitval carry_s3)
+ASM --(&2 pow 64) * &(bitval carry_s4) + &(val sum_s4) = &(val m_1) - &(val n_1) - &(bitval carry_s3)
+ASM --(&2 pow 64) * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) - &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,72) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 68) /\ (m < p_256 /\ n < p_256 ==> &(read (memory :> bytes (z,8 * 4)) s') = (&m - &n) rem &p_256)) /\ (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s17
+DIGEST cf9eeac6587da5feb0df20be8476a3a7
+END sub-human
+BEGIN sub-derived COUNT 1
+GOAL 0 ASMS 31
+ASM read PC s17 = word (pc + 68)
+ASM read (memory :> bytes64 (word_add z (word 16))) s17 = sum_s13
+ASM read (memory :> bytes64 (word_add z (word 24))) s17 = sum_s15
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X5] ,, MAYCHANGE [X6] ,, MAYCHANGE [events] ,, MAYCHANGE [X4] ,, MAYCHANGE [X3] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [X7] ,, MAYCHANGE [X8] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s17
+ASM read X8 s17 = sum_s15
+ASM read X7 s17 = sum_s13
+ASM read NF s17 <=> ival (word_add sum_s7 (word (bitval carry_s12))) < &0
+ASM read ZF s17 <=> val (word_add sum_s7 (word (bitval carry_s12))) = 0
+ASM read CF s17 <=> carry_s13
+ASM read VF s17 <=> ~(ival sum_s7 + &0 + &(bitval carry_s12) = ival (word_add sum_s7 (word (bitval carry_s12))))
+ASM read X3 s17 = word_neg (word (bitval (m < n)))
+ASM read X0 s17 = z
+ASM read X1 s17 = x
+ASM read X2 s17 = y
+ASM read X5 s17 = sum_s10
+ASM read X6 s17 = sum_s12
+ASM read X4 s17 = word_and (word_neg (word (bitval (m < n)))) (word 18446744069414584321)
+ASM read (memory :> bytes64 (word_add z (word 8))) s17 = sum_s12
+ASM read (memory :> bytes64 z) s17 = sum_s10
+ASM aligned_bytes_loaded s17 (word pc) bignum_sub_p256_mc
+ASM &2 pow 64 * &(bitval carry_s15) + &(val sum_s15) = &(val sum_s8) + &(val (word_and (word_neg (word (bitval (m < n)))) (word 18446744069414584321))) + &(bitval carry_s13)
+ASM &2 pow 64 * &(bitval carry_s13) + &(val sum_s13) = &(val sum_s7) + &(bitval carry_s12)
+ASM &2 pow 64 * &(bitval carry_s12) + &(val sum_s12) = &(val sum_s4) + &(val (word_and (word_neg (word (bitval (m < n)))) (word 4294967295))) + &(bitval carry_s10)
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &(val (word_neg (word (bitval (m < n)))))
+ASM --(&2 pow 64) * &(bitval (m < n)) + &(val sum_s8) = &(val m_3) - &(val n_3) - &(bitval carry_s7)
+ASM --(&2 pow 64) * &(bitval carry_s7) + &(val sum_s7) = &(val m_2) - &(val n_2) - &(bitval carry_s4)
+ASM --(&2 pow 64) * &(bitval carry_s4) + &(val sum_s4) = &(val m_1) - &(val n_1) - &(bitval carry_s3)
+ASM --(&2 pow 64) * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) - &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,72) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 68) /\ (m < p_256 /\ n < p_256 ==> &(read (memory :> bytes (z,8 * 4)) s') = (&m - &n) rem &p_256)) /\ (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s17
+DIGEST 1db26131bc8e4d17c5a357f894e541b6
+END sub-derived
+BEGIN sub-diag COUNT 1
+GOAL 0 ASMS 36
+ASM read PC s17 = word (pc + 68)
+ASM read (memory :> bytes64 (word_add z (word 16))) s17 = sum_s13
+ASM read (memory :> bytes64 (word_add z (word 24))) s17 = sum_s15
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X5] ,, MAYCHANGE [X6] ,, MAYCHANGE [events] ,, MAYCHANGE [X4] ,, MAYCHANGE [X3] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [X7] ,, MAYCHANGE [X8] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s17
+ASM read X8 s17 = sum_s15
+ASM read X7 s17 = sum_s13
+ASM read NF s17 <=> ival (word_add sum_s7 (word (bitval carry_s12))) < &0
+ASM read CF s17 <=> carry_s13
+ASM read VF s17 <=> ~(ival sum_s7 + &0 + &(bitval carry_s12) = ival (word_add sum_s7 (word (bitval carry_s12))))
+ASM read (rvalue (word_add sum_s3 (word_neg (word (bitval (m < n)))))) s17 = sum_s11
+ASM read X3 s17 = word_neg (word (bitval (m < n)))
+ASM read (rvalue (word_sub m_1 (word_add n_1 (word (bitval carry_s3))))) s17 = sum_s5
+ASM read X0 s17 = z
+ASM read X1 s17 = x
+ASM read X2 s17 = y
+ASM read X5 s17 = sum_s10
+ASM read X6 s17 = sum_s12
+ASM read X4 s17 = word_and (word_neg (word (bitval (m < n)))) (word 18446744069414584321)
+ASM read (rvalue (word_add sum_s7 (word (bitval carry_s12)))) s17 = sum_s14
+ASM read (memory :> bytes64 (word_add z (word 8))) s17 = sum_s12
+ASM read (memory :> bytes64 z) s17 = sum_s10
+ASM aligned_bytes_loaded s17 (word pc) bignum_sub_p256_mc
+ASM &2 pow 64 * &(bitval carry_s15) + &(val sum_s15) = &(val sum_s8) + &(val (word_and (word_neg (word (bitval (m < n)))) (word 18446744069414584321))) + &(bitval carry_s13)
+ASM &2 pow 64 * &(bitval carry_s14) + &(val sum_s14) = &(val sum_s7) + &(bitval carry_s12)
+ASM &2 pow 64 * &(bitval carry_s13) + &(val sum_s13) = &(val sum_s7) + &(bitval carry_s12)
+ASM &2 pow 64 * &(bitval carry_s12) + &(val sum_s12) = &(val sum_s4) + &(val (word_and (word_neg (word (bitval (m < n)))) (word 4294967295))) + &(bitval carry_s10)
+ASM &2 pow 64 * &(bitval carry_s11) + &(val sum_s11) = &(val sum_s3) + &(val (word_neg (word (bitval (m < n)))))
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &(val (word_neg (word (bitval (m < n)))))
+ASM --(&2 pow 64) * &(bitval (m < n)) + &(val sum_s8) = &(val m_3) - &(val n_3) - &(bitval carry_s7)
+ASM --(&2 pow 64) * &(bitval carry_s7) + &(val sum_s7) = &(val m_2) - &(val n_2) - &(bitval carry_s4)
+ASM --(&2 pow 64) * &(bitval carry_s5) + &(val sum_s5) = &(val m_1) - &(val n_1) - &(bitval carry_s3)
+ASM --(&2 pow 64) * &(bitval carry_s4) + &(val sum_s4) = &(val m_1) - &(val n_1) - &(bitval carry_s3)
+ASM --(&2 pow 64) * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) - &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,72) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 68) /\ (m < p_256 /\ n < p_256 ==> &(read (memory :> bytes (z,8 * 4)) s') = (&m - &n) rem &p_256)) /\ (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s17
+DIGEST cf9eeac6587da5feb0df20be8476a3a7
+END sub-diag
+BEGIN neg-human COUNT 1
+GOAL 0 ASMS 25
+ASM read PC s15 = word (pc + 60)
+ASM read (memory :> bytes64 (word_add z (word 16))) s15 = sum_s11
+ASM read (memory :> bytes64 (word_add z (word 24))) s15 = sum_s13
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X4] ,, MAYCHANGE [X5] ,, MAYCHANGE [events] ,, MAYCHANGE [X6] ,, MAYCHANGE [X7] ,, MAYCHANGE [X3] ,, MAYCHANGE [X2] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s15
+ASM read X7 s15 = sum_s13
+ASM read X6 s15 = sum_s11
+ASM read NF s15 <=> ival (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))) < &0
+ASM read ZF s15 <=> val (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))) = 0
+ASM read CF s15 <=> ~carry_s11
+ASM read VF s15 <=> ~(&0 - (ival n_2 + &(bitval carry_s10)) = ival (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))))
+ASM read X2 s15 = (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)
+ASM read X0 s15 = z
+ASM read X1 s15 = x
+ASM read X4 s15 = sum_s8
+ASM read X5 s15 = sum_s10
+ASM read X3 s15 = word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 18446744069414584321)
+ASM read (memory :> bytes64 (word_add z (word 8))) s15 = sum_s10
+ASM read (memory :> bytes64 z) s15 = sum_s8
+ASM aligned_bytes_loaded s15 (word pc) bignum_neg_p256_mc
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) = &(val (word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 18446744069414584321))) - &(val n_3) - &(bitval carry_s11)
+ASM --(&2 pow 64) * &(bitval carry_s11) + &(val sum_s11) = &0 - &(val n_2) - &(bitval carry_s10)
+ASM --(&2 pow 64) * &(bitval carry_s10) + &(val sum_s10) = &(val (word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 4294967295))) - &(val n_1) - &(bitval carry_s8)
+ASM --(&2 pow 64) * &(bitval carry_s8) + &(val sum_s8) = &(val (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)) - &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM nonoverlapping_modulo (2 EXP 64) (pc,64) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 60) /\ (n <= p_256 ==> read (memory :> bytes (z,8 * 4)) s' = (p_256 - n) MOD p_256)) /\ (MAYCHANGE [PC; X2; X3; X4; X5; X6; X7] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s15
+DIGEST ffbb25743e87367b891edd7f12152dae
+END neg-human
+BEGIN neg-derived COUNT 1
+GOAL 0 ASMS 25
+ASM read PC s15 = word (pc + 60)
+ASM read (memory :> bytes64 (word_add z (word 16))) s15 = sum_s11
+ASM read (memory :> bytes64 (word_add z (word 24))) s15 = sum_s13
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X4] ,, MAYCHANGE [X5] ,, MAYCHANGE [events] ,, MAYCHANGE [X6] ,, MAYCHANGE [X7] ,, MAYCHANGE [X3] ,, MAYCHANGE [X2] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s15
+ASM read X7 s15 = sum_s13
+ASM read X6 s15 = sum_s11
+ASM read NF s15 <=> ival (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))) < &0
+ASM read ZF s15 <=> val (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))) = 0
+ASM read CF s15 <=> ~carry_s11
+ASM read VF s15 <=> ~(&0 - (ival n_2 + &(bitval carry_s10)) = ival (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))))
+ASM read X2 s15 = (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)
+ASM read X0 s15 = z
+ASM read X1 s15 = x
+ASM read X4 s15 = sum_s8
+ASM read X5 s15 = sum_s10
+ASM read X3 s15 = word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 18446744069414584321)
+ASM read (memory :> bytes64 (word_add z (word 8))) s15 = sum_s10
+ASM read (memory :> bytes64 z) s15 = sum_s8
+ASM aligned_bytes_loaded s15 (word pc) bignum_neg_p256_mc
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) = &(val (word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 18446744069414584321))) - &(val n_3) - &(bitval carry_s11)
+ASM --(&2 pow 64) * &(bitval carry_s11) + &(val sum_s11) = &0 - &(val n_2) - &(bitval carry_s10)
+ASM --(&2 pow 64) * &(bitval carry_s10) + &(val sum_s10) = &(val (word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 4294967295))) - &(val n_1) - &(bitval carry_s8)
+ASM --(&2 pow 64) * &(bitval carry_s8) + &(val sum_s8) = &(val (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)) - &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM nonoverlapping_modulo (2 EXP 64) (pc,64) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 60) /\ (n <= p_256 ==> read (memory :> bytes (z,8 * 4)) s' = (p_256 - n) MOD p_256)) /\ (MAYCHANGE [PC; X2; X3; X4; X5; X6; X7] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s15
+DIGEST ffbb25743e87367b891edd7f12152dae
+END neg-derived
+BEGIN neg-diag COUNT 1
+GOAL 0 ASMS 30
+ASM read PC s15 = word (pc + 60)
+ASM read (memory :> bytes64 (word_add z (word 16))) s15 = sum_s11
+ASM read (memory :> bytes64 (word_add z (word 24))) s15 = sum_s13
+ASM (MAYCHANGE [PC] ,, MAYCHANGE [X4] ,, MAYCHANGE [X5] ,, MAYCHANGE [events] ,, MAYCHANGE [X6] ,, MAYCHANGE [X7] ,, MAYCHANGE [X3] ,, MAYCHANGE [X2] ,, MAYCHANGE [NF] ,, MAYCHANGE [ZF] ,, MAYCHANGE [CF] ,, MAYCHANGE [VF] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 0))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 8))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 16))] ,, MAYCHANGE [memory :> bytes64 (word_add z (word 24))]) s0 s15
+ASM read X7 s15 = sum_s13
+ASM read X6 s15 = sum_s11
+ASM read NF s15 <=> ival (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))) < &0
+ASM read CF s15 <=> ~carry_s11
+ASM read VF s15 <=> ~(&0 - (ival n_2 + &(bitval carry_s10)) = ival (word_sub (word 0) (word_add n_2 (word (bitval carry_s10)))))
+ASM read (rvalue (word_sub (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) n_0)) s15 = sum_s9
+ASM read (rvalue (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0))) s15 = sum_s7
+ASM read X2 s15 = (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)
+ASM read X0 s15 = z
+ASM read X1 s15 = x
+ASM read X4 s15 = sum_s8
+ASM read X5 s15 = sum_s10
+ASM read X3 s15 = word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 18446744069414584321)
+ASM read (rvalue (word_sub (word 0) (word_add n_2 (word (bitval carry_s10))))) s15 = sum_s12
+ASM read (memory :> bytes64 (word_add z (word 8))) s15 = sum_s10
+ASM read (memory :> bytes64 z) s15 = sum_s8
+ASM aligned_bytes_loaded s15 (word pc) bignum_neg_p256_mc
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) = &(val (word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 18446744069414584321))) - &(val n_3) - &(bitval carry_s11)
+ASM --(&2 pow 64) * &(bitval carry_s12) + &(val sum_s12) = &0 - &(val n_2) - &(bitval carry_s10)
+ASM --(&2 pow 64) * &(bitval carry_s11) + &(val sum_s11) = &0 - &(val n_2) - &(bitval carry_s10)
+ASM --(&2 pow 64) * &(bitval carry_s10) + &(val sum_s10) = &(val (word_and (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615) (word 4294967295))) - &(val n_1) - &(bitval carry_s8)
+ASM --(&2 pow 64) * &(bitval carry_s9) + &(val sum_s9) = &(val (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)) - &(val n_0)
+ASM --(&2 pow 64) * &(bitval carry_s8) + &(val sum_s8) = &(val (if val (word_sub (word_or (word_or n_2 n_3) (word_or n_0 n_1)) (word 0)) = 0 then word 0 else word 18446744073709551615)) - &(val n_0)
+ASM --(&2 pow 64) * &(bitval carry_s7) + &(val sum_s7) = &(val (word_or (word_or n_2 n_3) (word_or n_0 n_1))) - &0
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM nonoverlapping_modulo (2 EXP 64) (pc,64) (val z,8 * 4)
+CONCL eventually arm (\s'. (read PC s' = word (pc + 60) /\ (n <= p_256 ==> read (memory :> bytes (z,8 * 4)) s' = (p_256 - n) MOD p_256)) /\ (MAYCHANGE [PC; X2; X3; X4; X5; X6; X7] ,, MAYCHANGE [NF; ZF; CF; VF] ,, MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum (z,4)]) s0 s') s15
+DIGEST a933d34e1ab72f5a364d8f221f868ab2
+END neg-diag
+CLOSED add-derived HYP 0 CONCLMD5 76413f836671ca27d427e62fd7a2d3ab
+CLOSED sub-derived HYP 0 CONCLMD5 9ab072c9891c1c69d968a5fee354b381
+CLOSED neg-derived HYP 0 CONCLMD5 2df65bc3064822e924b24184c22435b1
+AXIOMS_OK
+DONE

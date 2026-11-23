@@ -1,0 +1,373 @@
+{
+  "commands": [
+    "cd .bench/s2n-bignum && W1_OUT=<work>/capture.out W1_LISTS=<work>/w1_lists.ml sh -c 'cat ../verify/w1/w1_capture.ml | ../hol-light/hol.sh'"
+  ],
+  "files": {
+    "object_add": {
+      "mnemonics": [
+        "1:ldp",
+        "2:ldp",
+        "3:adds",
+        "4:adcs",
+        "5:ldp",
+        "6:ldp",
+        "7:adcs",
+        "8:adcs",
+        "9:adc",
+        "10:adds",
+        "11:mov",
+        "12:sbcs",
+        "13:sbcs",
+        "14:mov",
+        "15:sbcs",
+        "16:sbcs",
+        "17:csel",
+        "18:csel",
+        "19:csel",
+        "20:csel",
+        "21:stp",
+        "22:stp",
+        "23:ret"
+      ],
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/p256/bignum_add_p256.o",
+      "sha256": "9155f3307bdfd50c2fc4779dce455690b53d82dcec6f8966656cf26ea088d8cd",
+      "steps": 23
+    },
+    "object_neg": {
+      "mnemonics": [
+        "1:ldp",
+        "2:ldp",
+        "3:orr",
+        "4:orr",
+        "5:orr",
+        "6:cmp",
+        "7:csetm",
+        "8:subs",
+        "9:and",
+        "10:sbcs",
+        "11:ngcs",
+        "12:and",
+        "13:sbc",
+        "14:stp",
+        "15:stp",
+        "16:ret"
+      ],
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/p256/bignum_neg_p256.o",
+      "sha256": "7a04c3c94b7a17e821bac00dca591f74771c8028a6f41750cd49f81e841b960b",
+      "steps": 16
+    },
+    "object_sub": {
+      "mnemonics": [
+        "1:ldp",
+        "2:ldp",
+        "3:subs",
+        "4:sbcs",
+        "5:ldp",
+        "6:ldp",
+        "7:sbcs",
+        "8:sbcs",
+        "9:csetm",
+        "10:adds",
+        "11:and",
+        "12:adcs",
+        "13:adcs",
+        "14:and",
+        "15:adc",
+        "16:stp",
+        "17:stp",
+        "18:ret"
+      ],
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/p256/bignum_sub_p256.o",
+      "sha256": "1ba29b3609d8e1d570d3690f70efa00ed6944d67f96ff18fed0c5115ee7dd2af",
+      "steps": 18
+    },
+    "proof_add": {
+      "guard": "allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_add_p256.ml sha256=8ee8cfd8e87b83da1eb253e563eeb6de717a0cd3d9313ca813d16b75eb059ea5 lines=122",
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_add_p256.ml",
+      "sha256": "8ee8cfd8e87b83da1eb253e563eeb6de717a0cd3d9313ca813d16b75eb059ea5"
+    },
+    "proof_neg": {
+      "guard": "allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_neg_p256.ml sha256=85733612878268164ed2f291826505c6cd71c67a9822a0f07b4a99d62a00df0b lines=107",
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_neg_p256.ml",
+      "sha256": "85733612878268164ed2f291826505c6cd71c67a9822a0f07b4a99d62a00df0b"
+    },
+    "proof_sub": {
+      "guard": "allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_sub_p256.ml sha256=114715a8b94e75fec78e0fc966fcc22de23162aae7d99e60e2d5b7ac45791739 lines=139",
+      "path": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/arm/proofs/bignum_sub_p256.ml",
+      "sha256": "114715a8b94e75fec78e0fc966fcc22de23162aae7d99e60e2d5b7ac45791739"
+    }
+  },
+  "gate_passed": false,
+  "hol": {
+    "command": "cat /mnt/1tb_kingston/Tekmerion/tools/w1_hol_capture.ml | ../hol-light/hol.sh",
+    "cwd": "/mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum",
+    "log": "/mnt/1tb_kingston/Tekmerion/.bench/verify/w1/capture.log",
+    "out": "/mnt/1tb_kingston/Tekmerion/.bench/verify/w1/capture.out",
+    "seconds": 177.7
+  },
+  "lists_file": "/mnt/1tb_kingston/Tekmerion/.bench/verify/w1/w1_lists.ml",
+  "lists_source": "let human_add = [3;4;7;8;10;12;13;15;16];;\nlet derived_add = [3;4;7;8;10;12;13;15;16];;\nlet diag_add = [3;4;5;7;8;9;10;11;12;13;14;15;16;17];;\nlet human_sub = [1;2;3;4;5;6;7;8;10;11;12;13;14;15;16;17];;\nlet derived_sub = [3;4;7;8;10;12;13;15];;\nlet diag_sub = [3;4;5;7;8;9;10;11;12;13;14;15];;\nlet human_neg = [8;10;11;13];;\nlet derived_neg = [8;10;11;13];;\nlet diag_neg = [7;8;9;10;11;12;13];;",
+  "operations": {
+    "add": {
+      "assumptions_multiset_equal": true,
+      "assumptions_sequence_equal": true,
+      "closed": {
+        "concl_md5": "76413f836671ca27d427e62fd7a2d3ab",
+        "hyp": 0
+      },
+      "closed_ok": true,
+      "conclusion_equal": true,
+      "conclusion_sha256": "d5159d273210f8926d8544a1a6937a82c2e3bad49e2504b023ffb6a83bcc2385",
+      "derived_assumptions": 35,
+      "derived_count": 1,
+      "derived_hol_md5": [
+        "72fd9b871bbc604cb841fc79cf1d8474"
+      ],
+      "derived_list": [
+        3,
+        4,
+        7,
+        8,
+        10,
+        12,
+        13,
+        15,
+        16
+      ],
+      "derived_sha256": "856215aa22ad734f26bc58da584cfd6e29c380ee9b2c272d722078c770632de7",
+      "derived_sha256_multiset": "4defeb0952e2da06c4e40b4f0550626ff0de1eb82394350d50606a05f5c08679",
+      "diag_list": [
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "diag_matches_human": false,
+      "human_assumptions": 35,
+      "human_calls": [
+        {
+          "anums": [
+            3,
+            4,
+            7,
+            8,
+            10,
+            12,
+            13,
+            15,
+            16
+          ],
+          "anums_spec": "[3;4;7;8;10;12;13;15;16]",
+          "exec": "BIGNUM_ADD_P256_EXEC",
+          "snums_spec": "(1--22)"
+        }
+      ],
+      "human_count": 1,
+      "human_hol_md5": [
+        "72fd9b871bbc604cb841fc79cf1d8474"
+      ],
+      "human_list": [
+        3,
+        4,
+        7,
+        8,
+        10,
+        12,
+        13,
+        15,
+        16
+      ],
+      "human_sha256": "856215aa22ad734f26bc58da584cfd6e29c380ee9b2c272d722078c770632de7",
+      "human_sha256_multiset": "4defeb0952e2da06c4e40b4f0550626ff0de1eb82394350d50606a05f5c08679",
+      "list_equal": true,
+      "match": true
+    },
+    "neg": {
+      "assumptions_multiset_equal": true,
+      "assumptions_sequence_equal": true,
+      "closed": {
+        "concl_md5": "2df65bc3064822e924b24184c22435b1",
+        "hyp": 0
+      },
+      "closed_ok": true,
+      "conclusion_equal": true,
+      "conclusion_sha256": "d01cb6bbe820c682d843b9bc37391a39d44bbaae4a020c4acf94998f04e20037",
+      "derived_assumptions": 25,
+      "derived_count": 1,
+      "derived_hol_md5": [
+        "ffbb25743e87367b891edd7f12152dae"
+      ],
+      "derived_list": [
+        8,
+        10,
+        11,
+        13
+      ],
+      "derived_sha256": "e549bb29f8e8f929e030e311768d8c215f680cde2a0d365a70d426bc0baa1db1",
+      "derived_sha256_multiset": "65c06548ff90be6e3eb747cc4d2da78f7f8a527faf86b4e430a485d03503101f",
+      "diag_list": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "diag_matches_human": false,
+      "human_assumptions": 25,
+      "human_calls": [
+        {
+          "anums": [
+            8,
+            10,
+            11,
+            13
+          ],
+          "anums_spec": "[8;10;11;13]",
+          "exec": "BIGNUM_NEG_P256_EXEC",
+          "snums_spec": "(1--15)"
+        }
+      ],
+      "human_count": 1,
+      "human_hol_md5": [
+        "ffbb25743e87367b891edd7f12152dae"
+      ],
+      "human_list": [
+        8,
+        10,
+        11,
+        13
+      ],
+      "human_sha256": "e549bb29f8e8f929e030e311768d8c215f680cde2a0d365a70d426bc0baa1db1",
+      "human_sha256_multiset": "65c06548ff90be6e3eb747cc4d2da78f7f8a527faf86b4e430a485d03503101f",
+      "list_equal": true,
+      "match": true
+    },
+    "sub": {
+      "assumptions_multiset_equal": false,
+      "assumptions_sequence_equal": false,
+      "closed": {
+        "concl_md5": "9ab072c9891c1c69d968a5fee354b381",
+        "hyp": 0
+      },
+      "closed_ok": true,
+      "conclusion_equal": true,
+      "conclusion_sha256": "b360677cdf9ded3fafcff6c07922472c1d205fc6b10c1ed5e37d13e5293de8a9",
+      "derived_assumptions": 31,
+      "derived_count": 1,
+      "derived_hol_md5": [
+        "1db26131bc8e4d17c5a357f894e541b6"
+      ],
+      "derived_list": [
+        3,
+        4,
+        7,
+        8,
+        10,
+        12,
+        13,
+        15
+      ],
+      "derived_sha256": "c8655e6be1869c1082faed2b2c559a564572d3e87285472ceb3115d596646371",
+      "derived_sha256_multiset": "375c42e87afaef0ff5d6f1d8a31fabed0e7cdef5d31f619c3e8409ef1bc094fe",
+      "diag_list": [
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "diag_matches_human": true,
+      "first_assumption_difference": "index 7: human='read CF s17 <=> carry_s13' derived='read ZF s17 <=> val (word_add sum_s7 (word (bitval carry_s12))) = 0'",
+      "human_assumptions": 36,
+      "human_calls": [
+        {
+          "anums": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "anums_spec": "(1--8)",
+          "exec": "BIGNUM_SUB_P256_EXEC",
+          "snums_spec": "(1--8)"
+        },
+        {
+          "anums": [
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17
+          ],
+          "anums_spec": "(10--17)",
+          "exec": "BIGNUM_SUB_P256_EXEC",
+          "snums_spec": "(10--17)"
+        }
+      ],
+      "human_count": 1,
+      "human_hol_md5": [
+        "cf9eeac6587da5feb0df20be8476a3a7"
+      ],
+      "human_list": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "human_sha256": "56ec1d240a5e78e6a73b72a2ff04f54b4d7ddb40d42b7bfbb0608f646e00467a",
+      "human_sha256_multiset": "4e922cb6ef190b99c36edce4d3f803b4010a7f57c58265dcc5980c27582ac42b",
+      "list_equal": false,
+      "match": false,
+      "only_derived": [
+        "read ZF s17 <=> val (word_add sum_s7 (word (bitval carry_s12))) = 0"
+      ],
+      "only_human": [
+        "&2 pow 64 * &(bitval carry_s11) + &(val sum_s11) = &(val sum_s3) + &(val (word_neg (word (bitval (m < n)))))",
+        "&2 pow 64 * &(bitval carry_s14) + &(val sum_s14) = &(val sum_s7) + &(bitval carry_s12)",
+        "--(&2 pow 64) * &(bitval carry_s5) + &(val sum_s5) = &(val m_1) - &(val n_1) - &(bitval carry_s3)",
+        "read (rvalue (word_add sum_s3 (word_neg (word (bitval (m < n)))))) s17 = sum_s11",
+        "read (rvalue (word_add sum_s7 (word (bitval carry_s12)))) s17 = sum_s14",
+        "read (rvalue (word_sub m_1 (word_add n_1 (word (bitval carry_s3))))) s17 = sum_s5"
+      ]
+    }
+  },
+  "raw_capture": "/mnt/1tb_kingston/Tekmerion/research/receipts/w1-accsteps-capture.txt"
+}

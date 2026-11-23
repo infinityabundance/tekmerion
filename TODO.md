@@ -428,8 +428,14 @@ a tactic script to a small typed **witness**; a deterministic compiler emits the
 
 ## W — mechanisms
 
-- [ ] **W1. Simulation compiler.** Derive accumulate sets from carry dataflow; emit the stepping
-  script; support digitize/abbreviate. Gate: reproduces the human post-simulation goal exactly.
+- [~] **W1. Simulation compiler.** Derivation implemented (`tools/derive_steps.py`: stdlib-only, no
+  I/O, no-peek enforced structurally). **add** and **neg** reproduce the human post-simulation goal
+  exactly (same SHA-256 and HOL MD5). **sub** matches the conclusion but not the assumption multiset:
+  the human uses blanket ranges `(1--8) ∪ (10--17)`, which add three duplicate carry relations; the
+  derived set is the minimal carry chain and the conclusion closes with `HYP 0`. Therefore the gate
+  is **semantic**: identical conclusion plus closure under the derived list, with exact assumption
+  equality required only where the human list is minimal. Remaining: digitize/abbreviate support and
+  p384/p521 extension.
 - [ ] **W2. Witness enumerator** per operation family, **no model**: templates for congruence
   witnesses and flag meanings across sibling routines.
 - [ ] **W3. Executable-model falsifier** gates every witness and invariant before the kernel.
