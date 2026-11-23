@@ -1,0 +1,116 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/tekmerion-28c175528fb66e7d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/native.rs (target/debug/deps/native-53a80e9cdea66883)
+
+running 26 tests
+test checker_path_contains_no_process_spawning ... ok
+test hand_built_ill_typed_terms_are_refused_not_panicked ... ok
+test lrat_negative_zero_is_rejected ... ok
+test lrat_bad_hint_and_missing_empty_clause_are_rejected ... ok
+test bitblast_agrees_with_semantics_on_small_cases ... ok
+test lrat_small_refutation_accepts_and_deletion_is_honoured ... ok
+test refl_sym_trans_congr_are_sound_and_checked ... ok
+test tamper_cycle_is_rejected ... ok
+test lrat_truncation_is_rejected_directly ... ok
+test tamper_duplicate_field_is_rejected ... ok
+test tamper_duplicate_step_is_rejected ... ok
+test tamper_missing_step_is_rejected ... ok
+test tamper_truncated_file_is_rejected ... ok
+test tamper_unknown_rule_is_rejected ... ok
+test tamper_trailing_bytes_are_rejected ... ok
+test tamper_reused_proof_for_a_different_statement_is_rejected ... ok
+test tamper_cnf_is_rejected ... ok
+test proves_add_comm_8_natively ... ok
+test term_grammar_refuses_unknown_and_ambiguous_encodings ... ok
+test tamper_flip_one_hint_is_rejected ... ok
+test tamper_delete_a_clause_is_rejected ... ok
+test tamper_flip_one_hint_sign_is_rejected ... ok
+test tamper_lrat_unknown_literal_is_rejected ... ok
+test tamper_lrat_trailing_garbage_is_rejected ... ok
+test proves_sub_add_64_natively ... ok
+test determinism_same_verdict_and_digest ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/native_semantics.rs (target/debug/deps/native_semantics-99f6273093f61353)
+
+running 7 tests
+test reference_oracle_is_not_on_the_trusted_path ... ok
+test malformed_inputs_are_rejected ... ok
+test false_identity_is_rejected_by_both ... ok
+test parser_round_trip_is_canonical ... ok
+test differential_mutations_agree ... ok
+test differential_acceptance_across_small_widths ... ok
+test fuzz_never_panics ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/refusals.rs (target/debug/deps/refusals-64173e0763da408c)
+
+running 25 tests
+test accepts_valid_document ... ok
+test all_edge_sigils_are_accepted ... ok
+test api_refuses_what_parser_refuses ... ok
+test r01_bad_magic ... ok
+test r02_unsupported_version ... ok
+test r03_node_without_head ... ok
+test r03_blank_line ... ok
+test r04_empty_unit_name ... ok
+test r03_node_after_head_map ... ok
+test r05_bad_hex ... ok
+test r03_wrong_field_count ... ok
+test r06_wrong_digest_length ... ok
+test r07_unknown_unit_head ... ok
+test r07_unknown_unit_pin ... ok
+test r08_head_digest_not_declared_for_unit ... ok
+test r08_pin_digest_not_declared ... ok
+test r09_unknown_edge_kind ... ok
+test r10_unknown_kind ... ok
+test r10_unknown_record_tag ... ok
+test r11_missing_required_field ... ok
+test r12_non_canonical_name ... ok
+test r13_duplicate_pin ... ok
+test r14_missing_final_newline ... ok
+test r15_is_reachable_through_the_api ... ok
+test r16_duplicate_head ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/semantics.rs (target/debug/deps/semantics-289d33113b1b618c)
+
+running 21 tests
+test edge_kind_is_part_of_identity ... ok
+test attestation_change_is_stale_not_broken ... ok
+test effective_status_checker_only_rebuild_is_stale ... ok
+test effective_status_closes_over_unchanged_intermediates ... ok
+test effective_status_reformat_is_none ... ok
+test effective_status_logic_change_is_semantic ... ok
+test effective_status_repin_is_semantic ... ok
+test effective_status_survives_artefact_change_then_checker_rebuild ... ok
+test formatting_change_revokes_nothing ... ok
+test identical_update_is_empty ... ok
+test identity_is_derived_from_content ... ok
+test round_trip_after_attestation_update ... ok
+test round_trip_after_repin_with_unchanged_semantic_and_bytes ... ok
+test round_trip_after_semantic_update ... ok
+test semantic_change_propagates_through_lemma ... ok
+test round_trip_after_subject_update ... ok
+test subject_change_revokes_applicability ... ok
+test unrelated_evidence_survives ... ok
+test wire_round_trip_preserves_identity ... ok
+test worst_severity_wins ... ok
+test naive_vs_typed_on_synthetic_corpus ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tekmerion
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

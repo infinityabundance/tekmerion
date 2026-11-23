@@ -1081,9 +1081,25 @@ compositional proof checking; online LRAT checking.
   fixtures offline. Receipts: `research/receipts/ix42-native-*`.
   **Not done:** the bit-blaster and checker are tested, not formally verified (Milestone B); RAT is
   refused; the logic is add/sub/equality only — no multiply, shifts, memory or ISA semantics.
-- [ ] **IX.43. Milestone B — checker correctness.** Formally specify the logical core and critical
-  parser; independent checking route; dependencies closed to approved foundations; documented trusted
-  base and explicit implementation-proof gaps.
+- [~] **IX.43. Milestone B — specification, oracle, and the measured gap.** Delivered:
+  `research/08-TNPS-SEMANTICS.md` (EBNF for terms/CNF/LRAT/certificates, typing, `eval`, CNF and
+  RUP/LRAT relations, DAG well-formedness, acceptance relation, soundness theorem with a per-rule
+  argument, assumptions A1–A7, gaps G1–G4); an independent test-only oracle (`src/native/reference.rs`,
+  no hints, own parsers, 20-bit search budget); and `research/receipts/ix43-tcb.md`.
+  **Differential:** 10 generated certificates agreed; 19 mutations, 18 rejected by both and 1 benign
+  reordering accepted by both; 500 term round-trips; 2,000 fuzz inputs and 1,000 bit-flip mutations,
+  no panic. `cargo test --offline`: **79 passed**. Trusted base **2,681 lines** across six native
+  modules plus the `Digest`/`Canon` core; only dependency `sha2 0.10.9`; no call path from `check` to
+  the oracle.
+  **Still unproved, and stated as such: G1** bit-blaster equivalence to term semantics, **G2** parser
+  refinement, **G3** executable-level refinement, **G4** machine-checked RUP/LRAT lemmas.
+  **Metric: 0/4 gaps discharged.** Milestone B is explicitly incomplete; do not describe the checker
+  as verified.
+  **Progress (2026-11-23, staging, uncommitted):** spec `research/08-TNPS-SEMANTICS.md`,
+  test-only oracle `src/native/reference.rs`, differential/conformance suite `tests/native_semantics.rs`,
+  and TCB `research/receipts/ix43-tcb.md`. Still open: **0/4 gaps discharged** (bit-blast, parser
+  refinement, executable refinement, paper-only lemmas) and independent agreement at **3/64** widths.
+  Do not mark done; the metric is in the TCB.
 - [ ] **IX.44. Milestone C — accelerated fabric.** Blocked multicore first if it pays, then SIMD,
   AVX2, AVX-512, CUDA; equivalence, fault injection, deterministic verdicts at every step; no relaxed
   rule and no new unverified dependency.

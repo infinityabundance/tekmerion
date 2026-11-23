@@ -1,0 +1,16 @@
+   253 src/native/mod.rs
+   609 src/native/logic.rs
+   401 src/native/bitblast.rs
+   458 src/native/lrat.rs
+   628 src/native/cert.rs
+   217 src/native/check.rs
+   726 src/native/reference.rs
+  1121 src/lib.rs
+   672 tests/native.rs
+  1109 tests/native_semantics.rs
+  6194 total
+115
+name = "sha2"
+version = "0.10.9"
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo 1.98.0 (797e8a9bc 2026-08-05)

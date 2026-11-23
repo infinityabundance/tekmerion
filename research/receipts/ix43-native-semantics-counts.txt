@@ -1,0 +1,5 @@
+term round-trip cases: 500
+certificate round-trip cases: 6
+differential mutation cases: 19
+differential acceptance cases: 10
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s

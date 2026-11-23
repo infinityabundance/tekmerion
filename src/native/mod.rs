@@ -55,6 +55,14 @@ pub mod check;
 pub mod logic;
 pub mod lrat;
 
+/// Test-only independent oracle. **Not part of the trusted base.**
+///
+/// The module is hidden from documentation and no trusted module refers to it;
+/// [`check`] cannot reach it. See the module documentation and
+/// `tests/native_semantics.rs`.
+#[doc(hidden)]
+pub mod reference;
+
 pub use bitblast::{bitblast, Cnf};
 pub use cert::{blob_digest, Blob, BlobKind, Certificate, Rule, Step};
 pub use check::{check, Theorem};
