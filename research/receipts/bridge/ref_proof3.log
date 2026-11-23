@@ -1,0 +1,2737 @@
+Printf.printf "REF3_DONE\n%!";;
+val ITER : thm =
+val ITER_POINTLESS : thm =
+val ITER_ALT : thm =
+val ITER_ALT_POINTLESS : thm =
+val ITER_ADD : thm =
+val ITER_ADD_POINTLESS : thm =
+val ITER_MUL : thm =
+val ITER_FIXPOINT : thm =
+val ORDER_EXISTENCE_GEN : thm =
+val ORDER_EXISTENCE_ITER : thm =
+val ORDER_EXISTENCE_CARD : thm =
+val ORDER_EXISTENCE_FINITE : thm =
+val RULE_INDUCT_TAC : thm -> tactic = <fun>
+val SYM_ALT : thm =
+val TRANS_ALT : thm =
+val RC_RULES : thm =
+val RC_INDUCT : thm =
+val RC_CASES : thm = |- [35mforall[0m R a0 a1. [32mRC[0m R a0 a1 <=> R a0 a1 \/ a1 = a0
+val RC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mRC[0m R x y
+val RC_REFL : thm = |- [35mforall[0m R x. [32mRC[0m R x x
+val RC_EXPLICIT : thm = |- [35mforall[0m R x y. [32mRC[0m R x y <=> R x y \/ x = y
+val RC_MONO : thm =
+val RC_CLOSED : thm = |- [35mforall[0m R. [32mRC[0m R = R <=> ([35mforall[0m x. R x x)
+val RC_IDEMP : thm = |- [35mforall[0m R. [32mRC[0m ([32mRC[0m R) = [32mRC[0m R
+val RC_SYM : thm =
+val RC_TRANS : thm =
+val SC_RULES : thm =
+val SC_INDUCT : thm =
+val SC_CASES : thm = |- [35mforall[0m R a0 a1. [32mSC[0m R a0 a1 <=> R a0 a1 \/ [32mSC[0m R a1 a0
+val SC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mSC[0m R x y
+val SC_SYM : thm = |- [35mforall[0m R x y. [32mSC[0m R x y ==> [32mSC[0m R y x
+val SC_EXPLICIT : thm = |- [35mforall[0m R. [32mSC[0m R x y <=> R x y \/ R y x
+val SC_MONO : thm =
+val SC_CLOSED : thm = |- [35mforall[0m R. [32mSC[0m R = R <=> ([35mforall[0m x y. R x y ==> R y x)
+val SC_IDEMP : thm = |- [35mforall[0m R. [32mSC[0m ([32mSC[0m R) = [32mSC[0m R
+val SC_REFL : thm = |- [35mforall[0m R. ([35mforall[0m x. R x x) ==> ([35mforall[0m x. [32mSC[0m R x x)
+val TC_RULES : thm =
+val TC_INDUCT : thm =
+val TC_CASES : thm =
+val TC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mTC[0m R x y
+val TC_TRANS : thm = |- [35mforall[0m R x y z. [32mTC[0m R x y /\ [32mTC[0m R y z ==> [32mTC[0m R x z
+val TC_MONO : thm =
+val TC_CLOSED : thm =
+val TC_IDEMP : thm = |- [35mforall[0m R. [32mTC[0m ([32mTC[0m R) = [32mTC[0m R
+val TC_REFL : thm = |- [35mforall[0m R. ([35mforall[0m x. R x x) ==> ([35mforall[0m x. [32mTC[0m R x x)
+val TC_SYM : thm =
+val RC_SC : thm = |- [35mforall[0m R. [32mRC[0m ([32mSC[0m R) = [32mSC[0m ([32mRC[0m R)
+val SC_RC : thm = |- [35mforall[0m R. [32mSC[0m ([32mRC[0m R) = [32mRC[0m ([32mSC[0m R)
+val RC_TC : thm = |- [35mforall[0m R. [32mRC[0m ([32mTC[0m R) = [32mTC[0m ([32mRC[0m R)
+val TC_RC : thm = |- [35mforall[0m R. [32mTC[0m ([32mRC[0m R) = [32mRC[0m ([32mTC[0m R)
+val TC_SC : thm = |- [35mforall[0m R x y. [32mSC[0m ([32mTC[0m R) x y ==> [32mTC[0m ([32mSC[0m R) x y
+val SC_TC : thm = |- [35mforall[0m R x y. [32mSC[0m ([32mTC[0m R) x y ==> [32mTC[0m ([32mSC[0m R) x y
+val TC_TRANS_L : thm = |- [35mforall[0m R x y z. [32mTC[0m R x y /\ R y z ==> [32mTC[0m R x z
+val TC_TRANS_R : thm = |- [35mforall[0m R x y z. R x y /\ [32mTC[0m R y z ==> [32mTC[0m R x z
+val TC_CASES_L : thm =
+val TC_CASES_R : thm =
+val TC_INDUCT_L : thm =
+val TC_INDUCT_R : thm =
+val WF_TC : thm = |- [35mforall[0m R. [32mWF[0m ([32mTC[0m R) <=> [32mWF[0m R
+val RSC : thm = |- [35mforall[0m R. [32mRSC[0m R = [32mRC[0m ([32mSC[0m R)
+val RSC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mRSC[0m R x y
+val RSC_REFL : thm = |- [35mforall[0m R x. [32mRSC[0m R x x
+val RSC_SYM : thm = |- [35mforall[0m R x y. [32mRSC[0m R x y ==> [32mRSC[0m R y x
+val RSC_CASES : thm = |- [35mforall[0m R x y. [32mRSC[0m R x y <=> x = y \/ R x y \/ R y x
+val RSC_INDUCT : thm =
+val RSC_MONO : thm =
+val RSC_CLOSED : thm =
+val RSC_IDEMP : thm = |- [35mforall[0m R. [32mRSC[0m ([32mRSC[0m R) = [32mRSC[0m R
+val RTC : thm = |- [35mforall[0m R. [32mRTC[0m R = [32mRC[0m ([32mTC[0m R)
+val RTC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mRTC[0m R x y
+val RTC_REFL : thm = |- [35mforall[0m R x. [32mRTC[0m R x x
+val RTC_TRANS : thm = |- [35mforall[0m R x y z. [32mRTC[0m R x y /\ [32mRTC[0m R y z ==> [32mRTC[0m R x z
+val RTC_RULES : thm =
+val RTC_TRANS_L : thm = |- [35mforall[0m R x y z. [32mRTC[0m R x y /\ R y z ==> [32mRTC[0m R x z
+val RTC_TRANS_R : thm = |- [35mforall[0m R x y z. R x y /\ [32mRTC[0m R y z ==> [32mRTC[0m R x z
+val RTC_CASES : thm =
+val RTC_CASES_L : thm =
+val RTC_CASES_R : thm =
+val RTC_INDUCT : thm =
+val RTC_INDUCT_L : thm =
+val RTC_INDUCT_R : thm =
+val RTC_MONO : thm =
+val RTC_CLOSED : thm =
+val RTC_IDEMP : thm = |- [35mforall[0m R. [32mRTC[0m ([32mRTC[0m R) = [32mRTC[0m R
+val RTC_SYM : thm =
+val RTC_STUTTER : thm =
+val TC_RTC_CASES_L : thm =
+val TC_RTC_CASES_R : thm =
+val TC_TC_RTC_CASES : thm =
+val TC_RTC_TC_CASES : thm =
+val RTC_NE_IMP_TC : thm =
+val STC : thm = |- [35mforall[0m R. [32mSTC[0m R = [32mTC[0m ([32mSC[0m R)
+val STC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mSTC[0m R x y
+val STC_SYM : thm = |- [35mforall[0m R x y. [32mSTC[0m R x y ==> [32mSTC[0m R y x
+val STC_TRANS : thm = |- [35mforall[0m R x y z. [32mSTC[0m R x y /\ [32mSTC[0m R y z ==> [32mSTC[0m R x z
+val STC_TRANS_L : thm = |- [35mforall[0m R x y z. [32mSTC[0m R x y /\ R y z ==> [32mSTC[0m R x z
+val STC_TRANS_R : thm = |- [35mforall[0m R x y z. R x y /\ [32mSTC[0m R y z ==> [32mSTC[0m R x z
+val STC_CASES : thm =
+val STC_CASES_L : thm =
+val STC_CASES_R : thm =
+val STC_INDUCT : thm =
+val STC_MONO : thm =
+val STC_CLOSED : thm =
+val STC_IDEMP : thm = |- [35mforall[0m R. [32mSTC[0m ([32mSTC[0m R) = [32mSTC[0m R
+val STC_REFL : thm = |- [35mforall[0m R. ([35mforall[0m x. R x x) ==> ([35mforall[0m x. [32mSTC[0m R x x)
+val RSTC : thm = |- [35mforall[0m R. [32mRSTC[0m R = [32mRC[0m ([32mTC[0m ([32mSC[0m R))
+val RSTC_INC : thm = |- [35mforall[0m R x y. R x y ==> [32mRSTC[0m R x y
+val RSTC_REFL : thm = |- [35mforall[0m R x. [32mRSTC[0m R x x
+val RSTC_SYM : thm = |- [35mforall[0m R x y. [32mRSTC[0m R x y ==> [32mRSTC[0m R y x
+val RSTC_TRANS : thm =
+val RSTC_RULES : thm =
+val RSTC_TRANS_L : thm =
+val RSTC_TRANS_R : thm =
+val RSTC_CASES : thm =
+val RSTC_CASES_L : thm =
+val RSTC_CASES_R : thm =
+val RSTC_INDUCT : thm =
+val RSTC_MONO : thm =
+val RSTC_CLOSED : thm =
+val RSTC_IDEMP : thm = |- [35mforall[0m R. [32mRSTC[0m ([32mRSTC[0m R) = [32mRSTC[0m R
+val RSC_INC_RC : thm = |- [35mforall[0m R x y. [32mRC[0m R x y ==> [32mRSC[0m R x y
+val RSC_INC_SC : thm = |- [35mforall[0m R x y. [32mSC[0m R x y ==> [32mRSC[0m R x y
+val RTC_INC_RC : thm = |- [35mforall[0m R x y. [32mRC[0m R x y ==> [32mRTC[0m R x y
+val RTC_INC_TC : thm = |- [35mforall[0m R x y. [32mTC[0m R x y ==> [32mRTC[0m R x y
+val STC_INC_SC : thm = |- [35mforall[0m R x y. [32mSC[0m R x y ==> [32mSTC[0m R x y
+val STC_INC_TC : thm = |- [35mforall[0m R x y. [32mTC[0m R x y ==> [32mSTC[0m R x y
+val RSTC_INC_RC : thm = |- [35mforall[0m R x y. [32mRC[0m R x y ==> [32mRSTC[0m R x y
+val RSTC_INC_SC : thm = |- [35mforall[0m R x y. [32mSC[0m R x y ==> [32mRSTC[0m R x y
+val RSTC_INC_TC : thm = |- [35mforall[0m R x y. [32mTC[0m R x y ==> [32mRSTC[0m R x y
+val RSTC_INC_RSC : thm = |- [35mforall[0m R x y. [32mRSC[0m R x y ==> [32mRSTC[0m R x y
+val RSTC_INC_RTC : thm = |- [35mforall[0m R x y. [32mRTC[0m R x y ==> [32mRSTC[0m R x y
+val RSTC_INC_STC : thm = |- [35mforall[0m R x y. [32mSTC[0m R x y ==> [32mRSTC[0m R x y
+val INV : thm = |- [35mforall[0m R y x. [32mINV[0m R x y <=> R y x
+val RC_INV : thm =
+val SC_INV : thm =
+val SC_INV_STRONG : thm =
+val TC_INV : thm =
+val RSC_INV : thm =
+val RTC_INV : thm =
+val STC_INV : thm =
+val RSTC_INV : thm =
+val RELPOW : thm =
+val RELPOW_R : thm =
+val RELPOW_M : thm =
+val RTC_RELPOW : thm =
+val TC_RELPOW : thm =
+val RELPOW_SEQUENCE : thm =
+val bitsize : thm = |- [35mforall[0m n. [32mbitsize[0m n = ([35mminimal[0m i. n < 2 EXP i)
+val BITSIZE_LE : thm = |- [35mforall[0m n k. [32mbitsize[0m n <= k <=> n < 2 EXP k
+val BITSIZE : thm = |- [35mforall[0m n. n < 2 EXP [32mbitsize[0m n
+val BITSIZE_UNIQUE : thm =
+val BITSIZE_UNIQUE_ALT : thm =
+val BITSIZE_MONO : thm = |- [35mforall[0m m n. m <= n ==> [32mbitsize[0m m <= [32mbitsize[0m n
+val BITSIZE_MAX : thm =
+val BITSIZE_MIN : thm =
+val BITSIZE_MULT_LE : thm =
+val BITSIZE_REV_EQ : thm =
+val BITSIZE_REV : thm = |- [35mforall[0m n. ~(n = 0) ==> 2 EXP ([32mbitsize[0m n - 1) <= n
+val BITSIZE_REV_EQ_ALT : thm =
+val BITSIZE_REV_ALT : thm =
+val LE_BITSIZE : thm =
+val LE_BITSIZE_ALT : thm =
+val BITSIZE_UNIQUE_EQ : thm =
+val BITSIZE_MULT : thm =
+val BITSIZE_MULT_ADD : thm =
+val BITSIZE_DIV : thm =
+val DIVIDES_ZERO : thm = |- [35mforall[0m x. 0 divides x <=> x = 0
+val DIVIDES_REFL : thm = |- [35mforall[0m x. x divides x
+val DIVIDES_TRANS : thm =
+val DIVIDES_ADD : thm =
+val DIVIDES_SUB_EQ : thm =
+val DIVIDES_SUB : thm =
+val DIVIDES_LMUL : thm = |- [35mforall[0m d a x. d divides a ==> d divides x * a
+val DIVIDES_RMUL : thm = |- [35mforall[0m d a x. d divides a ==> d divides a * x
+val DIVIDES_ADD_REVR : thm =
+val DIVIDES_ADD_REVL : thm =
+val DIVIDES_MUL_L : thm =
+val DIVIDES_MUL_R : thm =
+val DIVIDES_EQ_ZERO : thm = |- [35mforall[0m p n. n < p ==> (p divides n <=> n = 0)
+val DIVIDES_CASES : thm =
+val DIVIDES_DIV_NOT : thm =
+val DIVIDES_EXP : thm =
+val DIVIDES_EXP_LE_IMP : thm =
+val DIVIDES_EXP_LE : thm =
+val DIVIDES_TRIVIAL_UPPERBOUND : thm =
+val DIVIDES_FACT : thm = |- [35mforall[0m n p. 1 <= p /\ p <= n ==> p divides [32mFACT[0m n
+val DIVIDES_REXP_SUC : thm =
+val DIVIDES_REXP : thm =
+val FINITE_DIVISORS : thm =
+val FINITE_SPECIAL_DIVISORS : thm =
+val DIVISORS_EQ : thm =
+val MULTIPLES_EQ : thm =
+val DIVIDES_NSUM : thm =
+val DIVIDES_GCD : thm =
+val GCD_ZERO : thm = |- [35mforall[0m a b. [32mgcd[0m (a,b) = 0 <=> a = 0 /\ b = 0
+val GCD_REFL : thm = |- [35mforall[0m a. [32mgcd[0m (a,a) = a
+val GCD_MULTIPLE : thm = |- [35mforall[0m a b. [32mgcd[0m (b,a * b) = b
+val GCD_ADD : thm =
+val GCD_SUB : thm =
+val DIVIDES_GCD_LEFT : thm = |- [35mforall[0m m n. m divides n <=> [32mgcd[0m (m,n) = m
+val DIVIDES_GCD_RIGHT : thm = |- [35mforall[0m m n. n divides m <=> [32mgcd[0m (m,n) = n
+val GCD_COPRIME_LMUL : thm =
+val GCD_COPRIME_RMUL : thm =
+val DIVIDES_LMUL_GCD : thm =
+val DIVIDES_RMUL_GCD : thm =
+val GCD_MUL_COPRIME : thm =
+val GCD_SYM : thm = |- [35mforall[0m a b. [32mgcd[0m (a,b) = [32mgcd[0m (b,a)
+val GCD_ASSOC : thm = |- [35mforall[0m a b c. [32mgcd[0m (a,[32mgcd[0m (b,c)) = [32mgcd[0m ([32mgcd[0m (a,b),c)
+val GCD_LMUL : thm = |- [35mforall[0m a b c. [32mgcd[0m (c * a,c * b) = c * [32mgcd[0m (a,b)
+val GCD_RMUL : thm = |- [35mforall[0m a b c. [32mgcd[0m (a * c,b * c) = c * [32mgcd[0m (a,b)
+val GCD_BEZOUT_SUM : thm =
+val GCD_COPRIME_DIVIDES_LMUL : thm =
+val GCD_COPRIME_DIVIDES_RMUL : thm =
+val GCD_UNIQUE : thm =
+val GCD_EQ : thm =
+val BEZOUT_GCD_STRONG : thm =
+val BEZOUT_ADD_STRONG : thm =
+val BEZOUT_GCD : thm =
+val BEZOUT_ADD : thm =
+val BEZOUT : thm =
+val GCD_BEZOUT : thm =
+val GCD_LE : thm =
+val GCD_LE_MIN_EQ : thm =
+val GCD_LE_MIN : thm =
+val GCD_LE_MAX : thm = |- [35mforall[0m m n. [32mgcd[0m (m,n) <= [32mMAX[0m m n
+val COPRIME : thm =
+val COPRIME_GCD : thm = |- [35mforall[0m a b. [32mcoprime[0m (a,b) <=> [32mgcd[0m (a,b) = 1
+val GCD_ONE : thm = |- [35mforall[0m a b. [32mcoprime[0m (a,b) ==> [32mgcd[0m (a,b) = 1
+val COPRIME_SYM : thm = |- [35mforall[0m a b. [32mcoprime[0m (a,b) <=> [32mcoprime[0m (b,a)
+val COPRIME_BEZOUT : thm =
+val COPRIME_DIVPROD : thm =
+val GCD_COPRIME : thm =
+val GCD_COPRIME_EXISTS : thm =
+val COPRIME_DIVPROD_IFF : thm =
+val CONG_MULT_LCANCEL_IFF : thm =
+val CONG_MULT_RCANCEL_IFF : thm =
+val COPRIME_MUL : thm =
+val COPRIME_LMUL : thm =
+val COPRIME_RMUL : thm =
+val COPRIME_EXP : thm =
+val COPRIME_EXP_IMP : thm =
+val COPRIME_REXP : thm =
+val COPRIME_LEXP : thm =
+val COPRIME_NPRODUCT_EQ : thm =
+val COPRIME_NPRODUCT : thm =
+val COPRIME_DIVISORS : thm =
+val COPRIME_REFL : thm = |- [35mforall[0m n. [32mcoprime[0m (n,n) <=> n = 1
+val GCD_EXP : thm = |- [35mforall[0m n a b. [32mgcd[0m (a EXP n,b EXP n) = [32mgcd[0m (a,b) EXP n
+val DIVIDES_MUL : thm =
+val DIVISION_DECOMP : thm =
+val PRIME_ALT : thm =
+val PRIME_COPRIME_STRONG : thm =
+val PRIME_COPRIME : thm =
+val PRIME_COPRIME_EQ : thm =
+val COPRIME_PRIME : thm =
+val PRIME_DIVPROD : thm =
+val PRIME_DIVPROD_EQ : thm =
+val PRIME_INT_DIVPROD_EQ : thm =
+val PRIME_FACTOR : thm =
+val PRIME : thm =
+val PRIME_PRIME_FACTOR : thm =
+val PRIME_FACTOR_LT : thm =
+val COPRIME_PRIME_EQ : thm =
+val GCD_PRIME_CASES : thm =
+val COPRIME_PRIMEPOW : thm =
+val COPRIME_BEZOUT_STRONG : thm =
+val COPRIME_BEZOUT_ALT : thm =
+val BEZOUT_PRIME : thm =
+val PRIME_DIVEXP : thm =
+val PRIME_DIVEXP_N : thm =
+val PRIME_DIVEXP_EQ : thm =
+val COPRIME_SOS : thm =
+val PRIME_IMP_NZ : thm = |- [35mforall[0m p. [32mprime[0m p ==> ~(p = 0)
+val DISTINCT_PRIME_COPRIME : thm =
+val PRIME_COPRIME_LT : thm =
+val DIVIDES_PRIME_PRIME : thm =
+val COPRIME_PRIME_PRIME : thm =
+val DIVIDES_PRIME_EXP_LE : thm =
+val EQ_PRIME_EXP : thm =
+val PRIME_ODD : thm = |- [35mforall[0m p. [32mprime[0m p ==> p = 2 \/ [32mODD[0m p
+val ODD_PRIME : thm = |- [35mforall[0m p. [32mprime[0m p ==> ([32mODD[0m p <=> 3 <= p)
+val DIVIDES_FACT_PRIME : thm =
+val EQ_PRIMEPOW : thm =
+val PRIME_IRREDUCIBLE : thm =
+val COPRIME_EXP_DIVPROD : thm =
+val PRIME_COPRIME_CASES : thm =
+val PRIME_DIVPROD_POW_GEN : thm =
+val PRIME_DIVPROD_POW_GEN_EQ : thm =
+val PRIME_DIVPROD_POW : thm =
+val PRIME_DIVPROD_POW_EQ : thm =
+val PRIME_FACTOR_INDUCT : thm =
+val COMPLETE_FACTOR_INDUCT : thm =
+val PRIME_FACTOR_PARTITION : thm =
+val COPRIME_PAIR_DECOMP : thm =
+val EXP_MULT_EXISTS : thm =
+val COPRIME_POW : thm =
+val PRIME_EXP : thm = |- [35mforall[0m p n. [32mprime[0m (p EXP n) <=> [32mprime[0m p /\ n = 1
+val PRIME_POWER_MULT : thm =
+val PRIME_POWER_EXP : thm =
+val DIVIDES_PRIMEPOW : thm =
+val PRIMEPOW_DIVIDES_PROD : thm =
+val EUCLID_BOUND : thm =
+val EUCLID : thm = |- [35mforall[0m n. [35mexists[0m p. [32mprime[0m p /\ p > n
+val PRIMES_INFINITE : thm = |- [32mINFINITE[0m {p | [32mprime[0m p}
+val FACTORIZATION_INDEX : thm =
+val PRIMEPOW_FACTOR : thm =
+val PRIMEPOW_DIVISORS_DIVIDES : thm =
+val PRIMEPOW_DIVISORS_EQ : thm =
+val CHINESE_REMAINDER : thm =
+val FINITE_EXP_LE : thm =
+val FINITE_INDICES : thm =
+val index_def : thm =
+val PRIMEPOW_DIVIDES_INDEX : thm =
+val LE_INDEX : thm =
+val EXP_INDEX_DIVIDES : thm = |- [35mforall[0m p n. p EXP [32mindex[0m p n divides n
+val INDEX_LT : thm =
+val INDEX_MUL : thm =
+val INDEX_EXP : thm =
+val INDEX_FACT : thm =
+val INDEX_FACT_ALT : thm =
+val INDEX_FACT_UNBOUNDED : thm =
+val PRIMEPOW_DIVIDES_FACT : thm =
+val INDEX_REFL : thm = |- [35mforall[0m n. [32mindex[0m n n = ([34mif [0mn <= 1[34m then [0m0[34m else [0m1)
+val INDEX_ZERO : thm = |- [35mforall[0m p n. ~(p divides n) ==> [32mindex[0m p n = 0
+val INDEX_POW : thm = |- [35mforall[0m p n k. [32mindex[0m (p EXP k) n = [32mindex[0m p n DIV k
+val INDEX_PRIME : thm =
+val INDEX_TRIVIAL_BOUND : thm = |- [35mforall[0m n p. [32mindex[0m p n <= n
+val INDEX_DECOMPOSITION : thm =
+val INDEX_DECOMPOSITION_PRIME : thm =
+val INDEX_DECOMPOSITION_LE : thm =
+val INDEX_DECOMPOSITION_UNIQUE : thm =
+val INDEX_UNIQUE : thm =
+val INDEX_UNIQUE_EQ : thm =
+val INDEX_UNIQUE_ALT : thm =
+val INDEX_ADD_MIN : thm =
+val INDEX_SUB_MIN : thm =
+val INDEX_ADD : thm =
+val INDEX_MULT_BASE : thm =
+val INDEX_MULT_EXP : thm =
+val INDEX_MULT_ADD : thm =
+val INDEX_NSUM_LE : thm =
+val DIVIDES_INDEX : thm =
+val EQ_INDEX : thm =
+val COPRIME_INDEX : thm =
+val INDEX_GCD : thm =
+val FORALL_PRIME_INDEX : thm =
+val INDEX_FACT_PRIME_MULT : thm =
+val PRIME_FACTORIZATION_INDEX : thm =
+val PRIME_POWER_EXISTS : thm =
+val PRIME_POWER_EXISTS_ALT : thm =
+val PRIME_FACTORIZATION_ALT : thm =
+val PRIME_FACTORIZATION : thm =
+val lcm : thm =
+val LCM_DIVIDES : thm =
+val LCM : thm =
+val LCM_DIVIDES_MUL : thm = |- [35mforall[0m m n. [32mlcm[0m (m,n) divides m * n
+val DIVIDES_LCM : thm =
+val LCM_SYM : thm = |- [35mforall[0m m n. [32mlcm[0m (m,n) = [32mlcm[0m (n,m)
+val DIVIDES_LCM_GCD : thm =
+val PRIMEPOW_DIVIDES_LCM : thm =
+val PRIME_DIVIDES_LCM : thm =
+val LCM_ZERO : thm = |- [35mforall[0m m n. [32mlcm[0m (m,n) = 0 <=> m = 0 \/ n = 0
+val INDEX_LCM : thm =
+val LCM_ASSOC : thm = |- [35mforall[0m m n p. [32mlcm[0m (m,[32mlcm[0m (n,p)) = [32mlcm[0m ([32mlcm[0m (m,n),p)
+val LCM_REFL : thm = |- [35mforall[0m n. [32mlcm[0m (n,n) = n
+val LCM_MULTIPLE : thm = |- [35mforall[0m a b. [32mlcm[0m (b,a * b) = a * b
+val LCM_GCD_DISTRIB : thm =
+val GCD_LCM_DISTRIB : thm =
+val LCM_UNIQUE : thm =
+val LCM_EQ : thm =
+val DIVIDES_LCM_LEFT : thm = |- [35mforall[0m m n. n divides m <=> [32mlcm[0m (m,n) = m
+val DIVIDES_LCM_RIGHT : thm = |- [35mforall[0m m n. m divides n <=> [32mlcm[0m (m,n) = n
+val MULT_LCM_GCD : thm = |- [35mforall[0m m n. [32mlcm[0m (m,n) * [32mgcd[0m (m,n) = m * n
+val MULT_GCD_LCM : thm = |- [35mforall[0m m n. [32mgcd[0m (m,n) * [32mlcm[0m (m,n) = m * n
+val LCM_LMUL : thm = |- [35mforall[0m a b c. [32mlcm[0m (c * a,c * b) = c * [32mlcm[0m (a,b)
+val LCM_RMUL : thm = |- [35mforall[0m a b c. [32mlcm[0m (a * c,b * c) = c * [32mlcm[0m (a,b)
+val LCM_EXP : thm = |- [35mforall[0m n a b. [32mlcm[0m (a EXP n,b EXP n) = [32mlcm[0m (a,b) EXP n
+val LCM_COPRIME_DECOMP : thm =
+val LE_LCM : thm =
+val LCM_LE_MULT : thm = |- [35mforall[0m m n. [32mlcm[0m (m,n) <= m * n
+val LCM_EQ_MULT : thm =
+val MAX_LE_LCM_EQ : thm =
+val MAX_LE_LCM : thm =
+val NEUTRAL_GCD : thm = |- [32mneutral[0m ([35m\[0mm n. [32mgcd[0m (m,n)) = 0
+val MONOIDAL_GCD : thm = |- [32mmonoidal[0m ([35m\[0mm n. [32mgcd[0m (m,n))
+val NEUTRAL_LCM : thm = |- [32mneutral[0m ([35m\[0mm n. [32mlcm[0m (m,n)) = 1
+val MONOIDAL_LCM : thm = |- [32mmonoidal[0m ([35m\[0mm n. [32mlcm[0m (m,n))
+val ITERATE_GCD_DIVIDES : thm =
+val ITERATE_GCD_DIVIDES_EQ : thm =
+val DIVIDES_ITERATE_GCD : thm =
+val DIVIDES_ITERATE_GCD_GEN : thm =
+val DIVIDES_ITERATE_LCM : thm =
+val DIVIDES_ITERATE_LCM_GEN : thm =
+val ITERATE_LCM_DIVIDES : thm =
+val ITERATE_LCM_DIVIDES_GEN : thm =
+val PRIMEPOW_DIVIDES_ITERATE_LCM : thm =
+val PRIMEPOW_DIVIDES_ITERATE_LCM_GEN : thm =
+val PRIME_DIVIDES_ITERATE_LCM_GEN : thm =
+val PRIME_DIVIDES_ITERATE_LCM : thm =
+val INDUCT_COPRIME : thm =
+val INDUCT_COPRIME_STRONG : thm =
+val INDUCT_COPRIME_ALT : thm =
+val nat_mod_lemma : thm =
+val nat_mod : thm =
+val FINITE_NUMBER_SEGMENT : thm =
+val CONG_SUB_CASES : thm =
+val CONG_CASES : thm =
+val CONG_CASE : thm =
+val CONG_MULT_LCANCEL : thm =
+val CONG_MULT_RCANCEL : thm =
+val CONG_REFL : thm = |- [35mforall[0m x n. (x == x) (mod n)
+val EQ_IMP_CONG : thm = |- [35mforall[0m a b n. a = b ==> (a == b) (mod n)
+val CONG_SYM : thm = |- [35mforall[0m x y n. (x == y) (mod n) <=> (y == x) (mod n)
+val CONG_TRANS : thm =
+val CONG_ADD : thm =
+val CONG_MULT : thm =
+val CONG_EXP : thm =
+val CONG_SUB : thm =
+val CONG_MULT_LCANCEL_EQ : thm =
+val CONG_MULT_RCANCEL_EQ : thm =
+val CONG_ADD_LCANCEL_EQ : thm =
+val CONG_ADD_RCANCEL_EQ : thm =
+val CONG_ADD_RCANCEL : thm =
+val CONG_ADD_LCANCEL : thm =
+val CONG_MULT_LCANCEL_ALL : thm =
+val CONG_LMUL : thm =
+val CONG_RMUL : thm =
+val CONG_IMP_EQ : thm =
+val CONG_DIVIDES_MODULUS : thm =
+val CONG_DIVIDES : thm =
+val CONG_COPRIME : thm =
+val CONG_GCD_RIGHT : thm =
+val CONG_GCD_LEFT : thm =
+val CONG_MOD : thm = |- [35mforall[0m a n. (a MOD n == a) (mod n)
+val MOD_MULT_CONG : thm =
+val CONG_MOD_LT : thm =
+val MOD_UNIQUE : thm =
+val CONG_DIV : thm =
+val CONG_DIV_COPRIME : thm =
+val CONG_LT : thm =
+val CONG_LE : thm =
+val CONG_SOLVE_EQ : thm =
+val CONG_SOLVE_LT_EQ : thm =
+val CONG_SOLVE : thm =
+val CONG_SOLVE_UNIQUE : thm =
+val CONG_SOLVE_UNIQUE_NONTRIVIAL : thm =
+val CONG_UNIQUE_INVERSE_PRIME : thm =
+val COUNT_CONG_SOLVE_SIMPLE : thm =
+val COUNT_CONG_SOLVE_GEN : thm =
+val COUNT_CONG_SOLVE : thm =
+val CONG_CHINESE : thm =
+val CHINESE_REMAINDER_UNIQUE : thm =
+val CHINESE_REMAINDER_COPRIME_UNIQUE : thm =
+val CHINESE_REMAINDER_USUAL : thm =
+val CONG_CHINESE_EQ : thm =
+val CHINESE_REMAINDER_COUNT : thm =
+val CHINESE_REMAINDER_COPRIME_COUNT : thm =
+val COUNT_ROOTS_MODULO_COPRIME : thm =
+val inverse_mod : thm =
+val INVERSE_MOD_BOUND : thm = |- [35mforall[0m n x. [32minverse_mod[0m n x < n <=> 2 <= n
+val INVERSE_MOD_RMUL_GEN : thm =
+val INVERSE_MOD_LMUL_GEN : thm =
+val INVERSE_MOD_RMUL_EQ : thm =
+val INVERSE_MOD_LMUL_EQ : thm =
+val INVERSE_MOD_LMUL : thm =
+val INVERSE_MOD_RMUL : thm =
+val INVERSE_MOD_UNIQUE : thm =
+val INVERSE_MOD_CONG : thm =
+val INVERSE_MOD_INVERSE_MOD_CONG : thm =
+val INVERSE_MOD_INVERSE_MOD : thm =
+val INVERSE_MOD_NONZERO_ALT : thm =
+val INVERSE_MOD_NONZERO : thm =
+val INVERSE_MOD_BOUND_LE : thm =
+val INVERSE_MOD_INVERSION : thm =
+val squarefree : thm =
+val SQUAREFREE_IMP_NZ : thm = |- [35mforall[0m n. [32msquarefree[0m n ==> ~(n = 0)
+val SQUAREFREE_PRIME : thm =
+val SQUAREFREE_PRIME_DIVISOR : thm =
+val SQUAREFREE_INDEX : thm =
+val SQUAREFREE_PRIME_INDEX : thm =
+val SQUAREFREE_COPRIME : thm =
+val SQUAREFREE_COPRIME_DIVISORS : thm =
+val SQUAREFREE_DIVISOR : thm =
+val PRIME_IMP_SQUAREFREE : thm = |- [35mforall[0m p. [32mprime[0m p ==> [32msquarefree[0m p
+val SQUAREFREE_MUL : thm =
+val SQUAREFREE_EXP : thm =
+val SQUAREFREE_DIVIDES : thm =
+val SQUAREFREE_DIVEXP : thm =
+val SQUAREFREE_DIVEXP_EQ : thm =
+val SQUAREFREE : thm =
+val SQUAREFREE_ALT : thm =
+val SQUAREFREE_GCD : thm =
+val SQUAREFREE_GCD_SQUARE : thm =
+val SQUAREFREE_NPRODUCT : thm =
+val SQUAREFREE_EXPAND : thm =
+val SQUAREFREE_EXPAND_EQ : thm =
+val SQUAREFREE_DECOMPOSITION : thm =
+val CONG_MOD_SQUAREFREE : thm =
+val CONG_MOD_SQUAREFREE_EQ : thm =
+val phi : thm =
+val PHI_ALT : thm = |- [32mphi[0m n = [32mCARD[0m {m | [32mcoprime[0m (m,n) /\ m < n}
+val PHI_FINITE_LEMMA : thm = |- [35mforall[0m n. [32mFINITE[0m {m | [32mcoprime[0m (m,n) /\ m < n}
+val PHI_ANOTHER : thm =
+val PHI_LIMIT : thm = |- [35mforall[0m n. [32mphi[0m n <= n
+val PHI_LIMIT_STRONG : thm = |- [35mforall[0m n. ~(n = 1) ==> [32mphi[0m n <= n - 1
+val PHI_PRIME_EQ : thm =
+val PHI_PRIME : thm = |- [35mforall[0m p. [32mprime[0m p ==> [32mphi[0m p = p - 1
+val PHI_PRIMEPOW_SUC : thm =
+val PHI_PRIMEPOW : thm =
+val PHI_PRIMEPOW_ALT : thm =
+val PHI_MULTIPLICATIVE : thm =
+val EVEN_PHI : thm = |- [35mforall[0m n. 3 <= n ==> [32mEVEN[0m ([32mphi[0m n)
+val EVEN_PHI_EQ : thm = |- [35mforall[0m n. [32mEVEN[0m ([32mphi[0m n) <=> n = 0 \/ 3 <= n
+val ODD_PHI_EQ : thm = |- [35mforall[0m n. [32mODD[0m ([32mphi[0m n) <=> n = 1 \/ n = 2
+val PHI_EQ_PRIME : thm = |- [35mforall[0m p. [32mphi[0m p = p - 1 <=> p = 0 \/ [32mprime[0m p
+val PHI_LIMIT_COMPOSITE : thm =
+val NPRODUCT_MOD : thm =
+val NPRODUCT_CMUL : thm =
+val ITERATE_OVER_COPRIME : thm =
+val ITERATE_ITERATE_DIVISORS : thm =
+val FERMAT_LITTLE : thm =
+val FERMAT_LITTLE_PRIME : thm =
+val LUCAS_COPRIME_LEMMA : thm =
+val LUCAS_WEAK : thm =
+val LUCAS : thm =
+val order : thm =
+val EXP_ITER : thm = |- [35mforall[0m x n. x EXP n = [32mITER[0m n ([35m\[0my. x * y) 1
+val ORDER_DIVIDES : thm =
+val ORDER : thm = |- [35mforall[0m n a. (a EXP [32morder[0m n a == 1) (mod n)
+val ORDER_UNIQUE_ALT : thm =
+val ORDER_MINIMAL : thm =
+val ORDER_WORKS : thm =
+val ORDER_UNIQUE_PRIME : thm =
+val ORDER_CONG : thm =
+val ORDER_MOD : thm = |- [35mforall[0m p n. [32morder[0m p (n MOD p) = [32morder[0m p n
+val COPRIME_ORDER : thm =
+val ORDER_DIVIDES_PHI : thm =
+val ORDER_LE_PHI : thm = |- [35mforall[0m n. ~(n = 0) ==> [32morder[0m n a <= [32mphi[0m n
+val ORDER_DIVIDES_EXPDIFF : thm =
+val ORDER_UNIQUE : thm =
+val ORDER_MUL_LCM : thm =
+val ORDER_EXP_GEN : thm =
+val ORDER_EXP : thm =
+val ORDER_INVERSE_MOD : thm =
+val ORDER_MUL_DIVIDES : thm =
+val ORDER_MUL_EQ : thm =
+val ORDER_LCM_EXISTS : thm =
+val ORDER_DIVIDES_MAXIMAL : thm =
+val POWER_RESIDUE_MODULO_COPRIME : thm =
+val POWER_RESIDUE_MODULO_PRIME : thm =
+val INJECTIVE_EXP_MODULO : thm =
+val PRIMITIVE_ROOT_IMP_COPRIME : thm =
+val PRIMITIVE_ROOT_IMP_PRIME : thm =
+val PRIMITIVE_ROOT_IMAGE : thm =
+val PRIMITIVE_ROOT_IMAGE_PRIME : thm =
+val PRIMITIVE_ROOT_SURJECTIVE : thm =
+val PRIMITIVE_ROOT_SURJECTIVE_ALT : thm =
+val PRIMITIVE_ROOT_SURJECTIVE_PRIME : thm =
+val PRIMITIVE_ROOT_SURJECTIVE_PRIME_ALT : thm =
+val PRIME_DIVISOR_SQRT : thm =
+val PRIME_PRIME_FACTOR_SQRT : thm =
+val POCKLINGTON_LEMMA : thm =
+val POCKLINGTON : thm =
+val POCKLINGTON_ALT : thm =
+val primefact : thm =
+val PRIMEFACT : thm = |- [35mforall[0m n. ~(n = 0) ==> ([35mexists[0m ps. [32mprimefact[0m ps n)
+val PRIMAFACT_CONTAINS : thm =
+val PRIMEFACT_VARIANT : thm =
+val LUCAS_PRIMEFACT : thm =
+val POCKLINGTON_PRIMEFACT : thm =
+val INT_DIVIDES_REFL : thm = |- [35mforall[0m d. d divides d
+val INT_DIVIDES_TRANS : thm =
+val INT_DIVIDES_ADD : thm =
+val INT_DIVIDES_SUB : thm =
+val INT_DIVIDES_ZERO : thm = |- [35mforall[0m x. [32m&[0m0 divides x <=> x = [32m&[0m0
+val INT_DIVIDES_LNEG : thm = |- [35mforall[0m d x. --d divides x <=> d divides x
+val INT_DIVIDES_RNEG : thm = |- [35mforall[0m d x. d divides --x <=> d divides x
+val INT_DIVIDES_RMUL : thm = |- [35mforall[0m d x y. d divides x ==> d divides x * y
+val INT_DIVIDES_LMUL : thm = |- [35mforall[0m d x y. d divides y ==> d divides x * y
+val INT_DIVIDES_ADD_REVR : thm =
+val INT_DIVIDES_ADD_REVL : thm =
+val INT_DIVIDES_MUL_L : thm =
+val INT_DIVIDES_MUL_R : thm =
+val INT_DIVIDES_POW : thm =
+val INT_DIVIDES_RPOW : thm =
+val INT_DIVIDES_RPOW_SUC : thm =
+val INT_DIVIDES_POW_LE_IMP : thm =
+val INT_DIVIDES_ANTISYM_DIVISORS : thm =
+val INT_DIVIDES_ANTISYM_MULTIPLES : thm =
+val INT_DIVIDES_ONE_POS : thm =
+val INT_DIVIDES_ONE_ABS : thm = |- [35mforall[0m d. d divides [32m&[0m1 <=> [32mabs[0m d = [32m&[0m1
+val INT_DIVIDES_ONE : thm = |- [35mforall[0m d. d divides [32m&[0m1 <=> d = [32m&[0m1 \/ d = -- [32m&[0m1
+val INT_DIVIDES_ANTISYM_ASSOCIATED : thm =
+val INT_DIVIDES_ANTISYM : thm =
+val INT_DIVIDES_ANTISYM_ABS : thm =
+val INT_DIVIDES_ANTISYM_POS : thm =
+val INT_GCD_POS : thm = |- [35mforall[0m a b. [32m&[0m0 <= [32mgcd[0m (a,b)
+val INT_ABS_GCD : thm = |- [35mforall[0m a b. [32mabs[0m ([32mgcd[0m (a,b)) = [32mgcd[0m (a,b)
+val INT_GCD_DIVIDES : thm =
+val INT_COPRIME_GCD : thm = |- [35mforall[0m a b. [32mcoprime[0m (a,b) <=> [32mgcd[0m (a,b) = [32m&[0m1
+val INT_GCD_BEZOUT : thm =
+val INT_DIVIDES_GCD : thm =
+val INT_GCD : thm =
+val INT_GCD_UNIQUE : thm =
+val INT_GCD_UNIQUE_ABS : thm =
+val INT_GCD_REFL : thm = |- [35mforall[0m a. [32mgcd[0m (a,a) = [32mabs[0m a
+val INT_GCD_SYM : thm = |- [35mforall[0m a b. [32mgcd[0m (a,b) = [32mgcd[0m (b,a)
+val INT_GCD_ASSOC : thm =
+val INT_GCD_ABS : thm =
+val INT_GCD_ADD : thm =
+val INT_GCD_SUB : thm =
+val INT_DIVIDES_GCD_LEFT : thm =
+val INT_DIVIDES_GCD_RIGHT : thm =
+val INT_GCD_EQ : thm =
+val INT_GCD_LNEG : thm = |- [35mforall[0m a b. [32mgcd[0m (--a,b) = [32mgcd[0m (a,b)
+val INT_GCD_RNEG : thm = |- [35mforall[0m a b. [32mgcd[0m (a,--b) = [32mgcd[0m (a,b)
+val INT_GCD_NEG : thm =
+val INT_GCD_LABS : thm = |- [35mforall[0m a b. [32mgcd[0m ([32mabs[0m a,b) = [32mgcd[0m (a,b)
+val INT_GCD_RABS : thm = |- [35mforall[0m a b. [32mgcd[0m (a,[32mabs[0m b) = [32mgcd[0m (a,b)
+val INT_GCD_ABS : thm =
+val INT_GCD_LMUL : thm =
+val INT_GCD_RMUL : thm =
+val INT_GCD_COPRIME_LMUL : thm =
+val INT_GCD_COPRIME_RMUL : thm =
+val INT_GCD_COPRIME_DIVIDES_LMUL : thm =
+val INT_GCD_COPRIME_DIVIDES_RMUL : thm =
+val INT_GCD_COPRIME_EXISTS : thm =
+val INT_ABS_LCM : thm = |- [35mforall[0m a b. [32mabs[0m ([32mlcm[0m (a,b)) = [32mlcm[0m (a,b)
+val INT_DIVIDES_LCM : thm =
+val INT_LCM_UNIQUE_ABS : thm =
+val INT_LCM_UNIQUE : thm =
+val INT_LCM_EQ : thm =
+val INT_LCM_REFL : thm = |- [35mforall[0m n. [32mlcm[0m (n,n) = [32mabs[0m n
+val INT_LCM_SYM : thm = |- [35mforall[0m m n. [32mlcm[0m (m,n) = [32mlcm[0m (n,m)
+val INT_LCM_ASSOC : thm =
+val INT_LCM_LNEG : thm = |- [35mforall[0m a b. [32mlcm[0m (--a,b) = [32mlcm[0m (a,b)
+val INT_LCM_RNEG : thm = |- [35mforall[0m a b. [32mlcm[0m (a,--b) = [32mlcm[0m (a,b)
+val INT_LCM_NEG : thm =
+val INT_LCM_LABS : thm = |- [35mforall[0m a b. [32mlcm[0m ([32mabs[0m a,b) = [32mlcm[0m (a,b)
+val INT_LCM_RABS : thm = |- [35mforall[0m a b. [32mlcm[0m (a,[32mabs[0m b) = [32mlcm[0m (a,b)
+val INT_LCM_ABS : thm =
+val INT_LCM_LMUL : thm =
+val INT_LCM_RMUL : thm =
+val INT_COPRIME : thm =
+val INT_COPRIME_ALT : thm =
+val INT_COPRIME_SYM : thm = |- [35mforall[0m a b. [32mcoprime[0m (a,b) <=> [32mcoprime[0m (b,a)
+val INT_COPRIME_DIVPROD : thm =
+val INT_GCD_COPRIME : thm =
+val INT_COPRIME_MUL : thm =
+val INT_COPRIME_LMUL : thm =
+val INT_COPRIME_RMUL : thm =
+val INT_COPRIME_REFL : thm = |- [35mforall[0m n. [32mcoprime[0m (n,n) <=> n divides [32m&[0m1
+val INT_COPRIME_RPOW : thm =
+val INT_COPRIME_LPOW : thm =
+val INT_COPRIME_POW : thm =
+val INT_COPRIME_POW_IMP : thm =
+val INT_GCD_POW : thm =
+val INT_LCM_POW : thm =
+val INT_DIVISION_DECOMP : thm =
+val INT_DIVIDES_MUL : thm =
+val INT_CHINESE_REMAINDER : thm =
+val INT_CHINESE_REMAINDER_USUAL : thm =
+val INT_COPRIME_DIVISORS : thm =
+val INT_COPRIME_LNEG : thm = |- [35mforall[0m a b. [32mcoprime[0m (--a,b) <=> [32mcoprime[0m (a,b)
+val INT_COPRIME_RNEG : thm = |- [35mforall[0m a b. [32mcoprime[0m (a,--b) <=> [32mcoprime[0m (a,b)
+val INT_COPRIME_NEG : thm =
+val INT_COPRIME_LABS : thm =
+val INT_COPRIME_RABS : thm =
+val INT_COPRIME_ABS : thm =
+val INT_CONG : thm = |- [35mforall[0m x y n. (x == y) (mod n) <=> n divides x - y
+val INT_CONG_MOD_ABS : thm =
+val INT_CONG_MUL_LCANCEL : thm =
+val INT_CONG_MUL_RCANCEL : thm =
+val INT_CONG_MULT_LCANCEL_ALL : thm =
+val INT_CONG_LMUL : thm =
+val INT_CONG_RMUL : thm =
+val INT_CONG_REFL : thm = |- [35mforall[0m x n. (x == x) (mod n)
+val INT_EQ_IMP_CONG : thm = |- [35mforall[0m a b n. a = b ==> (a == b) (mod n)
+val INT_CONG_SYM : thm =
+val INT_CONG_TRANS : thm =
+val INT_CONG_ADD : thm =
+val INT_CONG_SUB : thm =
+val INT_CONG_MUL : thm =
+val INT_CONG_POW : thm =
+val INT_CONG_MUL_LCANCEL_EQ : thm =
+val INT_CONG_MUL_RCANCEL_EQ : thm =
+val INT_CONG_ADD_LCANCEL_EQ : thm =
+val INT_CONG_ADD_RCANCEL_EQ : thm =
+val INT_CONG_ADD_RCANCEL : thm =
+val INT_CONG_ADD_LCANCEL : thm =
+val INT_CONG_INT_DIVIDES_MODULUS : thm =
+val INT_CONG_DIVIDES : thm =
+val INT_CONG_COPRIME : thm =
+val INT_COPRIME_RREM : thm =
+val INT_COPRIME_LREM : thm =
+val INT_CONG_GCD_RIGHT : thm =
+val INT_CONG_GCD_LEFT : thm =
+val INT_CONG_SOLVE : thm =
+val INT_CONG_SOLVE_EQ : thm =
+val INT_CONG_SOLVE_UNIQUE : thm =
+val INT_CONG_CHINESE : thm =
+val INT_CHINESE_REMAINDER_COPRIME : thm =
+val INT_CHINESE_REMAINDER_COPRIME_UNIQUE : thm =
+val SOLVABLE_GCD : thm =
+val INT_LINEAR_CONG_POS : thm =
+val INT_CONG_SOLVE_POS : thm =
+val INT_CONG_IMP_EQ : thm =
+val INT_CONG_DIV : thm =
+val INT_CONG_DIV_COPRIME : thm =
+val INT_CRT_STRONG : thm =
+val INT_CRT_STRONG_IFF : thm =
+val INT_DIVIDES_LE : thm =
+val INT_DIVIDES_POW_LE : thm =
+val int_prime : thm =
+val INT_PRIME_NEG : thm = |- [35mforall[0m p. [32mint_prime[0m (--p) <=> [32mint_prime[0m p
+val INT_PRIME_ABS : thm = |- [35mforall[0m p. [32mint_prime[0m ([32mabs[0m p) <=> [32mint_prime[0m p
+val INT_PRIME_FACTOR : thm =
+val INT_PRIME_FACTOR_LT : thm =
+val INT_PRIME_FACTOR_INDUCT : thm =
+val INT_DIVIDES_FACT : thm =
+val INT_EUCLID_BOUND : thm =
+val INT_EUCLID : thm = |- [35mforall[0m n. [35mexists[0m p. [32mint_prime[0m p /\ p > n
+val INT_PRIMES_INFINITE : thm = |- [32mINFINITE[0m {p | [32mint_prime[0m p}
+val INT_COPRIME_PRIME : thm =
+val INT_COPRIME_PRIME_EQ : thm =
+val INT_PRIME_COPRIME : thm =
+val INT_PRIME_COPRIME_EQ : thm =
+val INT_COPRIME_PRIMEPOW : thm =
+val INT_COPRIME_BEZOUT : thm =
+val INT_COPRIME_BEZOUT_ALT : thm =
+val INT_BEZOUT_PRIME : thm =
+val INT_PRIME_DIVPROD : thm =
+val INT_PRIME_DIVPROD_EQ : thm =
+val INT_PRIME_DIVPOW : thm =
+val INT_PRIME_DIVPOW_N : thm =
+val INT_COPRIME_SOS : thm =
+val INT_PRIME_IMP_NZ : thm = |- [35mforall[0m p. [32mint_prime[0m p ==> ~(p = [32m&[0m0)
+val INT_DISTINCT_PRIME_COPRIME : thm =
+val INT_PRIME_COPRIME_LT : thm =
+val INT_DIVIDES_PRIME_PRIME : thm =
+val INT_COPRIME_POW_DIVPROD : thm =
+val INT_PRIME_COPRIME_CASES : thm =
+val INT_PRIME_DIVPROD_POW : thm =
+val INT_POW_MUL_EXISTS : thm =
+val INT_COPRIME_POW_ABS : thm =
+val INT_COPRIME_POW_ODD : thm =
+val INT_DIVIDES_PRIME_POW_LE : thm =
+val INT_EQ_PRIME_POW_ABS : thm =
+val INT_EQ_PRIME_POW_POS : thm =
+val INT_DIVIDES_FACT_PRIME : thm =
+val word_sizes : thm list ref = {contents = []}
+val add_word_sizes : thm list -> unit = <fun>
+val DIGITSUM_WORKS_GEN : thm =
+val DIGITSUM_WORKS : thm =
+val DIGITSUM_BOUND : thm =
+val DIGITSUM_SPLIT : thm =
+val DIGITSUM_DIV : thm =
+val DIGITSUM_MOD : thm =
+val DIGITSUM_MOD_NUMSEG : thm =
+val DIGITSUM_DIV_NUMSEG : thm =
+val DIGITSUM_DIV_MOD : thm =
+val DIGITSUM_UNIQUE : thm =
+val bitval : thm = |- [35mforall[0m b. [32mbitval[0m b = ([34mif [0mb[34m then [0m1[34m else [0m0)
+val BITVAL_CLAUSES : thm = |- [32mbitval[0m [32mfalse[0m = 0 /\ [32mbitval[0m [32mtrue[0m = 1
+val BITVAL_BOUND : thm = |- [35mforall[0m b. [32mbitval[0m b <= 1
+val BITVAL_BOUND_ALT : thm = |- [35mforall[0m b. [32mbitval[0m b < 2
+val ODD_BITVAL : thm = |- [35mforall[0m b. [32mODD[0m ([32mbitval[0m b) <=> b
+val EVEN_BITVAL : thm = |- [35mforall[0m b. [32mEVEN[0m ([32mbitval[0m b) <=> ~b
+val NUM_AS_BITVAL : thm = |- [35mforall[0m n. n <= 1 <=> ([35mexists[0m b. n = [32mbitval[0m b)
+val NUM_AS_BITVAL_ALT : thm = |- [35mforall[0m n. n < 2 <=> ([35mexists[0m b. n = [32mbitval[0m b)
+val BITVAL_POS : thm = |- [35mforall[0m b. 0 < [32mbitval[0m b <=> b
+val BITVAL_NOT : thm = |- [35mforall[0m b. [32mbitval[0m (~b) = 1 - [32mbitval[0m b
+val BITVAL_AND : thm = |- [35mforall[0m b c. [32mbitval[0m (b /\ c) = [32mbitval[0m b * [32mbitval[0m c
+val BITVAL_OR : thm =
+val BITVAL_IFF : thm =
+val BITVAL_XOR : thm =
+val BITVAL_EXP : thm =
+val INT_BITVAL_NOT : thm = |- [35mforall[0m b. [32m&[0m([32mbitval[0m (~b)) = [32m&[0m1 - [32m&[0m([32mbitval[0m b)
+val INT_BITVAL_AND : thm =
+val INT_BITVAL_OR : thm =
+val INT_BITVAL_IMP : thm =
+val INT_BITVAL_IFF : thm =
+val INT_BITVAL_POW : thm =
+val REAL_BITVAL_NOT : thm = |- [35mforall[0m b. [32m&[0m([32mbitval[0m (~b)) = [32m&[0m1 - [32m&[0m([32mbitval[0m b)
+val BITVAL_ODD : thm = |- [35mforall[0m n. [32mbitval[0m ([32mODD[0m n) = n MOD 2
+val LE_BITVAL : thm = |- [35mforall[0m b c. [32mbitval[0m b <= [32mbitval[0m c <=> b ==> c
+val INT_LE_BITVAL : thm =
+val REAL_LE_BITVAL : thm =
+val EQ_BITVAL : thm = |- [35mforall[0m b c. [32mbitval[0m b = [32mbitval[0m c <=> b <=> c
+val INT_EQ_BITVAL : thm =
+val REAL_EQ_BITVAL : thm =
+val BINARY_DIGITSUM_BOUND : thm =
+val BINARY_DIGITSUM_SPLIT : thm =
+val BINARY_DIGITSUM_DIV : thm =
+val BINARY_DIGITSUM_MOD : thm =
+val word_tybij : thm =
+val WORD_EQ_BITVECTOR : thm =
+val bit : thm =
+val WORD_EQ_BITS_ALT : thm =
+val WORD_EQ_BITS : thm =
+val BIT_TRIVIAL : thm =
+val BIT_GUARD : thm = |- [35mforall[0m x i. [32mbit[0m i x <=> i < [32mdimindex[0m (:N) /\ [32mbit[0m i x
+val bits_of_word : thm = |- [35mforall[0m w. [32mbits_of_word[0m w = {i | [32mbit[0m i w}
+val word_of_bits : thm =
+val IN_BITS_OF_WORD : thm = |- [35mforall[0m w i. i IN [32mbits_of_word[0m w <=> [32mbit[0m i w
+val BIT_WORD_OF_BITS : thm =
+val WORD_OF_BITS_EQ : thm =
+val WORD_OF_BITS_OF_WORD : thm =
+val BITS_OF_WORD_OF_BITS : thm =
+val BITS_OF_WORD_EQ : thm =
+val WORD_OF_BITS : thm = |- [35mforall[0m w. w = [32mword_of_bits[0m {i | [32mbit[0m i w}
+val WORD_OF_BITS_ALT : thm =
+val FINITE_BITS_OF_WORD : thm = |- [35mforall[0m w. [32mFINITE[0m ([32mbits_of_word[0m w)
+val BITS_OF_WORD_SUBSET : thm =
+val BITS_OF_WORD_SUBSET_ALT : thm =
+val BITS_OF_WORD_SUBSET_NUMSEG : thm =
+val val_def : thm =
+val VAL : thm =
+val word : thm =
+val BIT_WORD : thm =
+val BIT_LSB_WORD : thm =
+val BITS_OF_WORD_EQ_EMPTY : thm =
+val WORD_OF_BITS_EMPTY : thm = |- [32mword_of_bits[0m {} = [32mword[0m 0
+val BITVAL_BIT_WORD : thm =
+val WORD_VAL : thm = |- [35mforall[0m w. [32mword[0m ([32mval[0m w) = w
+val VAL_WORD : thm = |- [35mforall[0m n. [32mval[0m ([32mword[0m n) = n MOD 2 EXP [32mdimindex[0m (:N)
+val MOD_VAL_WORD : thm =
+val DIVIDES_VAL_WORD : thm =
+val VAL_WORD_LE : thm = |- [35mforall[0m n k. n <= k ==> [32mval[0m ([32mword[0m n) <= k
+val VAL_WORD_LT : thm = |- [35mforall[0m n k. n < k ==> [32mval[0m ([32mword[0m n) < k
+val FORALL_WORD : thm =
+val EXISTS_WORD : thm =
+val WORD_BITVAL : thm =
+val VAL_WORD_BITVAL : thm =
+val VAL_WORD_EQ : thm =
+val VAL_EQ : thm = |- [35mforall[0m v w. [32mval[0m v = [32mval[0m w <=> v = w
+val VAL_EQ_BITVAL : thm =
+val WORD_EQ : thm =
+val WORD_EQ_IMP : thm =
+val VAL_BOUND : thm = |- [35mforall[0m w. [32mval[0m w < 2 EXP [32mdimindex[0m (:N)
+val INT_VAL_BOUND : thm = |- [35mforall[0m w. [32m&[0m([32mval[0m w) < [32m&[0m2 pow [32mdimindex[0m (:N)
+val VAL_MOD_REFL : thm = |- [35mforall[0m x. [32mval[0m x MOD 2 EXP [32mdimindex[0m (:N) = [32mval[0m x
+val VAL_WORD_EQ_EQ : thm =
+val FORALL_VAL_GEN : thm =
+val FORALL_VAL : thm =
+val VAL_CONG : thm =
+val WORD_MOD_SIZE : thm =
+val VAL_WORD_CONG : thm =
+val VAL_WORD_GALOIS : thm =
+val WORD_VAL_GALOIS : thm =
+val DIVIDES_VAL_WORD_EQ : thm =
+val BIT_VAL : thm = |- [35mforall[0m x i. [32mbit[0m i x <=> [32mODD[0m ([32mval[0m x DIV 2 EXP i)
+val BIT_VAL_MOD : thm =
+val BIT_LSB : thm = |- [35mforall[0m x. [32mbit[0m 0 x <=> [32mODD[0m ([32mval[0m x)
+val TWICE_MSB : thm =
+val MSB_VAL : thm =
+val MSB_INT_VAL : thm =
+val BITVAL_MSB : thm =
+val BLOCK_BITS_ZERO_ALT : thm =
+val BLOCK_BITS_ZERO : thm =
+val LOWER_BITS_ZERO : thm =
+val UPPER_BITS_ZERO : thm =
+val UPPER_BITS_ZERO_ALT : thm =
+val VAL_WORD_OF_BITS : thm =
+val WORD_OF_BITS_AS_WORD : thm =
+val WORD_OF_BITS_AS_WORD_FINITE : thm =
+val WORD_OF_BITS_SING_AS_WORD : thm =
+val VAL_WORD_OF_BITS_SING : thm =
+val WORD_OF_BITS_MASK : thm =
+val BIT_MASK_WORD : thm =
+val BIT_WORD_BITVAL : thm =
+val BIT_WORD_OF_BITS_SING : thm =
+val VAL_MOD : thm =
+val VAL_MOD_STEP : thm =
+val VAL_DIV : thm =
+val VAL_DIV_ALT : thm =
+val VAL_LE_BITS : thm =
+val VAL_LE_SUBSET : thm =
+val ival : thm =
+val iword : thm =
+val word_sgn : thm = |- [35mforall[0m x. [32mword_sgn[0m x = [32mint_sgn[0m ([32mival[0m x)
+val INT_IVAL : thm =
+val WORD_IWORD : thm = |- [35mforall[0m n. [32mword[0m n = [32miword[0m ([32m&[0mn)
+val IVAL_VAL : thm =
+val VAL_IVAL : thm =
+val IVAL_EQ_VAL : thm =
+val INT_VAL_IWORD : thm =
+val INT_VAL_IWORD_EQ : thm =
+val MSB_IVAL : thm = |- [35mforall[0m w. [32mbit[0m ([32mdimindex[0m (:N) - 1) w <=> [32mival[0m w < [32m&[0m0
+val IVAL_BOUND : thm =
+val IVAL_VAL_CONG : thm =
+val IVAL_CONG : thm =
+val IVAL_EQ : thm = |- [35mforall[0m v w. [32mival[0m v = [32mival[0m w <=> v = w
+val IWORD_EQ : thm =
+val IWORD_REM_SIZE : thm =
+val IVAL_IWORD_CONG : thm =
+val VAL_IWORD_CONG : thm =
+val IVAL_WORD_CONG : thm =
+val IVAL_IWORD : thm =
+val IWORD_IVAL : thm = |- [35mforall[0m w. [32miword[0m ([32mival[0m w) = w
+val IVAL_IWORD_GALOIS : thm =
+val BIT_IVAL : thm =
+val BIT_IWORD : thm =
+val INT_REM_IVAL : thm =
+val VAL_IVAL_REM : thm =
+val INT_REM_IVAL_IWORD : thm =
+val INT_DIVIDES_IVAL_IWORD : thm =
+val FORALL_IVAL_GEN : thm =
+val FORALL_IVAL : thm =
+val FORALL_IWORD : thm =
+val EXISTS_IWORD : thm =
+val BIT_LSB_IWORD : thm = |- [35mforall[0m x. [32mbit[0m 0 ([32miword[0m x) <=> x rem [32m&[0m2 = [32m&[0m1
+val TWOS_COMPLEMENT_GEN : thm =
+val TWOS_COMPLEMENT : thm =
+val numbit : thm = |- [35mforall[0m n i. [32mnumbit[0m i n <=> [32mODD[0m (n DIV 2 EXP i)
+val NUMBIT_VAL : thm = |- [32mnumbit[0m i ([32mval[0m e) <=> [32mbit[0m i e
+val bits_of_num : thm = |- [35mforall[0m n. [32mbits_of_num[0m n = {i | [32mnumbit[0m i n}
+val IN_BITS_OF_NUM : thm =
+val BITS_OF_NUM_SUBSET_NUMSEG_LT : thm =
+val FINITE_BITS_OF_NUM : thm = |- [35mforall[0m n. [32mFINITE[0m ([32mbits_of_num[0m n)
+val NSUM_BITS_OF_NUM : thm =
+val BITS_OF_NUM_NSUM : thm =
+val BITS_OF_NUM_EQ : thm =
+val BITS_OF_NUM_GALOIS : thm =
+val NSUM_BITS_DIV : thm =
+val NSUM_BITS_MOD : thm =
+val NSUM_BITS_EQ : thm =
+val BITSUM_BOUND : thm =
+val BITS_OF_NUM_SUBSET_NUMSEG_EQ : thm =
+val BITSUM_DIVIDES : thm =
+val BITS_OF_NUM_DISJOINT_NUMSEG_EQ : thm =
+val BITS_OF_NUM_DIV : thm =
+val BITS_OF_NUM_MOD : thm =
+val BITS_OF_NUM_MUL_ALT : thm =
+val BITS_OF_NUM_MUL : thm =
+val BITS_OF_NUM_ADD : thm =
+val DISJOINT_BITS_HILO : thm =
+val DISJOINT_BITS_CLAUSES : thm =
+val DIV_MOD_DISJOINT_BITS : thm =
+val BITS_OF_WORD_WORD : thm =
+val BITS_OF_NUM_VAL : thm = |- [35mforall[0m x. [32mbits_of_num[0m ([32mval[0m x) = [32mbits_of_word[0m x
+val num_shift_add : thm =
+val num_shift_add_SUC : thm =
+val num_shift_add_lt : thm =
+val num_shift_add_mod : thm =
+val word_UINT_MAX : thm = |- [32mword_UINT_MAX[0m = [32mword[0m (2 EXP [32mdimindex[0m (:N) - 1)
+val word_INT_MIN : thm =
+val word_INT_MAX : thm =
+val WORD_INT_MIN : thm = |- [32mword_INT_MIN[0m = [32mword[0m (2 EXP ([32mdimindex[0m (:N) - 1))
+val WORD_INT_MAX : thm =
+val VAL_WORD_UINT_MAX : thm = |- [32mval[0m [32mword_UINT_MAX[0m = 2 EXP [32mdimindex[0m (:N) - 1
+val IVAL_WORD_INT_MIN : thm =
+val IVAL_WORD_INT_MAX : thm =
+val VAL_BOUND_ALT : thm = |- [35mforall[0m w. [32mval[0m w <= [32mval[0m [32mword_UINT_MAX[0m
+val IVAL_BOUND_ALT : thm =
+val VAL_WORD_INT_MIN : thm = |- [32mval[0m [32mword_INT_MIN[0m = 2 EXP ([32mdimindex[0m (:N) - 1)
+val INT_VAL_WORD_INT_MIN : thm =
+val WORD_INT_MIN_ALT : thm =
+val BIT_WORD_INT_MIN : thm =
+val word_saturate : thm =
+val iword_saturate : thm =
+val word_popcount : thm =
+val HAS_SIZE_BITS_OF_WORD_POPCOUNT : thm =
+val WORD_POPCOUNT_BOUND : thm = |- [35mforall[0m x. [32mword_popcount[0m x <= [32mdimindex[0m (:N)
+val WORD_POPCOUNT_BOUND_SIZE : thm =
+val WORD_POPCOUNT_BITVAL : thm =
+val WORD_POPCOUNT_NSUM : thm =
+val WORD_POPCOUNT_LE_BITS : thm =
+val WORD_POPCOUNT_WORD_OF_BITS_GEN : thm =
+val WORD_POPCOUNT_WORD_OF_BITS : thm =
+val word_evenparity : thm =
+val word_oddparity : thm =
+val NOT_WORD_EVENPARITY : thm =
+val NOT_WORD_ODDPARITY : thm =
+val modular : thm =
+val VAL_MODULAR : thm =
+val CONG_MODULAR : thm =
+val imodular : thm =
+val CONG_IMODULAR : thm =
+val word_not : thm =
+val BIT_WORD_NOT : thm =
+val BITS_OF_WORD_NOT : thm =
+val WORD_OF_BITS_DIFF : thm =
+val VAL_WORD_NOT : thm =
+val INT_VAL_WORD_NOT : thm =
+val REAL_VAL_WORD_NOT : thm =
+val WORD_POPCOUNT_NOT : thm =
+val word_and : thm =
+val BIT_WORD_AND : thm =
+val BIT_WORD_AND_ALT : thm =
+val BITS_OF_WORD_AND : thm =
+val WORD_OF_BITS_INTER : thm =
+val WORD_AND_WORD_OF_BITS_SING : thm =
+val WORD_OF_BITS_SING_AND_WORD : thm =
+val VAL_WORD_AND_LE : thm =
+val VAL_WORD_AND_LE_MIN : thm =
+val VAL_WORD_AND_WORD_LE : thm =
+val WORD_POPCOUNT_AND : thm =
+val word_or : thm =
+val BIT_WORD_OR : thm =
+val BIT_WORD_OR_ALT : thm =
+val BITS_OF_WORD_OR : thm =
+val WORD_OF_BITS_UNION : thm =
+val VAL_WORD_OR_LE : thm =
+val VAL_WORD_OR_LE_MAX : thm =
+val WORD_POPCOUNT_OR : thm =
+val WORD_POPCOUNT_OR_DISJOINT : thm =
+val word_xor : thm =
+val BIT_WORD_XOR : thm =
+val BIT_WORD_XOR_ALT : thm =
+val VAL_WORD_ADD_AND_XOR : thm =
+val VAL_WORD_ADD_AND_OR : thm =
+val VAL_WORD_OR_DISJOINT : thm =
+val VAL_WORD_OR_AND_XOR : thm =
+val REAL_VAL_WORD_XOR : thm =
+val word_add : thm =
+val VAL_WORD_ADD : thm =
+val VAL_WORD_ADD_CASES : thm =
+val VAL_WORD_ADC_CASES : thm =
+val INT_VAL_WORD_ADD_CASES : thm =
+val CONG_WORD_ADD : thm =
+val INT_CONG_WORD_ADD : thm =
+val WORD_ADD : thm = |- [35mforall[0m x y. [32mword[0m (x + y) = [32mword_add[0m ([32mword[0m x) ([32mword[0m y)
+val ICONG_WORD_ADD : thm =
+val IWORD_INT_ADD : thm =
+val WORD_ADD_IMODULAR : thm = |- [32mword_add[0m = [32mimodular[0m [32m(+)[0m
+val ODD_VAL_WORD : thm = |- [35mforall[0m n. [32mODD[0m ([32mval[0m ([32mword[0m n)) <=> [32mODD[0m n
+val EVEN_VAL_WORD : thm = |- [35mforall[0m n. [32mEVEN[0m ([32mval[0m ([32mword[0m n)) <=> [32mEVEN[0m n
+val ODD_VAL_WORD_ADD : thm =
+val EVEN_VAL_WORD_ADD : thm =
+val word_sub : thm =
+val VAL_WORD_SUB : thm =
+val VAL_WORD_SUB_CASES : thm =
+val INT_VAL_WORD_SUB_CASES : thm =
+val CONG_WORD_SUB : thm =
+val INT_CONG_WORD_SUB : thm =
+val INT_VAL_WORD_SUB : thm =
+val ICONG_WORD_SUB : thm =
+val IWORD_INT_SUB : thm =
+val WORD_SUB_IMODULAR : thm = |- [32mword_sub[0m = [32mimodular[0m [32m(-)[0m
+val WORD_SUB : thm =
+val word_neg : thm = |- [35mforall[0m a. [32mword_neg[0m a = [32mword_sub[0m ([32mword[0m 0) a
+val ODD_VAL_WORD_SUB : thm =
+val EVEN_VAL_WORD_SUB : thm =
+val VAL_WORD_NEG : thm =
+val VAL_WORD_NEG_CASES : thm =
+val INT_VAL_WORD_NEG_CASES : thm =
+val REAL_VAL_WORD_NEG_CASES : thm =
+val INT_VAL_WORD_NEG : thm =
+val REAL_VAL_WORD_NEG : thm =
+val CONG_WORD_NEG : thm =
+val INT_CONG_WORD_NEG : thm =
+val ICONG_WORD_NEG : thm =
+val IWORD_INT_NEG : thm = |- [35mforall[0m x. [32miword[0m (--x) = [32mword_neg[0m ([32miword[0m x)
+val WORD_NEG_AS_ADD : thm =
+val WORD_NOT_AS_SUB : thm =
+val ODD_VAL_WORD_NEG : thm =
+val EVEN_VAL_WORD_NEG : thm =
+val word_mul : thm =
+val VAL_WORD_MUL : thm =
+val CONG_WORD_MUL : thm =
+val INT_CONG_WORD_MUL : thm =
+val WORD_MUL : thm = |- [35mforall[0m x y. [32mword[0m (x * y) = [32mword_mul[0m ([32mword[0m x) ([32mword[0m y)
+val ICONG_WORD_MUL : thm =
+val IWORD_INT_MUL : thm =
+val WORD_MUL_IMODULAR : thm = |- [32mword_mul[0m = [32mimodular[0m [32m(*)[0m
+val ODD_VAL_WORD_MUL : thm =
+val EVEN_VAL_WORD_MUL : thm =
+val word_udiv : thm =
+val VAL_WORD_UDIV : thm =
+val word_umod : thm =
+val VAL_WORD_UMOD : thm =
+val word_umax : thm =
+val word_imax : thm =
+val VAL_WORD_UMAX : thm =
+val WORD_UMAX : thm =
+val WORD_UMAX_SYM : thm = |- [35mforall[0m x y. [32mword_umax[0m x y = [32mword_umax[0m y x
+val WORD_UMAX_ASSOC : thm =
+val IVAL_WORD_IMAX : thm =
+val word_umin : thm =
+val word_imin : thm =
+val VAL_WORD_UMIN : thm =
+val WORD_UMIN : thm =
+val WORD_UMIN_SYM : thm = |- [35mforall[0m x y. [32mword_umin[0m x y = [32mword_umin[0m y x
+val WORD_UMIN_ASSOC : thm =
+val IVAL_WORD_IMIN : thm =
+val word_shl : thm = |- [35mforall[0m x n. [32mword_shl[0m x n = [32mword[0m ([32mval[0m x * 2 EXP n)
+val VAL_WORD_SHL : thm =
+val CONG_WORD_SHL : thm =
+val ICONG_WORD_SHL : thm =
+val BIT_WORD_SHL : thm =
+val WORD_SHL_WORD_OF_BITS : thm =
+val WORD_SHL_ZERO : thm = |- [35mforall[0m x. [32mword_shl[0m x 0 = x
+val WORD_SHL_TRIVIAL : thm =
+val WORD_SHL_COMPOSE : thm =
+val WORD_SHL_LSB_ALT : thm =
+val WORD_SHL_LSB : thm =
+val WORD_SHL_WORD : thm =
+val WORD_SHL_AS_IWORD : thm =
+val WORD_SHL_IWORD : thm =
+val WORD_MUL_EXPAND : thm =
+val word_ushr : thm = |- [35mforall[0m x n. [32mword_ushr[0m x n = [32mword[0m ([32mval[0m x DIV 2 EXP n)
+val VAL_WORD_USHR : thm =
+val BIT_WORD_USHR : thm =
+val WORD_USHR_WORD_OF_BITS : thm =
+val WORD_USHR_ZERO : thm = |- [35mforall[0m x. [32mword_ushr[0m x 0 = x
+val WORD_USHR_COMPOSE : thm =
+val WORD_USHR_MSB_ALT : thm =
+val WORD_USHR_MSB : thm =
+val WORD_USHR_MSB_EQ : thm =
+val WORD_POPCOUNT_SHL : thm =
+val WORD_POPCOUNT_USHR : thm =
+val word_ishr : thm =
+val IVAL_WORD_ISHR : thm =
+val BIT_WORD_ISHR : thm =
+val WORD_ISHR_WORD_OF_BITS : thm =
+val WORD_ISHR_ZERO : thm = |- [35mforall[0m x. [32mword_ishr[0m x 0 = x
+val WORD_ISHR_COMPOSE : thm =
+val WORD_ISHR_UNIQUE : thm =
+val IVAL_WORD_ISHR_SHL_UNIQUE : thm =
+val word_ror : thm =
+val word_rol : thm =
+val WORD_ROR_ROL_GEN : thm =
+val WORD_ROL_ROR_GEN : thm =
+val WORD_ROR_PERIODIC : thm =
+val WORD_ROR_MOD : thm =
+val WORD_ROR_EQ_SELF : thm =
+val WORD_ROR_ZERO : thm = |- [35mforall[0m w. [32mword_ror[0m w 0 = w
+val WORD_ROL_PERIODIC : thm =
+val WORD_ROL_MOD : thm =
+val WORD_ROL_EQ_SELF : thm =
+val WORD_ROL_ZERO : thm = |- [35mforall[0m w. [32mword_rol[0m w 0 = w
+val WORD_ROR_ROL : thm =
+val WORD_ROL_ROR : thm =
+val WORD_ROR_SHIFTS : thm =
+val WORD_ROL_SHIFTS : thm =
+val BIT_WORD_ROR : thm =
+val BIT_WORD_ROL : thm =
+val WORD_ROR_COMPOSE : thm =
+val WORD_ROL_COMPOSE : thm =
+val VAL_WORD_ROR : thm =
+val VAL_WORD_ROL : thm =
+val word_ule : thm =
+val word_uge : thm =
+val word_ult : thm =
+val word_ugt : thm =
+val word_ile : thm =
+val word_ige : thm =
+val word_ilt : thm =
+val word_igt : thm =
+val WORD_ULT : thm = |- [35mforall[0m x y. [32mword_ult[0m x y <=> [32mval[0m x < [32mval[0m y
+val WORD_ULE : thm = |- [35mforall[0m x y. [32mword_ule[0m x y <=> [32mval[0m x <= [32mval[0m y
+val WORD_UGT : thm = |- [35mforall[0m x y. [32mword_ugt[0m x y <=> [32mval[0m x > [32mval[0m y
+val WORD_UGE : thm = |- [35mforall[0m x y. [32mword_uge[0m x y <=> [32mval[0m x >= [32mval[0m y
+val WORD_ILT : thm = |- [35mforall[0m x y. [32mword_ilt[0m x y <=> [32mival[0m x < [32mival[0m y
+val WORD_ILE : thm = |- [35mforall[0m x y. [32mword_ile[0m x y <=> [32mival[0m x <= [32mival[0m y
+val WORD_IGT : thm = |- [35mforall[0m x y. [32mword_igt[0m x y <=> [32mival[0m x > [32mival[0m y
+val WORD_IGE : thm = |- [35mforall[0m x y. [32mword_ige[0m x y <=> [32mival[0m x >= [32mival[0m y
+val word_zx : thm = |- [35mforall[0m w. [32mword_zx[0m w = [32mword[0m ([32mval[0m w)
+val VAL_WORD_ZX_GEN : thm =
+val VAL_WORD_ZX : thm =
+val WORD_ZX_ZX : thm =
+val WORD_ZX_TRIVIAL : thm = |- [35mforall[0m x. [32mword_zx[0m x = x
+val WORD_ZX_WORD : thm =
+val WORD_ZX_WORD_SIMPLE : thm =
+val WORD_ZX_BITVAL : thm =
+val BIT_WORD_ZX : thm =
+val WORD_ZX_AND : thm =
+val WORD_ZX_OR : thm =
+val WORD_ZX_XOR : thm =
+val WORD_ZX_NOT : thm =
+val WORD_ZX_ADD : thm =
+val WORD_ZX_MUL : thm =
+val WORD_ZX_NEG : thm =
+val WORD_ZX_SUB : thm =
+val WORD_ZX_SHL : thm =
+val word_sx : thm = |- [35mforall[0m w. [32mword_sx[0m w = [32miword[0m ([32mival[0m w)
+val IVAL_WORD_SX : thm =
+val WORD_SX_SX : thm =
+val WORD_SX_TRIVIAL : thm = |- [35mforall[0m x. [32mword_sx[0m x = x
+val WORD_SX_ZX : thm =
+val word_sxfrom : thm =
+val BIT_WORD_SXFROM : thm =
+val IVAL_WORD_SXFROM_UNIQUE : thm =
+val word_cand : thm =
+val word_cor : thm =
+val WORD_CAND : thm =
+val WORD_COR : thm =
+val VAL_WORD_CAND : thm =
+val VAL_WORD_COR : thm =
+val BIT_WORD_CAND : thm =
+val BIT_WORD_COR : thm =
+val word_join : thm =
+val VAL_WORD_JOIN : thm =
+val BIT_WORD_JOIN_GEN : thm =
+val BIT_WORD_JOIN : thm =
+val VAL_WORD_JOIN_SIMPLE : thm =
+val WORD_JOIN_NOT : thm =
+val word_subword : thm =
+val VAL_WORD_SUBWORD : thm =
+val VAL_WORD_SUBWORD_DIMINDEX : thm =
+val VAL_WORD_SUBWORD_SIMPLE : thm =
+val WORD_SUBWORD_WORD : thm =
+val BIT_WORD_SUBWORD : thm =
+val WORD_SUBWORD_JOIN_SELF : thm =
+val VAL_WORD_SUBWORD_JOIN : thm =
+val WORD_SUBWORD_JOIN_LOWER : thm =
+val WORD_SUBWORD_JOIN_UPPER : thm =
+val WORD_SUBWORD_SUBWORD : thm =
+val WORD_SUBWORD_TRIVIAL : thm =
+val WORD_SUBWORD_DIMINDEX : thm =
+val WORD_ZX_SUBWORD : thm =
+val VAL_WORD_SUBWORD_JOIN_FULL : thm =
+val WORD_SUBWORD_JOIN_AS_USHR : thm =
+val WORD_SUBWORD_JOIN_AS_SHL : thm =
+val WORD_SUBWORD_AS_USHR : thm =
+val WORD_USHR_AS_SUBWORD : thm =
+val WORD_SHL_SUBWORD : thm =
+val WORD_SUBWORD_AND : thm =
+val WORD_SUBWORD_OR : thm =
+val WORD_SUBWORD_XOR : thm =
+val WORD_SUBWORD_NOT : thm =
+val WORD_SUBWORD_ADD : thm =
+val WORD_SUBWORD_AS_IWORD : thm =
+val WORD_SUBWORD_IWORD : thm =
+val WORD_SUBWORD_IWORD : thm =
+val WORD_SUBWORD_AS_USHR_SHL : thm =
+val WORD_SXFROM_SUBWORD_AS_ISHR_SHL : thm =
+val VAL_EXPAND_SUBWORDS : thm =
+val VAL_SUBWORDS_EQ : thm =
+val WORD_SUBWORDS_EQ : thm =
+val word_insert : thm =
+val BIT_WORD_INSERT : thm =
+val WORD_SUBWORD_INSERT_OUTER : thm =
+val WORD_SUBWORD_INSERT_INNER : thm =
+val word_duplicate : thm =
+val BIT_WORD_DUPLICATE : thm =
+val WORD_DUPLICATE_REFL : thm = |- [35mforall[0m x. [32mword_duplicate[0m x = x
+val WORD_DUPLICATE_DOUBLE : thm =
+val WORD_SUBWORD_DUPLICATE : thm =
+val WORD_SUBWORD_DUPLICATE_DUPLICATE : thm =
+val VAL_WORD_DUPLICATE : thm =
+val WORD_DUPLICATE : thm =
+val WORD_SUBWORD_ZX : thm =
+val WORD_SUBWORD_ZX_TRIVIAL : thm =
+val BIT_WORD_ADD : thm =
+val BIT_WORD_SUB : thm =
+val BIT_WORD_NEG : thm =
+val BIT_WORD_ADD_CLAUSES : thm =
+val BIT_WORD_SUB_CLAUSES : thm =
+val BIT_WORD_NEG_CLAUSES : thm =
+val LE_VAL_MOD_STEP : thm =
+val LT_VAL_MOD_STEP : thm =
+val WORD_ADD_SYM : thm = |- [35mforall[0m x y. [32mword_add[0m x y = [32mword_add[0m y x
+val WORD_ADD_ASSOC : thm =
+val WORD_ADD_AC : thm =
+val WORD_MUL_SYM : thm = |- [35mforall[0m x y. [32mword_mul[0m x y = [32mword_mul[0m y x
+val WORD_MUL_ASSOC : thm =
+val WORD_MUL_AC : thm =
+val WORD_SUB_LZERO : thm = |- [35mforall[0m x. [32mword_sub[0m ([32mword[0m 0) x = [32mword_neg[0m x
+val WORD_SUB_REFL : thm = |- [35mforall[0m x. [32mword_sub[0m x x = [32mword[0m 0
+val WORD_NEG_NEG : thm = |- [35mforall[0m x. [32mword_neg[0m ([32mword_neg[0m x) = x
+val WORD_NEG_SUB : thm =
+val WORD_NOT_NOT : thm = |- [35mforall[0m x. [32mword_not[0m ([32mword_not[0m x) = x
+val WORD_AND_REFL : thm = |- [35mforall[0m x. [32mword_and[0m x x = x
+val WORD_AND_SYM : thm = |- [35mforall[0m x y. [32mword_and[0m x y = [32mword_and[0m y x
+val WORD_AND_ASSOC : thm =
+val WORD_OR_REFL : thm = |- [35mforall[0m x. [32mword_or[0m x x = x
+val WORD_OR_SYM : thm = |- [35mforall[0m x y. [32mword_or[0m x y = [32mword_or[0m y x
+val WORD_OR_ASSOC : thm =
+val WORD_NOT_AND : thm =
+val WORD_NOT_OR : thm =
+val WORD_XOR_NOT : thm =
+val WORD_XOR_REFL : thm = |- [35mforall[0m x. [32mword_xor[0m x x = [32mword[0m 0
+val WORD_XOR_SYM : thm = |- [35mforall[0m x y. [32mword_xor[0m x y = [32mword_xor[0m y x
+val WORD_XOR_ASSOC : thm =
+val WORD_NOT_NEG : thm =
+val WORD_NOT_SUB : thm =
+val WORD_NOT_ADD : thm =
+val VAL_EQ_MAX_ALT : thm =
+val VAL_EQ_MAX : thm =
+val VAL_EQ_MAX_MASK : thm =
+val VAL_WORD_AND_EQ_MAX : thm =
+val WORD_SHL_AND : thm =
+val WORD_USHR_AND : thm =
+val WORD_SHL_OR : thm =
+val WORD_USHR_OR : thm =
+val WORD_SHL_XOR : thm =
+val WORD_USHR_XOR : thm =
+val WORD_ADD_XOR_GEN : thm =
+val WORD_ADD_OR_GEN : thm =
+val WORD_OR_XOR_GEN : thm =
+val WORD_ADD_OR_EQ : thm =
+val WORD_OR_XOR_EQ : thm =
+val WORD_ADD_OR : thm =
+val WORD_OR_XOR : thm =
+val WORD_ADD_XOR : thm =
+val WORD_POPCOUNT_ADD_DISJOINT : thm =
+val WORD_POPCOUNT_XOR_AND : thm =
+val WORD_POPCOUNT_OR_AND : thm =
+val WORD_POPCOUNT_XOR : thm =
+val WORD_SUB_XOR : thm =
+val WORD_XOR_SUB : thm =
+val WORD_SUB_MASK_WORD : thm =
+val WORD_XOR_MASK_WORD : thm =
+val WORD_XOR_INT_MIN : thm =
+val WORD_BITVAL_NOT : thm =
+val IVAL_WORD_NOT : thm = |- [35mforall[0m x. [32mival[0m ([32mword_not[0m x) = --([32mival[0m x + [32m&[0m1)
+val BIT_WORD_NEG_CASES : thm =
+val BIT_WORD_AND_NEG : thm =
+val BIT_WORD_OR_NEG : thm =
+val BIT_WORD_XOR_NEG : thm =
+val WORD_OR_SHL_USHR : thm =
+val WORD_OR_USHR_SHL : thm =
+val WORD_ADD_SHL_USHR : thm =
+val WORD_ADD_USHR_SHL : thm =
+val WORD_MASK_ALT : thm =
+val WORD_MASK : thm =
+val BIT_WORD_MASK : thm =
+val WORD_ISHR_MSB : thm =
+val WORD_NOT_MASK : thm =
+val WORD_AND_MASK : thm =
+val WORD_OR_MASK : thm =
+val WORD_XOR_MASK : thm =
+val WORD_NEG_AND_MASK : thm =
+val WORD_AND_MASKS : thm =
+val WORD_OR_MASKS : thm =
+val WORD_XOR_MASKS : thm =
+val WORD_AND_CONDITIONS : thm =
+val WORD_OR_CONDITIONS : thm =
+val WORD_XOR_CONDITIONS : thm =
+val VAL_WORD_MASK : thm =
+val IVAL_WORD_MASK : thm =
+val INT_VAL_WORD_MASK : thm =
+val REAL_VAL_WORD_MASK : thm =
+val WORD_MUL_EXPAND_ALT : thm =
+val WORD_SX_ZX_GEN : thm =
+val BIT_WORD_SX : thm =
+val VAL_WORD_AND_MASK : thm =
+val IVAL_WORD_AND_MASK : thm =
+val VAL_WORD_AND_MASK_WORD : thm =
+val WORD_AND_MASK_WORD : thm =
+val VAL_WORD_AND_NOT_MASK_WORD : thm =
+val WORD_AND_NOT_MASK_WORD : thm =
+val WORD_BITMASK : thm =
+val MASK_WORD_SUB : thm =
+val WORD_AND_MASK_WORDS : thm =
+val WORD_OR_MASK_WORDS : thm =
+val WORD_USHR_MASK_WORD : thm =
+val word_ctz : thm =
+val word_clz : thm =
+val WORD_CLZ : thm =
+val WORD_LE_CTZ : thm =
+val WORD_CTZ_LE : thm =
+val WORD_CTZ_LE_DIMINDEX : thm = |- [35mforall[0m a. [32mword_ctz[0m a <= [32mdimindex[0m (:N)
+val WORD_CTZ_LBOUND : thm = |- [35mforall[0m a i. [32mbit[0m i a ==> [32mword_ctz[0m a <= i
+val WORD_CTZ_EQ_DIMINDEX : thm =
+val WORD_CTZ_LT_DIMINDEX : thm =
+val WORD_CTZ_UNIQUE_GEN : thm =
+val WORD_CTZ_UNIQUE : thm =
+val WORD_LE_CTZ_VAL_MOD : thm =
+val WORD_LE_CTZ_VAL : thm =
+val WORD_CTZ_UNIQUE_VAL : thm =
+val WORD_SIZE_SUB_CLZ : thm =
+val WORD_CLZ_LE_DIMINDEX : thm = |- [35mforall[0m a. [32mword_clz[0m a <= [32mdimindex[0m (:N)
+val WORD_LE_CLZ : thm =
+val WORD_CLZ_LE : thm =
+val WORD_CLZ_LBOUND_ALT : thm =
+val WORD_CLZ_LBOUND : thm =
+val WORD_CLZ_EQ_DIMINDEX : thm =
+val WORD_CLZ_LT_DIMINDEX : thm =
+val WORD_CLZ_DECOMP : thm =
+val WORD_CLZ_UNIQUE_GEN : thm =
+val WORD_CLZ_UNIQUE : thm =
+val WORD_LE_CLZ_VAL : thm =
+val WORD_LE_CLZ_VAL_MULT : thm =
+val WORD_LE_CLZ_VAL_DIV : thm =
+val VAL_BOUND_CLZ : thm =
+val WORD_CLZ_UNIQUE_VAL : thm =
+val WORD_CTZ_BIT : thm =
+val WORD_CLZ_BIT : thm =
+val WORD_CTZ_MASK_WORD : thm =
+val WORD_CLZ_MASK_WORD : thm =
+val WORD_AND_NEG_CTZ : thm =
+val WORD_CTZ_EMULATION_REV : thm =
+val WORD_CTZ_EMULATION_AND_NEG_REV : thm =
+val WORD_CTZ_EMULATION : thm =
+val WORD_CTZ_EMULATION_AND_NEG : thm =
+val WORD_CLZ_IMP : thm =
+val WORD_CLZ_OR : thm =
+val WORD_CTZ_IMP : thm =
+val WORD_CTZ_OR : thm =
+val WORD_CLZ_MONO : thm =
+val WORD_CTZ_EMULATION_POPCOUNT : thm =
+val word_reversefields : thm =
+val BIT_WORD_REVERSEFIELDS : thm =
+val WORD_REVERSEFIELDS_REVERSEFIELDS : thm =
+val WORD_CTZ_REVERSEFIELDS : thm =
+val WORD_CLZ_REVERSEFIELDS : thm =
+val WORD_CLZ_USHR : thm =
+val WORD_SHL_AS_USHR : thm =
+val WORD_USHR_AS_SHL : thm =
+val WORD_CTZ_SHL : thm =
+val word_bytereverse : thm =
+val BIT_WORD_BYTEREVERSE : thm =
+val WORD_BYTEREVERSE_BYTEREVERSE : thm =
+val WORD_BYTEREVERSE_REVERSEFIELDS : thm =
+val word_pmul : thm =
+val BIT_WORD_PMUL_ALT : thm =
+val BIT_WORD_PMUL : thm =
+val BITVAL_BIT_WORD_PMUL : thm =
+val WORD_PMUL_XOR : thm =
+val WORD_PMUL_ZX : thm =
+val WORD_PMUL_STEP : thm =
+val WORD_PMUL_SYM : thm = |- [35mforall[0m x y. [32mword_pmul[0m x y = [32mword_pmul[0m y x
+val aligned : thm =
+val ALIGNED : thm =
+val ALIGNED_WORD : thm =
+val ALIGNED_IWORD : thm =
+val ALIGNED_WORD_NEG : thm =
+val ALIGNED_WORD_ADD : thm =
+val ALIGNED_WORD_MUL : thm =
+val ALIGNED_WORD_SUB : thm =
+val ALIGNED_WORD_ADD_EQ : thm =
+val ALIGNED_WORD_SUB_EQ : thm =
+val word_jshl : thm =
+val word_jshr : thm =
+val word_jushr : thm =
+val word_jdiv : thm =
+val word_jrem : thm =
+val word_jror : thm = |- [35mforall[0m w k. [32mword_jror[0m w k = [32mword_ror[0m w ([32mval[0m k)
+val word_jrol : thm = |- [35mforall[0m w k. [32mword_jrol[0m w k = [32mword_rol[0m w ([32mval[0m k)
+val VAL_WORD_NEG_MOD_DIMINDEX : thm =
+val WORD_JROL_JROR : thm =
+val WORD_JROR_JROL : thm =
+val WORD_JROR : thm =
+val WORD_JROL : thm =
+val WORD_JUSHR_NEG : thm =
+val WORD_JSHL_NEG : thm =
+val IVAL_TOPFLIP_VAL : thm =
+val WORD_ULE_TOPFLIP : thm =
+val WORD_ULT_TOPFLIP : thm =
+val WORD_UGE_TOPFLIP : thm =
+val WORD_UGT_TOPFLIP : thm =
+val WORD_ILT_TOPFLIP : thm =
+val WORD_ILE_TOPFLIP : thm =
+val WORD_IGT_TOPFLIP : thm =
+val WORD_IGE_TOPFLIP : thm =
+val WORD_LE_ADD_EXACT : thm =
+val WORD_ADD_LT_EXACT : thm =
+val WORD_ADD_LT_INEXACT : thm =
+val WORD_LT_ADC_EXACT : thm =
+val WORD_ADC_LE_EXACT : thm =
+val WORD_ADC_LE_INEXACT : thm =
+val WORD_POPCOUNT_ADD_OR : thm =
+val WORD_POPCOUNT_ADD : thm =
+val WORD_POPCOUNT_MUL : thm =
+val WORD_ODDPARITY_POPCOUNT : thm =
+val WORD_EVENPARITY_POPCOUNT : thm =
+val WORD_COMPARISON_ULT : thm =
+val WORD_COMPARISON_ULE : thm =
+val WORD_COMPARISON_ILT : thm =
+val WORD_COMPARISON_ILE : thm =
+val WORD_COMPARISON_NE : thm =
+val WORD_COMPARISON_EQ : thm =
+val TRIV_CHOOSE : thm -> thm -> thm = <fun>
+val _BITMATCH : thm =
+val _ELSEPATTERN : thm = |- [35mforall[0m a e. [32m_ELSEPATTERN[0m e a = ([35m\[0mx. e = x)
+val bitpat : thm =
+val pat_size : thm = |- [35mforall[0m p. [32mpat_size[0m p = [32mFST[0m ([32mdest_bitpat[0m p)
+val pat_set : thm = |- [35mforall[0m p. [32mpat_set[0m p = [32mSND[0m ([32mdest_bitpat[0m p)
+val pat_set_lt : thm = |- [35mforall[0m p s. [32mpat_set[0m p s ==> s < 2 EXP [32mpat_size[0m p
+val pat_thm : thm =
+val NILPAT : thm = |- [32mNILPAT[0m = [32mmk_bitpat[0m (0,([35m\[0ms. s = 0))
+val NILPAT_pat_size : thm = |- [32mpat_size[0m [32mNILPAT[0m = 0
+val NILPAT_pat_set : thm = |- [35mforall[0m s. [32mpat_set[0m [32mNILPAT[0m s <=> s = 0
+val CONSPAT : thm =
+val CONSPAT_pat_size : thm =
+val CONSPAT_pat_set : thm =
+val MATCH_SEQPATTERN : thm =
+val BITMATCH_SEQPATTERN : thm =
+val MATCH_ELSEPATTERN : thm = |- [32m_MATCH[0m e ([32m_ELSEPATTERN[0m a) = a
+val BITMATCH_ELSEPATTERN : thm = |- ([34mbitmatch [0me[34m with[0m _ -> a) = a
+val pat_extract : thm =
+val MATCH_EQ : thm = |- r e = ([35m\[0my. x = y) ==> [32m_MATCH[0m e r = x
+val bitpat_inverts : thm =
+val bitpat_down : thm =
+val CONSPAT_down_inverts : thm =
+val CONSPAT_word_inverts : thm = |- [32mbitpat_inverts[0m ([32mCONSPAT[0m p a) [32mword[0m a
+val bitpat_inverts_comp : thm =
+val bm_add_pos : thm discrim_tree -> term -> (thm * thm list) discrim_tree =
+val BITMATCH_SIMP_CONV : thm list -> conv = <fun>
+val component_read_write_thms : thm list ref = {contents = []}
+val add_component_read_write_thms : thm list -> unit = <fun>
+val component_alias_thms : thm list ref = {contents = []}
+val valid_component_thms : thm list ref = {contents = []}
+val add_valid_component_thms : thm list -> unit = <fun>
+val strongly_valid_component_thms : thm list ref = {contents = []}
+val add_strongly_valid_component_thms : thm list -> unit = <fun>
+val weakly_valid_component_thms : thm list ref = {contents = []}
+val add_weakly_valid_component_thms : thm list -> unit = <fun>
+val extensionally_valid_component_thms : thm list ref = {contents = []}
+val add_extensionally_valid_component_thms : thm list -> unit = <fun>
+val component_orthogonality_thms : thm list ref = {contents = []}
+val add_component_orthogonality_thms : thm list -> unit = <fun>
+val component_tybij : thm =
+val COMPONENT_INJ : thm =
+val FORALL_COMPONENT : thm =
+val EXISTS_COMPONENT : thm =
+val read_def : thm = |- [35mforall[0m c. [32mread[0m c = [32mFST[0m ([32mdest_component[0m c)
+val write_def : thm = |- [35mforall[0m c. [32mwrite[0m c = [32mSND[0m ([32mdest_component[0m c)
+val read : thm = |- [35mforall[0m r w. [32mread[0m ([32mcomponent[0m (r,w)) = r
+val write : thm = |- [35mforall[0m r w. [32mwrite[0m ([32mcomponent[0m (r,w)) = w
+val COMPONENT_EQ : thm =
+val entirety : thm = |- [32mentirety[0m = [32mcomponent[0m (([35m\[0ms. s),([35m\[0mx s. x))
+val READ_ENTIRETY : thm =
+val WRITE_ENTIRETY : thm =
+val READ_WRITE_ENTIRETY : thm =
+val component_compose : thm =
+val COMPONENT_COMPOSE_ASSOC : thm =
+val READ_COMPONENT_COMPOSE : thm =
+val WRITE_COMPONENT_COMPOSE : thm =
+val COMPOSE_ENTIRETY : thm =
+val READ_WRITE_COMPONENT_COMPOSE : thm =
+val read_over_write : thm =
+val write_over_write : thm =
+val write_over_read : thm =
+val weak_read_over_write : thm =
+val valid_component : thm =
+val VALID_COMPONENT_COMPOSE : thm =
+val VALID_COMPONENT_ENTIRETY : thm =
+val weakly_valid_component : thm =
+val VALID_IMP_WEAKLY_VALID_COMPONENT : thm =
+val WEAKLY_VALID_COMPONENT_ENTIRETY : thm =
+val strongly_valid_component : thm =
+val STRONGLY_VALID_IMP_VALID_COMPONENT : thm =
+val STRONGLY_VALID_COMPONENT_COMPOSE : thm =
+val STRONGLY_VALID_COMPONENT_ENTIRETY : thm =
+val extensionally_valid_component : thm =
+val STRONGLY_VALID_IMP_EXTENSIONALLY_VALID_COMPONENT : thm =
+val EXTENSIONALLY_VALID_COMPONENT_ENTIRETY : thm =
+val orthogonal_components : thm =
+val ORTHOGONAL_COMPONENTS_SYM : thm =
+val get_record_components : thm -> term list = <fun>
+val record_read_write_thms : thm * thm -> thm list = <fun>
+val record_strongly_valid_component_thms : thm * thm -> thm list = <fun>
+val record_valid_component_thms : thm * thm -> thm list = <fun>
+val record_extensionally_valid_component_thms : thm * thm -> thm list = <fun>
+val record_weakly_valid_component_thms : thm * thm -> thm list = <fun>
+val record_orthogonality_thms : thm * thm -> thm list = <fun>
+val nonoverlapping_modulo : thm =
+val contained_modulo : thm =
+val NONOVERLAPPING_MODULO_SETWISE : thm =
+val CONTAINED_MODULO_SETWISE : thm =
+val NONOVERLAPPING_MODULO_WORDWISE : thm =
+val CONTAINED_MODULO_WORDWISE : thm =
+val NONOVERLAPPING_MODULO_TRIVIAL : thm =
+val CONTAINED_MODULO_TRIVIAL : thm =
+val CONTAINED_MODULO_EMPTY : thm =
+val NONOVERLAPPING_MODULO_REFL : thm =
+val CONTAINED_MODULO_REFL : thm =
+val NONOVERLAPPING_MODULO_SYM : thm =
+val CONTAINED_MODULO_TRANS : thm =
+val NONOVERLAPPING_MODULO_SUBREGIONS : thm =
+val NONOVERLAPPING_MODULO_LMOD : thm =
+val NONOVERLAPPING_MODULO_RMOD : thm =
+val CONTAINED_MODULO_LMOD : thm =
+val CONTAINED_MODULO_RMOD : thm =
+val NONOVERLAPPING_MODULO_LMIN : thm =
+val NONOVERLAPPING_MODULO_RMIN : thm =
+val CONTAINED_MODULO_LMIN : thm =
+val CONTAINED_MODULO_RMIN : thm =
+val NONOVERLAPPING_MODULO_OFFSET_RIGHT : thm =
+val NONOVERLAPPING_MODULO_OFFSET_LEFT : thm =
+val NONOVERLAPPING_MODULO_MULTIPLE : thm =
+val NONOVERLAPPING_MODULO_DIFFERENCE : thm =
+val NONOVERLAPPING_NONMODULAR_DIFFERENCE : thm =
+val NONOVERLAPPING_NONMODULAR_NUM : thm =
+val NONOVERLAPPING_MODULO_OFFSET : thm =
+val NONOVERLAPPING_MODULO_MODULAR : thm =
+val NONOVERLAPPING_MODULO_DIFFERENCE_ALT : thm =
+val NONOVERLAPPING_MODULO_DIFFERENCE_NUM : thm =
+val NONOVERLAPPING_MODULO_DIFFERENCE_NUM_RESTRICTED : thm =
+val CONTAINED_MODULO_IMP_NONTRIVIAL : thm =
+val CONTAINED_MODULO_IMP_LE : thm =
+val CONTAINED_MODULO_IMP_LE_ADD : thm =
+val NONOVERLAPPING_IMP_LT : thm =
+val NONOVERLAPPING_IMP_LE : thm =
+val NONOVERLAPPING_IMP_SMALL_RIGHT : thm =
+val NONOVERLAPPING_IMP_SMALL_LEFT : thm =
+val NONOVERLAPPING_IMP_SMALL_RIGHT_ALT : thm =
+val NONOVERLAPPING_IMP_SMALL_LEFT_ALT : thm =
+val NONOVERLAPPING_MODULO_SIMPLE : thm =
+val NONOVERLAPPING_MODULO_OFFSET_SIMPLE_RIGHT : thm =
+val NONOVERLAPPING_MODULO_OFFSET_SIMPLE_LEFT : thm =
+val NONOVERLAPPING_MODULO_OFFSET_SIMPLE_BOTH : thm =
+val CONTAINED_MODULO_SIMPLE : thm =
+val CONTAINED_MODULO_OFFSET_SIMPLE : thm =
+val NONOVERLAPPING_SIMPLE : thm =
+val nonoverlapping : thm =
+val contained : thm =
+val NONOVERLAPPING : thm =
+val CONTAINED : thm =
+val NONOVERLAPPING_MODULO : thm =
+val CONTAINED_MODULO : thm =
+val NONOVERLAPPING_SYM : thm =
+val CONTAINED_TRIVIAL : thm =
+val NONOVERLAPPING_TRIVIAL : thm =
+val NONOVERLAPPING_SUBREGIONS : thm =
+val NONOVERLAPPING_QFREE : thm =
+val CONTAINED_QFREE : thm =
+val NONOVERLAPPING_SIMPLE_LEFT : thm =
+val NONOVERLAPPING_SIMPLE : thm =
+val CONTAINED_SIMPLE : thm =
+val NONOVERLAPPING_CLAUSES : thm =
+val REPEAT_MATCH_CONV : thm -> conv = <fun>
+val FORALL_FUN_PAIR_THM : thm =
+val OPTION_DISTINCT : thm = |- [35mforall[0m a'. ~([32mNONE[0m = [32mSOME[0m a')
+val OPTION_INJ : thm = |- [35mforall[0m a a'. [32mSOME[0m a = [32mSOME[0m a' <=> a = a'
+val is_some : thm =
+val obind : thm = |- [32mNONE[0m >>= f = [32mNONE[0m /\ ([35mforall[0m a. [32mSOME[0m a >>= f = f a)
+val obind_eq_some : thm =
+val ODD_DOUBLE : thm = |- [35mforall[0m n. ~[32mODD[0m (2 * n)
+val exists_list_split : thm =
+val TRIV_CHOOSE : thm -> thm -> thm = <fun>
+val from_bitlist : thm =
+val FROM_BITLIST_CLAUSES : thm =
+val num_of_bytelist : thm =
+val bytelist_of_num : thm =
+val bytelist_of_int : thm =
+val LENGTH_BYTELIST_OF_NUM : thm =
+val LENGTH_BYTELIST_OF_INT : thm =
+val NUM_OF_BYTELIST_BOUND : thm =
+val BYTELIST_OF_NUM_OF_BYTELIST : thm =
+val NUM_OF_BYTELIST_OF_NUM : thm =
+val BYTELIST_OF_NUM_MOD : thm =
+val NUM_OF_BYTELIST_OF_NUM_EQ : thm =
+val BYTELIST_OF_INT_OF_NUM : thm =
+val numbit : thm = |- [35mforall[0m n i. [32mnumbit[0m i n <=> [32mODD[0m (n DIV 2 EXP i)
+val NUMBIT_VAL : thm = |- [32mnumbit[0m i ([32mval[0m e) <=> [32mbit[0m i e
+val num_shift_add : thm =
+val num_shift_add_SUC : thm =
+val num_shift_add_lt : thm =
+val num_shift_add_mod : thm =
+val read_word_n : thm =
+val read_word : thm =
+val read_byte : thm = |- [32mread_byte[0m = [32mread_word[0m 1
+val read_byte_val : thm =
+val read_word_n_eq_some : thm =
+val read_word_eq_some : thm =
+val INTEGER_CASES : thm =
+val REAL_ABS_INTEGER_LEMMA : thm =
+val INTEGER_CLOSED : thm =
+val INTEGER_ADD : thm =
+val INTEGER_SUB : thm =
+val INTEGER_MUL : thm =
+val INTEGER_POW : thm = |- [35mforall[0m x n. [32minteger[0m x ==> [32minteger[0m (x pow n)
+val REAL_LE_INTEGERS : thm =
+val REAL_LE_CASES_INTEGERS : thm =
+val REAL_LE_REVERSE_INTEGERS : thm =
+val REAL_LT_INTEGERS : thm =
+val REAL_EQ_INTEGERS : thm =
+val REAL_EQ_INTEGERS_IMP : thm =
+val INTEGER_NEG : thm = |- [35mforall[0m x. [32minteger[0m (--x) <=> [32minteger[0m x
+val INTEGER_ABS : thm = |- [35mforall[0m x. [32minteger[0m ([32mabs[0m x) <=> [32minteger[0m x
+val INTEGER_POS : thm =
+val NONNEGATIVE_INTEGER : thm =
+val NONPOSITIVE_INTEGER : thm =
+val NONPOSITIVE_INTEGER_ALT : thm =
+val INTEGER_ADD_EQ : thm =
+val INTEGER_SUB_EQ : thm =
+val FORALL_INTEGER : thm =
+val INTEGER_SUM : thm =
+val INTEGER_DIV : thm =
+val rational : thm =
+val RATIONAL_INTEGER : thm = |- [35mforall[0m x. [32minteger[0m x ==> [32mrational[0m x
+val RATIONAL_NUM : thm = |- [35mforall[0m n. [32mrational[0m ([32m&[0mn)
+val RATIONAL_NEG : thm = |- [35mforall[0m x. [32mrational[0m x ==> [32mrational[0m (--x)
+val RATIONAL_ABS : thm = |- [35mforall[0m x. [32mrational[0m x ==> [32mrational[0m ([32mabs[0m x)
+val RATIONAL_INV : thm = |- [35mforall[0m x. [32mrational[0m x ==> [32mrational[0m ([32minv[0m x)
+val RATIONAL_ADD : thm =
+val RATIONAL_SUB : thm =
+val RATIONAL_MUL : thm =
+val RATIONAL_DIV : thm =
+val RATIONAL_POW : thm = |- [35mforall[0m x n. [32mrational[0m x ==> [32mrational[0m (x pow n)
+val RATIONAL_CLOSED : thm =
+val RATIONAL_NEG_EQ : thm = |- [35mforall[0m x. [32mrational[0m (--x) <=> [32mrational[0m x
+val RATIONAL_ABS_EQ : thm = |- [35mforall[0m x. [32mrational[0m ([32mabs[0m x) <=> [32mrational[0m x
+val RATIONAL_INV_EQ : thm = |- [35mforall[0m x. [32mrational[0m ([32minv[0m x) <=> [32mrational[0m x
+val RATIONAL_SUM : thm =
+val RATIONAL_ALT : thm =
+val REAL_TRUNCATE_POS : thm =
+val REAL_TRUNCATE : thm =
+val FLOOR_FRAC : thm =
+val FLOOR_UNIQUE : thm =
+val FLOOR : thm =
+val FLOOR_DOUBLE : thm =
+val FRAC_FLOOR : thm = |- [35mforall[0m x. [32mfrac[0m x = x - [32mfloor[0m x
+val FLOOR_NUM : thm = |- [35mforall[0m n. [32mfloor[0m ([32m&[0mn) = [32m&[0mn
+val REAL_LE_FLOOR : thm =
+val REAL_FLOOR_LE : thm =
+val REAL_FLOOR_LT : thm =
+val REAL_LT_FLOOR : thm =
+val FLOOR_POS : thm = |- [35mforall[0m x. [32m&[0m0 <= x ==> ([35mexists[0m n. [32mfloor[0m x = [32m&[0mn)
+val FLOOR_DIV_DIV : thm =
+val FLOOR_MONO : thm = |- [35mforall[0m x y. x <= y ==> [32mfloor[0m x <= [32mfloor[0m y
+val REAL_FLOOR_EQ : thm = |- [35mforall[0m x. [32mfloor[0m x = x <=> [32minteger[0m x
+val REAL_FLOOR_LT_REFL : thm = |- [35mforall[0m x. [32mfloor[0m x < x <=> ~[32minteger[0m x
+val REAL_FRAC_POS_LT : thm = |- [35mforall[0m x. [32m&[0m0 < [32mfrac[0m x <=> ~[32minteger[0m x
+val FRAC_NUM : thm = |- [35mforall[0m n. [32mfrac[0m ([32m&[0mn) = [32m&[0m0
+val REAL_FLOOR_REFL : thm = |- [35mforall[0m x. [32minteger[0m x ==> [32mfloor[0m x = x
+val REAL_FRAC_ZERO : thm = |- [35mforall[0m x. [32minteger[0m x ==> [32mfrac[0m x = [32m&[0m0
+val REAL_FLOOR_ADD : thm =
+val REAL_FLOOR_TRIANGLE : thm =
+val REAL_FLOOR_NEG : thm =
+val REAL_FRAC_ADD : thm =
+val FLOOR_POS_LE : thm = |- [35mforall[0m x. [32m&[0m0 <= [32mfloor[0m x <=> [32m&[0m0 <= x
+val FRAC_UNIQUE : thm =
+val REAL_FRAC_EQ : thm = |- [35mforall[0m x. [32mfrac[0m x = x <=> [32m&[0m0 <= x /\ x < [32m&[0m1
+val INTEGER_ROUND : thm =
+val FRAC_DIV_MOD : thm =
+val FRAC_NEG : thm =
+val REAL_FLOOR_FLOOR_DIV : thm =
+val INTEGER_EXISTS_BETWEEN_ALT : thm =
+val INTEGER_EXISTS_BETWEEN_LT : thm =
+val INTEGER_EXISTS_BETWEEN : thm =
+val INTEGER_EXISTS_BETWEEN_ABS : thm =
+val INTEGER_EXISTS_BETWEEN_ABS_LT : thm =
+val REAL_OF_INT_OF_REAL : thm =
+val IMAGE_REAL_OF_INT_UNIV : thm = |- [32mIMAGE[0m [32mreal_of_int[0m (:int) = [32minteger[0m
+val HAS_SIZE_INTSEG_NUM : thm =
+val FINITE_INTSEG : thm =
+val HAS_SIZE_INTSEG_INT : thm =
+val CARD_INTSEG_INT : thm =
+val REAL_CARD_INTSEG_INT : thm =
+val INFINITE_INTEGER : thm = |- [32mINFINITE[0m [32minteger[0m
+val INFINITE_RATIONAL : thm = |- [32mINFINITE[0m [32mrational[0m
+val PADIC_RATIONAL_APPROXIMATION_STRADDLE : thm =
+val PADIC_RATIONAL_APPROXIMATION_STRADDLE_POS : thm =
+val PADIC_RATIONAL_APPROXIMATION_STRADDLE_POS_LE : thm =
+val RATIONAL_APPROXIMATION : thm =
+val RATIONAL_BETWEEN : thm =
+val RATIONAL_BETWEEN_EQ : thm =
+val RATIONAL_APPROXIMATION_STRADDLE : thm =
+val RATIONAL_APPROXIMATION_ABOVE : thm =
+val RATIONAL_APPROXIMATION_BELOW : thm =
+val INFINITE_RATIONAL_IN_RANGE : thm =
+val REAL_CONGRUENCE : thm =
+val REAL_INT_CONGRUENCE : thm =
+val LIST_OF_SEQ_CLAUSES : thm =
+val SUB_LIST : thm =
+val SUB_LIST_CLAUSES : thm =
+val SUB_LIST_LENGTH : thm =
+val SUB_LIST_SPLIT : thm =
+val SUB_LIST_TOPSPLIT : thm =
+val LENGTH_SUB_LIST : thm =
+val SUB_LIST_TRIVIAL : thm =
+val SUB_LIST_IDEMPOTENT : thm =
+val SUB_LIST_MIN : thm =
+val SUB_LIST_REFL : thm =
+val SUB_LIST_APPEND_LEFT : thm =
+val TRIM_LIST : thm =
+val APPEND_EXISTS : thm = |- [35mforall[0m x. [35mexists[0m x1 x2. x = [32mAPPEND[0m x1 x2
+val RELPOW_ITER : thm =
+val EQUAL_FROM_CONGRUENT_REAL : thm =
+val EQUAL_FROM_CONGRUENT_MOD : thm =
+val EQUAL_FROM_CONGRUENT_MOD_MOD : thm =
+val limb : thm =
+val LIMB_BOUND : thm = |- [35mforall[0m w n i. [32mlimb[0m w n i < 2 EXP w
+val DIGITSUM_WORDS_LIMB_GEN : thm =
+val DIGITSUM_WORKS_LIMB : thm =
+val LIMB_DIGITSUM : thm =
+val DIGITSUM_LT_STEP : thm =
+val LEXICOGRAPHIC_LT : thm =
+val LEXICOGRAPHIC_LE : thm =
+val LEXICOGRAPHIC_EQ : thm =
+val WORD_SUBWORD_EQUAL_SUBWORD_THEN_ZX : thm =
+val WORD_SUBWORD_N_EQUAL : thm =
+val WORD_CTZ_INDEX : thm =
+val WORD_CLZ_BITSIZE : thm =
+val WORD_INDEX_WRAP : thm =
+val MOD_UNIQ_BALANCED : thm =
+val MOD_UNIQ_BALANCED_REAL : thm =
+val INT_REM_UNIQ_BALANCED : thm =
+val INT_REM_UNIQ_BALANCED_MOD : thm =
+val NOCARRY_WORD_ADC : thm =
+val CARRY_WORD_ADC : thm =
+val NOCARRY_WORD_ADD : thm =
+val CARRY_WORD_ADD : thm =
+val NOCARRY_WORD_SBB : thm =
+val CARRY_WORD_SBB : thm =
+val NOCARRY_WORD_SUB : thm =
+val CARRY_WORD_SUB : thm =
+val NOCARRY_THM : thm = |- [35mforall[0m x. 2 EXP 64 <= [32mval[0m x <=> [32mfalse[0m
+val ACCUMULATE_ADC : thm =
+val ACCUMULATE_ADD : thm =
+val ACCUMULATE_SBB : thm =
+val ACCUMULATE_SBB_RZERO : thm =
+val ACCUMULATE_SBB_LZERO : thm =
+val ACCUMULATE_SUB : thm =
+val ACCUMULATE_MUL_GEN : thm =
+val ACCUMULATE_MUL : thm =
+val APPROXIMATE_WORD_USHR : thm =
+val APPROXIMATE_WORD_SHL : thm =
+val APPROXIMATE_WORD_ADD : thm =
+val APPROXIMATE_WORD_SUB : thm =
+val APPROXIMATE_WORD_MUL : thm =
+val APPROXIMATE_WORD_MADD : thm =
+val APPROXIMATE_WORD_MNEG : thm =
+val APPROXIMATE_WORD_IWORD : thm =
+val FLAG_FROM_CARRY_REAL_LT : thm =
+val FLAG_FROM_CARRY_REAL_LE : thm =
+val FLAG_FROM_CARRY_LT : thm =
+val FLAG_FROM_CARRY_LE : thm =
+val WORD_FROM_CARRY_REAL_LT : thm =
+val WORD_FROM_CARRY_REAL_LE : thm =
+val WORD_FROM_CARRY_LT : thm =
+val WORD_FROM_CARRY_LE : thm =
+val FLAG_AND_MASK_FROM_CARRY_REAL_LT : thm =
+val FLAG_AND_MASK_FROM_CARRY_LT : thm =
+val MASK_AND_VALUE_FROM_CARRY_REAL_LT : thm =
+val MASK_AND_VALUE_FROM_CARRY_LT : thm =
+val WORD_MULTIPLICATION_LOHI : thm =
+val codelength : thm = |- [35mforall[0m code. [32mcodelength[0m code = [32mLENGTH[0m code
+val CODELENGTH_CONV : thm list -> conv = <fun>
+val word_interleave : thm =
+val word_subdeinterleave : thm =
+val word_deinterleave : thm =
+val WORD_DEINTERLEAVE_CLAUSES : thm =
+val WORD_OF_BITS_AS_WORD_ALT : thm =
+val word_condense : thm =
+val WORD_CONDENSE_ALT : thm =
+val num_condense : thm =
+val NUM_CONDENSE_CLAUSES : thm =
+val NSUM_CLAUSES_IMAGE : thm =
+val WORD_CONDENSE : thm =
+val NUM_CONDENSE_BINARY : thm =
+val WORD_ADD_ASSOC_CONSTS : thm =
+val WORD_OR_ADD_DISJ : thm =
+val WORD_MUL_EQ : thm =
+val WORD_SUB_ADD : thm =
+val WORD_SUBWORD_MUL : thm =
+val GT_REFL : thm = |- [35mforall[0m x. ~(x > x)
+val ADD_MOD_MOD_REFL : thm =
+val ADD_DIV_MOD_SIMP_LEMMA : thm =
+val LT_MULT_ADD_MULT : thm =
+val LT_ADD_MULT_MULT : thm =
+val LE_MULT_ADD : thm = |- [35mforall[0m x x2 y. x < x2 ==> x * y + y <= x2 * y
+val ADD_SUB_SWAP : thm =
+val LE_SUB_RCANCEL : thm =
+val BITVAL_LE_DIV : thm =
+val BITVAL_LE_MOD_MOD_DIV : thm =
+val VAL_MUL_DIV_MOD_SIMP : thm =
+val MOD_ADD_MOD_RIGHT : thm =
+val LT_SUB_LT : thm = |- [35mforall[0m a b. 0 < b /\ b < a ==> a - b < a
+val MULT_ADD_DIV_LT : thm =
+val COMPUTE_LENGTH_RULE : thm -> thm = <fun>
+val TWEAK_PC_OFFSET : thm -> thm = <fun>
+val ENUMERATEL : thm =
+val ENUMERATEL_APPEND_ZERO : thm =
+val ALL_F : thm = |- [35mforall[0m l h. [32mALL[0m ([35m\[0mx. [32mfalse[0m) ([32mCONS[0m h l) <=> [32mfalse[0m
+val EX_SUBSET_LIST : thm =
+val GEN_EX_SUBSET_LIST : thm =
+val READ_WRITE_COMPONENT_COMPOSE_CONDITIONAL : thm =
+val READ_WRITE_ORTHOGONAL_COMPOSE_L : thm =
+val WEAK_READ_OVER_WRITE : thm =
+val READ_OVER_WRITE_COMPOSE : thm =
+val WRITE_OVER_READ_COMPOSE : thm =
+val WRITE_OVER_WRITE_COMPOSE : thm =
+val WEAK_READ_OVER_WRITE_COMPOSE : thm =
+val VALID_COMPONENT_UNWAP : thm =
+val READ_WRITE_VALID_COMPONENT : thm =
+val WEAKLY_VALID_COMPONENT_UNWAP : thm =
+val WEAKLY_VALID_COMPONENT : thm =
+val WEAKLY_VALID_COMPONENT_COMPOSE : thm =
+val WRITE_o_WRITE : thm =
+val STRONGLY_VALID_COMPONENT_UNWAP : thm =
+val EXTENSIONALLY_VALID_COMPONENT_UNWAP : thm =
+val EXTENSIONALLY_VALID_COMPONENT : thm =
+val EXTENSIONALLY_VALID_IMP_WEAKLY_VALID_COMPONENT : thm =
+val EXTENSIONALLY_VALID_COMPONENT_COMPOSE : thm =
+val ORTHOGONAL_COMPONENTS_COMPOSE_LEFT : thm =
+val ORTHOGONAL_COMPONENTS_COMPOSE_RIGHT_GEN : thm =
+val ORTHOGONAL_COMPONENTS_COMPOSE_RIGHT : thm =
+val ORTHOGONAL_COMPONENTS_SUB_LEFT : thm =
+val ORTHOGONAL_COMPONENTS_SUB_RIGHT : thm =
+val ORTHOGONAL_SPECIAL_COMPONENTS : thm =
+val ORTHOGONAL_COMPONENTS : thm =
+val ORTHOGONAL_WEAK_COMPONENTS : thm =
+val READ_WRITE_ORTHOGONAL_COMPONENTS : thm =
+val WRITE_SYM : thm =
+val evaluate : thm = |- [32mevaluate[0m f = [32mcomponent[0m (f,([35m\[0my x. x))
+val READ_WRITE_EVALUATE : thm =
+val rvalue : thm =
+val READ_RVALUE : thm = |- [32mread[0m ([32mrvalue[0m c) s = c
+val WRITE_RVALUE : thm =
+val READ_WRITE_RVALUE : thm =
+val COMPONENT_COMPOSE_RVALUE : thm =
+val COMPONENT_LCOMPOSE_RVALUE : thm =
+val ORTHOGONAL_COMPONENTS_RVALUE : thm =
+val through : thm =
+val READ_WRITE_THROUGH : thm =
+val asnumber : thm = |- [32masnumber[0m = [32mthrough[0m ([32mval[0m,[32mword[0m)
+val asword : thm = |- [32masword[0m = [32mthrough[0m ([32mword[0m,[32mval[0m)
+val READ_WRITE_ASWORD : thm =
+val WRITE_ASWORD_MOD : thm =
+val READ_WRITE_ASNUMBER : thm =
+val EXTENSIONALLY_VALID_COMPONENT_ASNUMBER : thm =
+val WEAKLY_VALID_COMPONENT_ASNUMBER : thm =
+val VALID_COMPONENT_ASWORD : thm = |- [32mvalid_component[0m [32masword[0m
+val WEAKLY_VALID_COMPONENT_ASWORD : thm = |- [32mweakly_valid_component[0m [32masword[0m
+val element : thm =
+val STRONGLY_VALID_COMPONENT_ELEMENT : thm =
+val EXTENSIONALLY_VALID_COMPONENT_ELEMENT : thm =
+val VALID_COMPONENT_ELEMENT : thm =
+val WEAKLY_VALID_COMPONENT_ELEMENT : thm =
+val READ_ELEMENT : thm =
+val READ_WRITE_ELEMENT : thm =
+val ORTHOGONAL_COMPONENTS_ELEMENT : thm =
+val ELEMENT_EXTENSIONALITY : thm =
+val READ_WRITE_SAME_ELEMENT : thm =
+val bitelement : thm =
+val READ_BITELEMENT : thm =
+val READ_WRITE_BITELEMENT_GEN : thm =
+val WRITE_WRITE_BITELEMENT : thm =
+val STRONGLY_VALID_COMPONENT_BITELEMENT : thm =
+val VALID_COMPONENT_BITELEMENT : thm =
+val EXTENSIONALLY_VALID_COMPONENT_BITELEMENT : thm =
+val WEAKLY_VALID_COMPONENT_BITELEMENT : thm =
+val READ_WRITE_BITELEMENT : thm =
+val ORTHOGONAL_COMPONENTS_BITELEMENT : thm =
+val subword : thm =
+val bottomhalf : thm = |- [32mbottomhalf[0m = [32msubword[0m (0,[32mdimindex[0m (:N))
+val tophalf : thm = |- [32mtophalf[0m = [32msubword[0m ([32mdimindex[0m (:N),[32mdimindex[0m (:N))
+val READ_SUBWORD : thm =
+val STRONGLY_VALID_COMPONENT_SUBWORD : thm =
+val VALID_COMPONENT_SUBWORD : thm =
+val WRITE_SUBWORD_BITWISE : thm =
+val READ_WRITE_SUBWORD : thm =
+val READ_SUBWORD_TRIVIAL : thm =
+val WRITE_SUBWORD_TRIVIAL : thm =
+val ORTHOGONAL_COMPONENTS_SUBWORD : thm =
+val READ_WRITE_HIGHER_SUBWORD : thm =
+val READ_WRITE_LOWER_SUBWORD : thm =
+val READ_TOPHALF_BOTTOMHALF_EQ : thm =
+val STRONGLY_VALID_COMPONENT_BOTTOMHALF : thm =
+val STRONGLY_VALID_COMPONENT_TOPHALF : thm =
+val EXTENSIONALLY_VALID_COMPONENT_BOTTOMHALF : thm =
+val EXTENSIONALLY_VALID_COMPONENT_TOPHALF : thm =
+val VALID_COMPONENT_BOTTOMHALF : thm = |- [32mvalid_component[0m [32mbottomhalf[0m
+val VALID_COMPONENT_TOPHALF : thm = |- [32mvalid_component[0m [32mtophalf[0m
+val WEAKLY_VALID_COMPONENT_BOTTOMHALF : thm =
+val WEAKLY_VALID_COMPONENT_TOPHALF : thm = |- [32mweakly_valid_component[0m [32mtophalf[0m
+val ORTHOGONAL_COMPONENTS_TOPHALF_BOTTOMHALF : thm =
+val READ_WRITE_TOPHALF_BOTTOMHALF : thm =
+val STRONGLY_VALID_COMPONENT_TOPS : thm =
+val STRONGLY_VALID_COMPONENT_BOTTOMS : thm =
+val EXTENSIONALLY_VALID_COMPONENT_TOPS : thm =
+val EXTENSIONALLY_VALID_COMPONENT_BOTTOMS : thm =
+val WEAKLY_VALID_COMPONENT_TOPS : thm =
+val WEAKLY_VALID_COMPONENT_BOTTOMS : thm =
+val VALID_COMPONENT_TOPS : thm =
+val VALID_COMPONENT_BOTTOMS : thm =
+val READ_SHORT : thm =
+val WRITE_SHORT : thm =
+val bytes : thm =
+val READ_ELEMENT_WRITE_BYTES : thm =
+val READ_BYTES : thm =
+val EXTENSIONALLY_VALID_COMPONENT_BYTES : thm =
+val ORTHOGONAL_COMPONENTS_BYTES : thm =
+val READ_WRITE_BYTES : thm =
+val READ_BYTES_TRIVIAL : thm =
+val WEAKLY_VALID_COMPONENT_BYTES : thm =
+val READ_BYTES_BOUND : thm =
+val READ_BYTES_BOUND_ALT : thm =
+val READ_BYTES_MOD_LEN : thm =
+val WRITE_BYTES : thm =
+val WRITE_BYTES_RESTRICT : thm =
+val READ_BYTES_COMBINE : thm =
+val WRITE_BYTES_COMBINE : thm =
+val READ_BYTES_EQ : thm =
+val READ_BYTES_MOD : thm =
+val READ_BYTES_DIV : thm =
+val bytelist : thm =
+val bytelist_clauses : thm =
+val read_bytelist_append : thm =
+val EXTENSIONALLY_VALID_COMPONENT_BYTELIST : thm =
+val wbytes : thm =
+val VAL_READ_WBYTES : thm =
+val READ_MEMORY_BYTESIZED_SPLIT : thm =
+val READ_MEMORY_BYTESIZED_UNSPLIT : thm =
+val READ_MEMORY_TRIPLES_SPLIT : thm =
+val WRITE_MEMORY_TRIPLES_SPLIT : thm =
+val READ_MEMORY_BYTES_TRIVIAL : thm =
+val PREFIX_BYTES_AS_SUBCOMPONENT : thm =
+val CONTAINED_BYTES_AS_SUBCOMPONENT_GEN : thm =
+val CONTAINED_BYTES_AS_SUBCOMPONENT : thm =
+val top : thm =
+val VALID_COMPONENT_TOP : thm =
+val WEAKLY_VALID_COMPONENT_TOP : thm =
+val READ_TOP : thm =
+val READ_WRITE_TOP : thm =
+val READ_WRITE_SAME_TOP : thm =
+val valmod : thm =
+val VALMOD : thm =
+val VALMOD_BASIC : thm =
+val VALMOD_VALMOD_BASIC : thm =
+val VALMOD_REPEAT : thm =
+val FORALL_VALMOD : thm =
+val VALMOD_SWAP : thm =
+val SELECT_VALMOD : thm =
+val VALMOD_REFL : thm =
+val READ_ELEMENT_VALMOD : thm =
+val WRITE_ELEMENT_VALMOD : thm =
+val WRITE_ELEMENT_ABS : thm =
+val add_component_alias_thms : thm list -> unit = <fun>
+val NONOVERLAPPING_DRIVERS : thm list -> thm list = <fun>
+val FILTER_CANONIZE_ASSUMPTIONS : thm list -> thm list = <fun>
+val NONOVERLAPPING_RULE : thm list * thm list -> term -> thm = <fun>
+val ORTHOGONAL_COMPONENTS_RULE : thm list * thm list -> term -> thm = <fun>
+val STATE_UPDATE_RULE : thm list * thm list -> thm -> thm -> thm = <fun>
+val STATE_UPDATE_NEW_RULE : thm -> thm list = <fun>
+val NONSELFMODIFYING_STATE_UPDATE_TAC : thm -> tactic = <fun>
+val ALIGNED_WORD_CONV : thm list -> term -> thm = <fun>
+val seq : thm =
+val SEQ_ASSOC : thm = |- [35mforall[0m r1 r2 r3. r1 ,, r2 ,, r3 = (r1 ,, r2) ,, r3
+val SEQ_ID : thm = |- ([35mforall[0m r. [32m(=)[0m ,, r = r) /\ ([35mforall[0m r. r ,, [32m(=)[0m = r)
+val SEQ_TRIVIAL : thm = |- ([35m\[0ma b. [32mtrue[0m) ,, ([35m\[0ma b. [32mtrue[0m) = ([35m\[0ma b. [32mtrue[0m)
+val subsumed : thm =
+val SUBSUMED_SEQ : thm =
+val SUBSUMED_FOR_SEQ : thm =
+val SUBSUMED_ID_SEQ : thm =
+val SUBSUMED_REFL : thm = |- [35mforall[0m R. R subsumed R
+val SUBSUMED_SEQ_LEFT : thm =
+val SUBSUMED_SEQ_RIGHT : thm =
+val SUBSUMED_TRIVIAL : thm = |- [35mforall[0m R. R subsumed ([35m\[0ms s'. [32mtrue[0m)
+val assign : thm = |- [35mforall[0m c y. c := y = ([35m\[0ms s'. [32mwrite[0m c y s = s')
+val SEQ : thm = |- (c := y ,, r) s = r ([32mwrite[0m c y s)
+val ASSIGNS : thm =
+val ASSIGNS_THM : thm = |- [32mASSIGNS[0m c = ([35m\[0ms s'. [35mexists[0m y. [32mwrite[0m c y s = s')
+val ASSIGNS_SEQ : thm =
+val SUBSUMED_ID_EXTENSIONALLY_VALID_COMPONENT : thm =
+val SUBSUMED_ASSIGNS_SUBCOMPONENTS : thm =
+val SUBSUMED_ASSIGNS_SUBCOMPONENT : thm =
+val ASSIGNS_PULL_THM : thm =
+val SEQ_PULL_THM : thm =
+val ASSIGNS_ASSIGN : thm = |- [32mASSIGNS[0m c = ([35m\[0ms s'. [35mexists[0m y. (c := y) s s')
+val ASSIGNS_ABSORB_SAME_COMPONENTS : thm =
+val ASSIGNS_ABSORB_BITELEMENT : thm =
+val ASSIGNS_ABSORB_ENTIRETY_R : thm =
+val ASSIGNS_ABSORB_ENTIRETY_L : thm =
+val ASSIGNS_ABSORB_SUBCOMPONENT_R : thm =
+val ASSIGNS_ABSORB_SUBCOMPONENT_L : thm =
+val ASSIGNS_RVALUE : thm = |- [35mforall[0m y. [32mASSIGNS[0m ([32mrvalue[0m y) = [32m(=)[0m
+val ASSIGNS_ABSORB_RVALUE : thm =
+val ASSIGNS_SWAP_ORTHOGONAL_COMPONENTS : thm =
+val ASSIGNS_SWAP_ELEMENTS : thm =
+val ASSIGNS_SWAP_BITELEMENTS : thm =
+val ASSIGNS_SWAP_SUBCOMPONENTS : thm =
+val ASSIGNS_SWAP_SUBCOMPONENTS_L : thm =
+val ASSIGNS_SWAP_SUBCOMPONENTS_R : thm =
+val ASSIGNS_BYTES : thm =
+val ASSIGNS_SWAP_ELEMENT_BYTES : thm =
+val ASSIGNS_SWAP_BYTES : thm =
+val ASSIGNS_BYTES_ASWORD : thm =
+val SUBSUMED_ASSIGNS_BYTES : thm =
+val ASSIGNS_BYTES_SPLIT : thm =
+val ASSIGNS_BYTES_MONO : thm =
+val ASSIGNS_BYTES_SUBSUMED_SPLIT : thm =
+val VIA : thm =
+val VIA_COMPOSE : thm =
+val VIA_SUBSUMED_ASSIGNS : thm = |- [35mforall[0m c R. [32mVIA[0m c R subsumed [32mASSIGNS[0m c
+val SUBSUMED_VIA : thm =
+val VIA_ASSIGN : thm = |- [35mforall[0m c y. [32mVIA[0m c1 (c2 := y) = c1 :> c2 := y
+val VIA_ASSIGNS : thm =
+val VIA_ENTIRETY : thm = |- [35mforall[0m c. [32mVIA[0m c ([32mASSIGNS[0m [32mentirety[0m) = [32mASSIGNS[0m c
+val VIA_ID : thm =
+val VIA_SEQ : thm =
+val VIA_SYM : thm =
+val VIA_ASSIGNS_SYM : thm =
+val ASSIGNS_VIA_SYM : thm =
+val modify : thm = |- [32mmodify[0m c f = ([35m\[0ms. [32mwrite[0m c (f ([32mread[0m c s)) s)
+val MODIFY_COMPOSE : thm =
+val MODIFY_CONST : thm = |- [35mforall[0m c y. [32mmodify[0m c ([35m\[0mx. y) = [32mwrite[0m c y
+val WRITE_COMPOSE : thm =
+val MODIFY_VIA : thm =
+val MODIFY_ID : thm =
+val MODIFY_o : thm =
+val MODIFY_o_WRITE : thm =
+val WRITE_o_MODIFY : thm =
+val MODIFY_SYM : thm =
+val MODIFY_WRITE_SYM : thm =
+val WRITE_MODIFY_SYM : thm =
+val READ_MODIFY_VALID_COMPONENT : thm =
+val READ_MODIFY_ORTHOGONAL_COMPONENTS : thm =
+val MAYCHANGE : thm =
+val MAYCHANGE_SING : thm = |- [35mforall[0m c. [32mMAYCHANGE[0m [c] = [32mASSIGNS[0m c
+val MAYCHANGE_STARTER : thm = |- [35mforall[0m s. [32mMAYCHANGE[0m [] s s
+val MAYCHANGE_WRITE : thm =
+val MAYCHANGE_LID : thm = |- [32mMAYCHANGE[0m [] ,, R = R
+val UNDEFINED_VALUE : thm = |- [32mUNDEFINED_VALUE[0m = [32mASSIGNS[0m
+val UNDEFINED_VALUES : thm =
+val MAYCHANGE_UPDATE_RULE : thm -> thm -> thm = <fun>
+val eventually_RULES : thm =
+val eventually_INDUCT : thm =
+val eventually_CASES : thm =
+val EVENTUALLY_MONO : thm =
+val EVENTUALLY_IMP_EVENTUALLY : thm =
+val EVENTUALLY_EVENTUALLY : thm =
+val EVENTUALLY_P_INOUT : thm =
+val EVENTUALLY_TRIVIAL : thm = |- [35mforall[0m step s. [32meventually[0m step ([35m\[0ms. [32mtrue[0m) s
+val EVENTUALLY_CONSTANT : thm =
+val EVENTUALLY_EXISTS : thm =
+val EVENTUALLY_IMP_INOUT : thm =
+val EVENTUALLY_SEQUENTIALLY : thm =
+val hoare : thm =
+val HOARE_PRECONDITION : thm =
+val HOARE_POSTCONDITION : thm =
+val HOARE : thm =
+val HOARE_TRANS : thm =
+val ensures : thm =
+val ENSURES_TRIVIAL : thm = |- [35mforall[0m step q f. [32mensures[0m step ([35m\[0mx. [32mfalse[0m) q f
+val ENSURES_ALREADY : thm =
+val steps_RULES : thm =
+val steps_INDUCT : thm =
+val steps_CASES : thm =
+val STEPS_TRIVIAL : thm = |- [35mforall[0m s s' step. [32msteps[0m step 0 s s' <=> s = s'
+val STEPS_SYM : thm =
+val STEPS_STEP_LEFT_RIGHT : thm =
+val STEPS_ADD : thm =
+val STEPS_STEP : thm =
+val STEPS_ONE : thm = |- [35mforall[0m s s' step. [32msteps[0m step 1 s s' <=> step s s'
+val STEPS_NOSTUCK : thm =
+val eventually_n : thm =
+val EVENTUALLY_N_TRIVIAL : thm =
+val EVENTUALLY_N_CONJ : thm =
+val EVENTUALLY_N_NESTED : thm =
+val EVENTUALLY_N_COMPOSE : thm =
+val EVENTUALLY_N_STEP : thm =
+val EVENTUALLY_N_STEPS : thm =
+val EVENTUALLY_N_MONO : thm =
+val EVENTUALLY_N_IMP_EVENTUALLY_N : thm =
+val EVENTUALLY_N_EVENTUALLY : thm =
+val EVENTUALLY_N_P_INOUT : thm =
+val EVENTUALLY_N_EVENTUALLY_STEPS : thm =
+val EVENTUALLY_EVENTUALLY_N : thm =
+val ensures_n : thm =
+val SEQ_PAIR_SPLIT : thm =
+val ENSURES_N_ENSURES : thm =
+val ENSURES_N_TRIVIAL : thm =
+val ENSURES_N_ALREADY : thm =
+val ENSURES_ENSURES_N : thm =
+val ENSURES_N_CONJ : thm =
+val ENSURES_N_PRECONDITION_THM_GEN : thm =
+val ENSURES_N_PRECONDITION_THM : thm =
+val ENSURES_N_POSTCONDITION_THM_GEN : thm =
+val ENSURES_N_POSTCONDITION_THM : thm =
+val ENSURES_N_PREPOSTCONDITION_THM : thm =
+val ENSURES_N_FRAME_MONO : thm =
+val ENSURES_N_FRAME_SUBSUMED : thm =
+val ENSURES_N_TRANS : thm =
+val ENSURES_N_TRANS_SIMPLE : thm =
+val ENSURES_N_SUBLEMMA_THM : thm =
+val ENSURES_N_CONSTANT_PRECONDITION : thm =
+val ENSURES_N_CONSTANT_PRECONDITION_CONJUNCTS : thm =
+val simulation_precanon_thms : thm list ref = {contents = []}
+val ENSURES_PRECONDITION_THM_GEN : thm =
+val ENSURES_PRECONDITION_THM : thm =
+val ENSURES_POSTCONDITION_THM_GEN : thm =
+val ENSURES_POSTCONDITION_THM : thm =
+val ENSURES_PREPOSTCONDITION_THM : thm =
+val ENSURES_FRAME_MONO : thm =
+val ENSURES_FRAME_SUBSUMED : thm =
+val ENSURES_TRANS : thm =
+val ENSURES_TRANS_SIMPLE : thm =
+val ENSURES_CONSTANT_PRECONDITION : thm =
+val ENSURES_CONSTANT_PRECONDITION_CONJUNCTS : thm =
+val ENSURES_SUBLEMMA_THM : thm =
+val ENSURES_SUBLEMMA_TAC : thm -> string -> string -> tactic = <fun>
+val ENSURES_SUBSUBLEMMA_TAC : thm list -> string -> string -> tactic = <fun>
+val ENSURES_MAYCHANGE_PRESERVED : thm =
+val ENSURES_MAYCHANGE_EXISTING_PRESERVED : thm =
+val ASSIGNS_TOPHALF_BOTTOMHALF : thm =
+val ENSURES_MAYCHANGE_TOPHALF_PRESERVED : thm =
+val VIA_WRITE_RULE : thm -> term -> thm = <fun>
+val MAYCHANGE_WRITE_RULE : thm -> term -> thm = <fun>
+val ENSURES_N_ENSURES_TAC : thm -> tactic = <fun>
+val PURE_BOUNDER_RULE : thm list -> term -> thm = <fun>
+val BOUNDER_RULE : thm list -> term -> thm = <fun>
+val bounder_prenorm_thms : thm list ref = {contents = []}
+val PURE_BOUNDER_TAC : thm list -> tactic = <fun>
+val BOUNDER_TAC : thm list -> tactic = <fun>
+val GEN_DECARRY_RULE : thm list -> thm list -> thm list = <fun>
+val DECARRY_RULE : thm list -> thm list = <fun>
+val DESUM_RULE : thm list -> thm list = <fun>
+val ACCUMULATOR_DEFAULT_REWRITE_RULE : thm -> thm = <fun>
+val uarch_event_INDUCT : thm =
+val uarch_event_RECURSION : thm =
+val memaccess_inbounds : thm =
+val MEMACCESS_INBOUNDS_APPEND : thm =
+val MEMACCESS_INBOUNDS_MEM : thm =
+val MEMACCESS_INBOUNDS_CONTAINED : thm =
+val ASSUME_CALLEE_SAFETY_TAC : thm -> string -> tactic = <fun>
+val ASSUME_CALLEE_SAFETY_TAILED_TAC : thm -> string -> tactic = <fun>
+val sha_choose : thm =
+val sha_maj : thm =
+val elem : thm =
+val SHA_COMMON_REDUCE : thm -> conv = <fun>
+val aes_sub_byte : thm =
+val aes_sub_bytes_select : thm =
+val aes_sub_bytes : thm =
+val aes_shift_rows : thm =
+val aes_inv_shift_rows : thm =
+val FFmul : thm =
+val aes_mix_word : thm =
+val aes_mix_columns : thm =
+val aes_inv_mix_word : thm =
+val aes_inv_mix_columns : thm =
+val aes_rotword : thm =
+val aes_subword : thm =
+val WORD_JOIN_LIST_CONV : thm -> thm list -> conv = <fun>
+val JOINED_CONV : thm -> thm -> conv = <fun>
+val AES_SHIFT_ROWS_COMMON_CONV : thm -> conv = <fun>
+val FFMUL_CONV : thm -> thm -> conv = <fun>
+val aese : thm =
+val aesmc : thm = |- [35mforall[0m n. [32maesmc[0m n = [32maes_mix_columns[0m n
+val aesd : thm =
+val aesimc : thm = |- [35mforall[0m n. [32maesimc[0m n = [32maes_inv_mix_columns[0m n
+val armstate_INDUCT : thm =
+val armstate_RECURSION : thm =
+val armstate_COMPONENTS : thm =
+val bytes_loaded : thm =
+val bytes_loaded_nil : thm = |- [32mbytes_loaded[0m s pc []
+val bytes_loaded_append : thm =
+val bytes_loaded_unique : thm =
+val bytes_loaded_update : thm =
+val BYTES_LOADED_SUB_LIST : thm =
+val BYTES_LOADED_TRIM_LIST : thm =
+val aligned_bytes_loaded : thm =
+val aligned_bytes_loaded_word : thm =
+val aligned_bytes_loaded_append_left : thm =
+val aligned_bytes_loaded_append : thm =
+val aligned_bytes_loaded_append_alt : thm =
+val aligned_bytes_loaded_unique : thm =
+val aligned_bytes_loaded_update : thm =
+val ALIGNED_BYTES_LOADED_SUB_LIST : thm =
+val ALIGNED_BYTES_LOADED_SUB_LIST : thm =
+val ALIGNED_BYTES_LOADED_TRIM_LIST : thm =
+val ALIGNED_BYTES_LOADED_APPEND_CLAUSE : thm =
+val NF : thm = |- [32mNF[0m = [32mflags[0m :> [32mbitelement[0m 3
+val ZF : thm = |- [32mZF[0m = [32mflags[0m :> [32mbitelement[0m 2
+val CF : thm = |- [32mCF[0m = [32mflags[0m :> [32mbitelement[0m 1
+val VF : thm = |- [32mVF[0m = [32mflags[0m :> [32mbitelement[0m 0
+val XZR : thm = |- [32mXZR[0m = [32mrvalue[0m ([32mword[0m 0)
+val WZR : thm = |- [32mWZR[0m = [32mXZR[0m :> [32mbottom_32[0m
+val ZR : thm = |- [32mZR[0m = [32mrvalue[0m ([32mword[0m 0)
+val XREG : thm =
+val SP : thm = |- [32mSP[0m = [32mregisters[0m :> [32melement[0m ([32mword[0m 31)
+val WREG : thm = |- [32mWREG[0m n = [32mXREG[0m n :> [32mzerotop_32[0m
+val WSP : thm = |- [32mWSP[0m = [32mSP[0m :> [32mzerotop_32[0m
+val regshift_INDUCT : thm =
+val regshift_RECURSION : thm =
+val regshift_operation : thm =
+val Shiftedreg_DEF : thm =
+val SHIFTEDREG_TRIVIAL : thm = |- [35mforall[0m reg. [32mShiftedreg[0m reg [32mLSL[0m 0 = reg
+val extendtype_INDUCT : thm =
+val extendtype_RECURSION : thm =
+val extendreg_operation : thm =
+val Extendedreg_DEF : thm =
+val QREG : thm = |- [32mQREG[0m n = [32msimdregisters[0m :> [32melement[0m ([32mword[0m n)
+val DREG : thm = |- [32mDREG[0m n = [32mQREG[0m n :> [32mzerotop_64[0m
+val SREG : thm = |- [32mSREG[0m n = [32mDREG[0m n :> [32mzerotop_32[0m
+val HREG : thm = |- [32mHREG[0m n = [32mSREG[0m n :> [32mzerotop_16[0m
+val BREG : thm = |- [32mBREG[0m n = [32mHREG[0m n :> [32mzerotop_8[0m
+val LANE_B : thm =
+val LANE_H : thm =
+val LANE_S : thm =
+val LANE_D : thm =
+val ARM_ZERO_REGISTER : thm =
+val XZR_ZR : thm = |- [32mXZR[0m = [32mZR[0m
+val WZR_ZR : thm = |- [32mWZR[0m = [32mZR[0m
+val condition_INDUCT : thm =
+val condition_RECURSION : thm =
+val Condition_EQ : thm = |- [32mCondition_EQ[0m = [32mCondition[0m ([32mword[0m 0)
+val Condition_NE : thm = |- [32mCondition_NE[0m = [32mCondition[0m ([32mword[0m 1)
+val Condition_CS : thm = |- [32mCondition_CS[0m = [32mCondition[0m ([32mword[0m 2)
+val Condition_HS : thm = |- [32mCondition_HS[0m = [32mCondition[0m ([32mword[0m 2)
+val Condition_CC : thm = |- [32mCondition_CC[0m = [32mCondition[0m ([32mword[0m 3)
+val Condition_LO : thm = |- [32mCondition_LO[0m = [32mCondition[0m ([32mword[0m 3)
+val Condition_MI : thm = |- [32mCondition_MI[0m = [32mCondition[0m ([32mword[0m 4)
+val Condition_PL : thm = |- [32mCondition_PL[0m = [32mCondition[0m ([32mword[0m 5)
+val Condition_VS : thm = |- [32mCondition_VS[0m = [32mCondition[0m ([32mword[0m 6)
+val Condition_VC : thm = |- [32mCondition_VC[0m = [32mCondition[0m ([32mword[0m 7)
+val Condition_HI : thm = |- [32mCondition_HI[0m = [32mCondition[0m ([32mword[0m 8)
+val Condition_LS : thm = |- [32mCondition_LS[0m = [32mCondition[0m ([32mword[0m 9)
+val Condition_GE : thm = |- [32mCondition_GE[0m = [32mCondition[0m ([32mword[0m 10)
+val Condition_LT : thm = |- [32mCondition_LT[0m = [32mCondition[0m ([32mword[0m 11)
+val Condition_GT : thm = |- [32mCondition_GT[0m = [32mCondition[0m ([32mword[0m 12)
+val Condition_LE : thm = |- [32mCondition_LE[0m = [32mCondition[0m ([32mword[0m 13)
+val Condition_AL : thm = |- [32mCondition_AL[0m = [32mCondition[0m ([32mword[0m 14)
+val Condition_NV : thm = |- [32mCondition_NV[0m = [32mCondition[0m ([32mword[0m 15)
+val CONDITION_CLAUSES : thm list =
+val condition_semantics : thm =
+val invert_condition : thm =
+val INVERT_CONDITION : thm =
+val INVERT_CONDITION_TWICE : thm =
+val CONDITION_SEMANTICS_INVERT_CONDITION : thm =
+val offset_INDUCT : thm =
+val offset_RECURSION : thm =
+val no_offset : thm = |- [32mNo_Offset[0m = [32mImmediate_Offset[0m ([32mword[0m 0)
+val offset_address : thm =
+val offset_writeback : thm =
+val offset_writesback : thm =
+val SOME_FLAGS : thm = |- [32mSOME_FLAGS[0m = [[32mNF[0m; [32mZF[0m; [32mCF[0m; [32mVF[0m]
+val C_ARGUMENTS : thm =
+val C_RETURN : thm = |- [32mC_RETURN[0m = [32mread[0m [32mX0[0m
+val PRESERVED_GPRS : thm =
+val MODIFIABLE_GPRS : thm =
+val MODIFIABLE_SIMD_REGS : thm =
+val MODIFIABLE_UPPER_SIMD_REGS : thm =
+val MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI : thm =
+val masking : thm =
+val arm_ADC : thm =
+val arm_ADCS : thm =
+val arm_ADD : thm =
+val arm_ADD_VEC : thm =
+val arm_ABS_VEC : thm =
+val arm_ADDS : thm =
+val arm_ADR : thm =
+val arm_ADRP : thm =
+val arm_AND : thm =
+val arm_AND_VEC : thm =
+val arm_ANDS : thm =
+val arm_ASRV : thm =
+val arm_B : thm =
+val arm_BFM : thm =
+val arm_BIC : thm =
+val arm_BIC_VEC : thm =
+val arm_BICS : thm =
+val arm_BIT : thm =
+val arm_BIF : thm =
+val arm_BL : thm =
+val arm_BL_ABSOLUTE : thm =
+val arm_Bcond : thm =
+val arm_CBNZ : thm =
+val arm_CBZ : thm =
+val arm_CCMN : thm =
+val arm_CCMP : thm =
+val arm_CLZ : thm =
+val arm_CMHI_VEC : thm =
+val arm_CMGE_VEC : thm =
+val arm_CMGT_VEC : thm =
+val arm_CMLE_VEC_ZERO : thm =
+val arm_CNT : thm =
+val arm_CSEL : thm =
+val arm_CSINC : thm =
+val arm_CSINV : thm =
+val arm_CSNEG : thm =
+val arm_DUP_GEN : thm =
+val arm_EON : thm =
+val arm_EOR : thm =
+val arm_EOR_VEC : thm =
+val arm_EXT : thm =
+val arm_EXTR : thm =
+val arm_FCSEL : thm =
+val arm_INS : thm =
+val arm_INS_GEN : thm =
+val arm_LSLV : thm =
+val arm_LSRV : thm =
+val arm_MADD : thm =
+val arm_MLS_VEC : thm =
+val arm_MLA_VEC : thm =
+val arm_MOVI : thm =
+val arm_MOVK : thm = |- [32marm_MOVK[0m Rd imm pos = Rd :> [32msubword[0m (pos,16) := imm
+val arm_MOVN : thm =
+val arm_MOVZ : thm =
+val arm_FMOV_FtoI : thm =
+val arm_FMOV_ItoF : thm =
+val arm_MSUB : thm =
+val arm_MUL_VEC : thm =
+val arm_PMUL_VEC : thm =
+val arm_NOP : thm = |- [32marm_NOP[0m = ([35m\[0ms s'. s = s')
+val arm_ORN : thm =
+val arm_ORR : thm =
+val arm_ORR_VEC : thm =
+val arm_RET : thm =
+val arm_REV : thm =
+val arm_RORV : thm =
+val arm_SBC : thm =
+val arm_SBCS : thm =
+val arm_SBFM : thm =
+val arm_SHL_VEC : thm =
+val word_ishr_round : thm =
+val arm_SRSHR_VEC : thm =
+val arm_SSHR_VEC : thm =
+val arm_SLI_VEC : thm =
+val arm_SRI_VEC : thm =
+val arm_SHRN : thm =
+val arm_SMULH : thm =
+val arm_SQDMULH_VEC : thm =
+val arm_SQRDMULH_VEC : thm =
+val arm_SUB : thm =
+val arm_SUB_VEC : thm =
+val arm_SUBS : thm =
+val arm_UADDLP : thm =
+val arm_UMIN_VEC : thm =
+val arm_UADDLV : thm =
+val NEUTRAL_MAX : thm = |- [32mneutral[0m [32mMAX[0m = 0
+val MONOIDAL_MAX : thm = |- [32mmonoidal[0m [32mMAX[0m
+val ITERATE_MAX_CLAUSES : thm =
+val arm_UMAXV : thm =
+val arm_UBFM : thm =
+val arm_UMADDL : thm =
+val arm_UMLAL_VEC : thm =
+val arm_UMLSL_VEC : thm =
+val arm_SMLAL_VEC : thm =
+val arm_SMLSL_VEC : thm =
+val arm_UMSUBL : thm =
+val arm_UMOV : thm =
+val arm_UMULH : thm =
+val arm_UMULL_VEC : thm =
+val arm_SMULL_VEC : thm =
+val arm_PMULL_VEC : thm =
+val arm_USHLL_VEC : thm =
+val arm_SSHLL_VEC : thm =
+val arm_USHR_VEC : thm =
+val word_ushl : thm =
+val arm_USHL_VEC : thm =
+val arm_USRA_VEC : thm =
+val arm_XTN : thm =
+val word_split_lohi : thm =
+val word_split_lo : thm =
+val word_split_hi : thm =
+val word_interleave_lo : thm =
+val word_interleave_hi : thm =
+val arm_TBL : thm =
+val arm_LDR : thm =
+val arm_STR : thm =
+val arm_LDRB : thm =
+val arm_STRB : thm =
+val arm_LDP : thm =
+val arm_STP : thm =
+val arm_BCAX : thm =
+val arm_AESE : thm =
+val arm_AESMC : thm =
+val arm_AESD : thm =
+val arm_AESIMC : thm =
+val arm_XAR : thm =
+val arm_BEQ : thm = |- [32marm_BEQ[0m = [32marm_Bcond[0m [32mCondition_EQ[0m
+val arm_BNE : thm = |- [32marm_BNE[0m = [32marm_Bcond[0m [32mCondition_NE[0m
+val arm_BCS : thm = |- [32marm_BCS[0m = [32marm_Bcond[0m [32mCondition_CS[0m
+val arm_BHS : thm = |- [32marm_BHS[0m = [32marm_Bcond[0m [32mCondition_HS[0m
+val arm_BCC : thm = |- [32marm_BCC[0m = [32marm_Bcond[0m [32mCondition_CC[0m
+val arm_BLO : thm = |- [32marm_BLO[0m = [32marm_Bcond[0m [32mCondition_LO[0m
+val arm_BMI : thm = |- [32marm_BMI[0m = [32marm_Bcond[0m [32mCondition_MI[0m
+val arm_BPL : thm = |- [32marm_BPL[0m = [32marm_Bcond[0m [32mCondition_PL[0m
+val arm_BVS : thm = |- [32marm_BVS[0m = [32marm_Bcond[0m [32mCondition_VS[0m
+val arm_BVC : thm = |- [32marm_BVC[0m = [32marm_Bcond[0m [32mCondition_VC[0m
+val arm_BHI : thm = |- [32marm_BHI[0m = [32marm_Bcond[0m [32mCondition_HI[0m
+val arm_BLS : thm = |- [32marm_BLS[0m = [32marm_Bcond[0m [32mCondition_LS[0m
+val arm_BGE : thm = |- [32marm_BGE[0m = [32marm_Bcond[0m [32mCondition_GE[0m
+val arm_BLT : thm = |- [32marm_BLT[0m = [32marm_Bcond[0m [32mCondition_LT[0m
+val arm_BGT : thm = |- [32marm_BGT[0m = [32marm_Bcond[0m [32mCondition_GT[0m
+val arm_BLE : thm = |- [32marm_BLE[0m = [32marm_Bcond[0m [32mCondition_LE[0m
+val arm_BAL : thm = |- [32marm_BAL[0m = [32marm_Bcond[0m [32mCondition_AL[0m
+val arm_BNV : thm = |- [32marm_BNV[0m = [32marm_Bcond[0m [32mCondition_NV[0m
+val arm_CINC : thm =
+val arm_CINV : thm =
+val arm_CNEG : thm =
+val arm_CMN : thm =
+val arm_CMP : thm =
+val arm_CSET : thm =
+val arm_CSETM : thm =
+val arm_MOV : thm =
+val arm_MOV_VEC : thm =
+val arm_MNEG : thm =
+val arm_MUL : thm =
+val arm_MVN : thm =
+val arm_NEG : thm =
+val arm_NEGS : thm =
+val arm_NGC : thm =
+val arm_NGCS : thm =
+val arm_ROR : thm =
+val arm_TST : thm =
+val arm_UMNEGL : thm = |- [32marm_UMNEGL[0m Rd Rn Rm = [32marm_UMSUBL[0m Rd Rn Rm [32mXZR[0m
+val arm_UMULL : thm = |- [32marm_UMULL[0m Rd Rn Rm = [32marm_UMADDL[0m Rd Rn Rm [32mXZR[0m
+val ARM_INSTRUCTION_ALIASES : thm list =
+val arm_ASR : thm =
+val arm_LSL : thm =
+val arm_LSR : thm =
+val arm_ASR_ALIAS : thm =
+val arm_LSL_ALIAS : thm =
+val arm_LSR_ALIAS : thm =
+val arm_ROR_ALT : thm =
+val arm_CCMN_ALT : thm =
+val arm_CCMP_ALT : thm =
+val ARM_SBC_ALT : thm =
+val ARM_SBCS_ALT : thm =
+val ARM_MADD_ALT : thm =
+val arm_ADCS_ALT : thm =
+val arm_ADDS_ALT : thm =
+val arm_SBCS_ALT : thm =
+val arm_SUBS_ALT : thm =
+val arm_CBNZ_ALT : thm =
+val arm_CBZ_ALT : thm =
+val arm_MOVZ_ALT : thm =
+val arm_MOVK_ALT : thm =
+val all_simd_rules : thm list =
+val EXPAND_SIMD_RULE : thm -> thm = <fun>
+val arm_ADD_VEC_ALT : thm =
+val arm_ABS_VEC_ALT : thm =
+val arm_CMGE_VEC_ALT : thm =
+val arm_CMGT_VEC_ALT : thm =
+val arm_CMHI_VEC_ALT : thm =
+val arm_CMLE_VEC_ZERO_ALT : thm =
+val arm_CNT_ALT : thm =
+val arm_DUP_GEN_ALT : thm =
+val arm_MLS_VEC_ALT : thm =
+val arm_MLA_VEC_ALT : thm =
+val arm_MUL_VEC_ALT : thm =
+val arm_PMUL_VEC_ALT : thm =
+val arm_PMULL_VEC_ALT : thm =
+val arm_SHL_VEC_ALT : thm =
+val arm_SSHR_VEC_ALT : thm =
+val arm_SHRN_ALT : thm =
+val arm_SLI_VEC_ALT : thm =
+val arm_SMLAL_VEC_ALT : thm =
+val arm_SMLSL_VEC_ALT : thm =
+val arm_SMULL_VEC_ALT : thm =
+val arm_SRI_VEC_ALT : thm =
+val arm_SUB_VEC_ALT : thm =
+val arm_TBL_ALT : thm =
+val arm_UADDLP_ALT : thm =
+val arm_UMIN_VEC_ALT : thm =
+val arm_UMLAL_VEC_ALT : thm =
+val arm_UMLSL_VEC_ALT : thm =
+val arm_UMULL_VEC_ALT : thm =
+val arm_USHL_VEC_ALT : thm =
+val arm_USHLL_VEC_ALT : thm =
+val arm_SSHLL_VEC_ALT : thm =
+val arm_USHR_VEC_ALT : thm =
+val arm_USRA_VEC_ALT : thm =
+val arm_XTN_ALT : thm =
+val arm_SQDMULH_VEC_ALT : thm =
+val arm_SQRDMULH_VEC_ALT : thm =
+val arm_SRSHR_VEC_ALT : thm =
+val arm_UADDLV_ALT : thm =
+val arm_UMAXV_ALT : thm =
+val ASSIGN_MEMORY_TRIPLES_SPLIT : thm =
+val ARM_OPERATION_CLAUSES : thm list =
+val ARM_LOAD_STORE_CLAUSES : thm list =
+val XREG_SP : thm = |- [35mforall[0m n. [32mXREG_SP[0m n = [32mregisters[0m :> [32melement[0m n
+val WREG_SP : thm = |- [35mforall[0m n. [32mWREG_SP[0m n = [32mXREG_SP[0m n :> [32mzerotop_32[0m
+val QLANE : thm =
+val arm_logop : thm =
+val arm_adcop : thm =
+val arm_addop : thm =
+val arm_movop : thm =
+val arm_csop : thm =
+val arm_ccop : thm =
+val arm_lsvop : thm =
+val arm_bfmop : thm =
+val arm_ldst : thm =
+val arm_ldst_q : thm =
+val arm_ldst_d : thm =
+val arm_ldstb : thm =
+val arm_ldstp : thm =
+val arm_ldstp_d : thm =
+val arm_ldstp_q : thm =
+val arm_adv_simd_expand_imm : thm =
+val decode_bitmask : thm =
+val decode_shift : thm =
+val decode_extendtype : thm =
+val decode : thm =
+val encode_BL : thm =
+val decode_encode_BL : thm =
+val encode_ADR : thm =
+val decode_encode_ADR : thm =
+val encode_ADRP : thm =
+val decode_encode_ADRP : thm =
+val N_SUBLIST_CONV : thm -> int -> term -> thm = <fun>
+val arm_decode : thm =
+val ARM_DECODE_CONS : thm =
+val arm_decode_unique : thm =
+val ARM_DECODES_THM : thm -> (thm * term) list = <fun>
+val ARM_MK_EXEC_RULE : thm -> thm * thm option array = <fun>
+val arm_execute : thm = |- [32marm_execute[0m = ([35m\[0mi. i)
+val arm : thm =
+val OFFSET_ADDRESS_CLAUSES : thm =
+val WREG_EXPAND_CLAUSES : thm =
+val DREG_EXPAND_CLAUSES : thm =
+val READ_SHIFTEDREG_CLAUSES : thm =
+val READ_EXTENDEDREG_CLAUSES : thm =
+val READ_LANE_CLAUSES : thm =
+val XREG_NE_SP : thm =
+val ARM_THM : thm option array -> thm -> thm -> thm = <fun>
+val ARM_ENSURES_SUBLEMMA_TAC : thm -> string -> string -> tactic = <fun>
+val ARM_ENSURES_SUBSUBLEMMA_TAC : thm list -> string -> string -> tactic =
+val ARM_CONV : thm option array -> thm list -> term -> thm = <fun>
+val ARM_SINGLE_STEP_TAC : thm * thm option array -> string -> tactic = <fun>
+val ARM_VACCSTEP_TAC : thm * thm option array -> bool -> string -> tactic =
+val ARM_ACCSTEP_TAC : thm * thm option array -> bool -> string -> tactic =
+val ARM_VSTEPS_TAC : thm * thm option array -> int list -> tactic = <fun>
+val ARM_STEPS_TAC : thm * thm option array -> int list -> tactic = <fun>
+val ARM_ACCSIM_TAC : thm * thm option array -> int list -> int list -> tactic =
+val ARM_BIGSTEP_TAC : thm * thm option array -> string -> tactic = <fun>
+val ALIGNED_BYTES_LOADED_SUBPROGRAM_RULE : thm -> thm -> int -> thm = <fun>
+val swap_forall : thm =
+val append_lemma : thm =
+val ARM_ADD_RETURN_NOSTACK_TAC : thm * thm option array -> thm -> tactic =
+val ARM_SUB_LIST_OF_MC_TAC : thm -> thm -> thm list -> tactic = <fun>
+val BL_TARGET_CONV : thm list -> term -> thm = <fun>
+val adrp_within_bounds : thm =
+val ADRP_ADD_FOLD : thm =
+val bigdigit : thm =
+val BIGDIGITSUM_WORKS_GEN : thm =
+val BIGDIGITSUM_WORKS : thm =
+val BIGDIGIT_BOUND : thm = |- [35mforall[0m n i. [32mbigdigit[0m n i < 2 EXP 64
+val VAL_WORD_BIGDIGIT : thm =
+val BIGDIGIT_ZERO : thm =
+val BIGDIGIT_ADD_LEFT : thm =
+val BIGDIGIT_SUC : thm =
+val highdigits : thm = |- [35mforall[0m n i. [32mhighdigits[0m n i = n DIV 2 EXP (64 * i)
+val lowdigits : thm = |- [35mforall[0m n i. [32mlowdigits[0m n i = n MOD 2 EXP (64 * i)
+val HIGH_LOW_DIGITS : thm =
+val HIGHDIGITS_CLAUSES : thm =
+val HIGHDIGITS_STEP : thm =
+val LOWDIGITS_CLAUSES : thm =
+val HIGHDIGITS_ZERO : thm =
+val HIGHDIGITS_TRIVIAL : thm = |- [35mforall[0m n. [32mhighdigits[0m 0 n = 0
+val HIGHDIGITS_TOP : thm =
+val LOWDIGITS_BOUND : thm = |- [35mforall[0m n i. [32mlowdigits[0m n i < 2 EXP (64 * i)
+val LOWDIGITS_EQ_SELF : thm =
+val LOWDIGITS_SELF : thm =
+val LOWDIGITS_TRIVIAL : thm = |- [35mforall[0m n. [32mlowdigits[0m 0 n = 0
+val LOWDIGITS_LE : thm = |- [35mforall[0m n i. [32mlowdigits[0m n i <= n
+val LOWDIGITS_LOWDIGITS : thm =
+val BIGDIGIT_HIGHDIGITS : thm =
+val HIGHDIGITS_HIGHDIGITS : thm =
+val BIGDIGIT_LOWDIGITS : thm =
+val BIGDIGIT_DIV : thm =
+val WORD_BIGDIGIT_DIV : thm =
+val num_of_wordlist : thm =
+val wordlist_of_num : thm =
+val NUM_OF_WORDLIST_SING : thm = |- [35mforall[0m h. [32mnum_of_wordlist[0m [h] = [32mval[0m h
+val NUM_OF_WORDLIST_APPEND : thm =
+val NUM_OF_WORDLIST_BOUND_LENGTH : thm =
+val NUM_OF_WORDLIST_BOUND : thm =
+val NUM_OF_WORDLIST_BOUND_GEN : thm =
+val NUM_OF_WORDLIST_DIV : thm =
+val NUM_OF_WORDLIST_MOD : thm =
+val NUM_OF_WORDLIST_ZAP : thm =
+val LENGTH_WORDLIST_OF_NUM : thm =
+val NUM_OF_WORDLIST_BOUND : thm =
+val WORDLIST_OF_NUM_OF_WORDLIST : thm =
+val NUM_OF_WORDLIST_OF_NUM : thm =
+val WORDLIST_OF_NUM_MOD : thm =
+val NUM_OF_WORDLIST_OF_NUM_EQ_SELF : thm =
+val NUM_OF_WORDLIST_LT : thm =
+val NUM_OF_WORDLIST_LE : thm =
+val NUM_OF_WORDLIST_EQ : thm =
+val NUM_OF_WORDLIST_SUB_LIST : thm =
+val NUM_OF_WORDLIST_EL : thm =
+val EL_NUM_OF_WORDLIST : thm =
+val LISTS_NUM_OF_WORDLIST_EQ : thm =
+val BYTES_EQ_NUM_OF_WORDLIST_EXPAND : thm =
+val BYTES_EQ_NUM_OF_WORDLIST_APPEND : thm =
+val bignum_of_list : thm =
+val bignum_of_wordlist : thm =
+val BIGNUM_OF_WORDLIST_DIV : thm =
+val BIGNUM_OF_WORDLIST_SING : thm =
+val BIGNUM_OF_WORDLIST_MOD : thm =
+val BIGNUM_OF_WORDLIST_ZAP : thm =
+val BIGNUM_OF_WORDLIST_BOUND_LENGTH : thm =
+val BIGNUM_OF_WORDLIST_BOUND : thm =
+val BIGNUM_FROM_WORDLIST_BOUND_GEN : thm =
+val BIGNUM_OF_WORDLIST_APPEND : thm =
+val BIGNUM_OF_WORDLIST_LT : thm =
+val BIGNUM_OF_WORDLIST_LE : thm =
+val BIGNUM_OF_WORDLIST_EQ : thm =
+val BIGNUM_OF_WORDLIST_EQ_MAX : thm =
+val BIGNUM_OF_WORDLIST_LT_MAX : thm =
+val BIGDIGIT_BIGNUM_OF_WORDLIST : thm =
+val wordlist_from_memory : thm =
+val WORDLIST_FROM_MEMORY_GEN : thm =
+val WORDLIST_FROM_MEMORY : thm =
+val LENGTH_WORDLIST_FROM_MEMORY : thm =
+val NUM_OF_WORDLIST_FROM_MEMORY_GEN : thm =
+val NUM_OF_WORDLIST_FROM_MEMORY : thm =
+val NUM_OF_WORDLIST_FROM_MEMORY_BYTE : thm =
+val WORDLIST_FROM_MEMORY_EQ_ALT : thm =
+val WORDLIST_FROM_MEMORY_CLAUSES : thm =
+val pair_wordlist : thm =
+val LENGTH_PAIR_WORDLIST : thm =
+val NUM_OF_PAIR_WORDLIST : thm =
+val WORDLIST_FROM_MEMORY_PAIR_GEN : thm =
+val WORDLIST_FROM_MEMORY_PAIR : thm =
+val bignum_from_memory : thm =
+val BIGNUM_FROM_MEMORY_BOUND : thm =
+val BIGNUM_FROM_MEMORY_TRIVIAL : thm =
+val BIGNUM_FROM_MEMORY : thm =
+val BIGNUM_FROM_MEMORY_STEP : thm =
+val BIGNUM_FROM_MEMORY_SING : thm =
+val BIGNUM_FROM_MEMORY_MOD : thm =
+val BIGNUM_FROM_MEMORY_DIV : thm =
+val LOWDIGITS_BIGNUM_FROM_MEMORY : thm =
+val HIGHDIGITS_BIGNUM_FROM_MEMORY : thm =
+val BIGNUM_FROM_MEMORY_SPLIT : thm =
+val BIGDIGIT_BIGNUM_FROM_MEMORY : thm =
+val BIGNUM_FROM_MEMORY_LT_STEP : thm =
+val BIGNUM_FROM_MEMORY_LEXICOGRAPHIC : thm =
+val BIGNUM_FROM_MEMORY_EXPAND : thm =
+val BIGNUM_FROM_MEMORY_EQ_HIGHDIGITS : thm =
+val BIGNUM_FROM_MEMORY_OFFSET_EQ_HIGHDIGITS : thm =
+val BIGNUM_FROM_MEMORY_EQ_HIGHDIGITS_ALT : thm =
+val BIGNUM_FROM_MEMORY_OFFSET_EQ_HIGHDIGITS_ALT : thm =
+val BIGNUM_FROM_MEMORY_EQ_LOWDIGITS : thm =
+val packaged_bignum_from_memory : thm =
+val BIGNUM_FROM_MEMORY_BYTES : thm =
+val READ_BYTES_EQ_BYTELIST : thm =
+val READ_BYTELIST_EQ_BYTES : thm =
+val bignum : thm = |- [32mbignum[0m (a,k) = [32mbytes[0m (a,8 * k)
+val BIGNUM_FROM_MEMORY_BIGNUM : thm =
+val READ_BIGNUM_BOUND : thm =
+val READ_BIGNUM_TRIVIAL : thm =
+val it : unit = ()
+#               val SUB_MOVE : thm = |- [35mforall[0m r m q. q <= m ==> r + m - q = (r + m) - q
+#       Exception:
+#               Exception: Failure "MATCH_MP_TAC: No match".
+#             Exception: Failure "TAC_PROOF: Unsolved goals".
+Exception: Failure "seqapply: Length mismatch".
+#         val ref_add : thm =
+Error: Unbound value SUB_MOD
+Error: Unbound value ADD_REF_VAL
+#   REF3_DONE
+val it : unit = ()

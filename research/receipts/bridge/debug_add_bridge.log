@@ -1,0 +1,120 @@
+    Printf.printf "DEBUG_CSAT_%d_START\n%s\nDEBUG_CSAT_%d_END\n%!" !ngRT\n%s\nDEBUG_CSAT_%d_END\n%!" !ngo                                  <al (string_of_term imp)(string_of_term imp) !ngoal;    Printf.printf "DEBUG_CSAT_%d_START\n%s\nDEBUG_CSAT_%d_END\n%!" !ngoal (string_of_term imp) !ngoal;
+  with e -> Printf.printf "DEBUG_BRIDGE_FAIL %s\n%!" (Printexc.to_striDGE_FAIL %s\n%!" (Printexc.to_strin                                  <g e)(Printexc.to_string e); false;;  with e -> Printf.printf "DEBUG_BRIDGE_FAIL %s\n%!" (Printexc.to_string e); false;;
+Printf.printf "DEBUG_BRIDGE_DONE closed=%b goals=%d seconds=%.3f\n%!" sed=%b goals=%d seconds=%.3f\n%!" c                                  <losedPrintf.printf "DEBUG_BRIDGE_DONE closed=%b goals=%d seconds=%.3f\n%!" closed
+DEBUG_CSAT_1_START
+true
+==> (&(val m_0) +
+     &(val (word_join m_1 (word 0))) +
+     &(val (word_join m_2 (word 0))) +
+     &(val (word_join m_3 (word 0)))) +
+    &(val n_0) +
+    &(val (word_join n_1 (word 0))) +
+    &(val (word_join n_2 (word 0))) +
+    &(val (word_join n_3 (word 0))) <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> &0 <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> &(val n_0) +
+    &(val (word_join n_1 (word 0))) +
+    &(val (word_join n_2 (word 0))) +
+    &(val (word_join n_3 (word 0))) <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> &(val m_0) +
+    &(val (word_join m_1 (word 0))) +
+    &(val (word_join m_2 (word 0))) +
+    &(val (word_join m_3 (word 0))) <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> --(&2 pow 64) * &1 + &(val sum_s16) =
+    &(bitval carry_s8) - &0 - &(bitval carry_s15)
+==> -- &(val (word_join (word (bitval carry_s15)) (word 0))) + &(val sum_s15) =
+    &(val sum_s8) - &18446744069414584321 - &(bitval carry_s13)
+==> -- &(val (word_join (word (bitval carry_s13)) (word 0))) + &(val sum_s13) =
+    &(val sum_s7) - &0 - &(bitval carry_s12)
+==> -- &(val (word_join (word (bitval carry_s12)) (word 0))) + &(val sum_s12) =
+    &(val sum_s4) - &4294967295 - (&1 - &(bitval carry_s10))
+==> &(val (word_join (word (bitval carry_s10)) (word 0))) + &(val sum_s10) =
+    &(val sum_s3) + &1
+==> &(val (word_join (word (bitval carry_s8)) (word 0))) + &(val sum_s8) =
+    &(val m_3) + &(val n_3) + &(bitval carry_s7)
+==> &(val (word_join (word (bitval carry_s7)) (word 0))) + &(val sum_s7) =
+    &(val m_2) + &(val n_2) + &(bitval carry_s4)
+==> &(val (word_join (word (bitval carry_s4)) (word 0))) + &(val sum_s4) =
+    &(val m_1) + &(val n_1) + &(bitval carry_s3)
+==> &(val (word_join (word (bitval carry_s3)) (word 0))) + &(val sum_s3) =
+    &(val m_0) + &(val n_0)
+==> true
+==> true
+==> nonoverlapping_modulo (2 EXP 64) (pc,92) (val z,8 * 4)
+==> (&(val m_0) +
+     &(val (word_join m_1 (word 0))) +
+     &(val (word_join m_2 (word 0))) +
+     &(val (word_join m_3 (word 0)))) +
+    &(val n_0) +
+    &(val (word_join n_1 (word 0))) +
+    &(val (word_join n_2 (word 0))) +
+    &(val (word_join n_3 (word 0))) =
+    &(val sum_s3) +
+    &(val (word_join sum_s4 (word 0))) +
+    &(val (word_join sum_s7 (word 0))) +
+    &(val (word_join sum_s8 (word 0)))
+DEBUG_CSAT_1_END
+DEBUG_CSAT_1_OK 29.862
+DEBUG_CSAT_2_START
+true
+==> (&(val m_0) +
+     &(val (word_join m_1 (word 0))) +
+     &(val (word_join m_2 (word 0))) +
+     &(val (word_join m_3 (word 0)))) +
+    &(val n_0) +
+    &(val (word_join n_1 (word 0))) +
+    &(val (word_join n_2 (word 0))) +
+    &(val (word_join n_3 (word 0))) <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> &0 <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> &(val n_0) +
+    &(val (word_join n_1 (word 0))) +
+    &(val (word_join n_2 (word 0))) +
+    &(val (word_join n_3 (word 0))) <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> &(val m_0) +
+    &(val (word_join m_1 (word 0))) +
+    &(val (word_join m_2 (word 0))) +
+    &(val (word_join m_3 (word 0))) <
+    &115792089210356248762697446949407573530086143415290314195533631308867097853951
+==> --(&2 pow 64) * &0 + &(val sum_s16) =
+    &(bitval carry_s8) - &0 - &(bitval carry_s15)
+==> -- &(val (word_join (word (bitval carry_s15)) (word 0))) + &(val sum_s15) =
+    &(val sum_s8) - &18446744069414584321 - &(bitval carry_s13)
+==> -- &(val (word_join (word (bitval carry_s13)) (word 0))) + &(val sum_s13) =
+    &(val sum_s7) - &0 - &(bitval carry_s12)
+==> -- &(val (word_join (word (bitval carry_s12)) (word 0))) + &(val sum_s12) =
+    &(val sum_s4) - &4294967295 - (&1 - &(bitval carry_s10))
+==> &(val (word_join (word (bitval carry_s10)) (word 0))) + &(val sum_s10) =
+    &(val sum_s3) + &1
+==> &(val (word_join (word (bitval carry_s8)) (word 0))) + &(val sum_s8) =
+    &(val m_3) + &(val n_3) + &(bitval carry_s7)
+==> &(val (word_join (word (bitval carry_s7)) (word 0))) + &(val sum_s7) =
+    &(val m_2) + &(val n_2) + &(bitval carry_s4)
+==> &(val (word_join (word (bitval carry_s4)) (word 0))) + &(val sum_s4) =
+    &(val m_1) + &(val n_1) + &(bitval carry_s3)
+==> &(val (word_join (word (bitval carry_s3)) (word 0))) + &(val sum_s3) =
+    &(val m_0) + &(val n_0)
+==> true
+==> true
+==> nonoverlapping_modulo (2 EXP 64) (pc,92) (val z,8 * 4)
+==> (&(val m_0) +
+     &(val (word_join m_1 (word 0))) +
+     &(val (word_join m_2 (word 0))) +
+     &(val (word_join m_3 (word 0)))) +
+    &(val n_0) +
+    &(val (word_join n_1 (word 0))) +
+    &(val (word_join n_2 (word 0))) +
+    &(val (word_join n_3 (word 0))) =
+    &(val sum_s10) +
+    &(val (word_join sum_s12 (word 0))) +
+    &(val (word_join sum_s13 (word 0))) +
+    &(val (word_join sum_s15 (word 0)))
+DEBUG_CSAT_2_END
+DEBUG_CSAT_2_FAIL Failure("CSAT: cadical did not report UNSAT, exit 10") 22.188
+DEBUG_BRIDGE_FAIL Failure("CSAT: cadical did not report UNSAT, exit 10")

@@ -681,12 +681,18 @@ Everything else stays parked until step 7 produces a number.
      instance. All curve-specific reduction (`+19`, `2^32+977`, masks) lives here, in a purely
      bit-level problem.
   3. **`VAL_JOIN`-style lemmas** turning `bignum_of_wordlist [w0..w3]` into one word.
-- [ ] **V7.3. Contamination test for the design itself:** if any bridge lemma mentions a specific
+- [x] **V7.3. Contamination test for the design itself:** if any bridge lemma mentions a specific
   curve constant or reduction shape, class-specific templates have crept back in and the held-out
   failures will return. Enforce mechanically (grep the lemma statements for curve names).
-- [ ] **V7.4. `bridge.ml` is unverified.** It declares lemmas with `prove`, but no committed
-  evidence shows any of them succeeded. Mark unverified until a fresh HOL Light process proves each
-  one and the output is receipted (AGENTS rule 6).
+  **Checked 2026-11-23:** `research/receipts/bridge/curve_check.py tools/bridge.ml` → 20 `prove`
+  statements, 0 hits (log `research/receipts/bridge/curve_check.log`).
+- [x] **V7.4. `bridge.ml` verified.** Fresh HOL Light process: **38/38 bindings `OK`**,
+  18 theorems proved, load time 0.384 s, **axioms 3 → 3**. Five real conversion defects were fixed
+  (GSYM direction, `dimindex` subterm, `int_mul`/`int_pow` matching, negative shifts, and
+  `MATCH_MP_TAC` on a nested implication). Receipt: `research/receipts/bridge/bridge_fresh.log`.
+  **Verified 2026-11-23:** all 38 top-level bindings report `BRIDGE_CHECK ... OK` in a fresh
+  process; axiom count 3 → 3. Log `research/receipts/bridge/bridge_fresh.log`; harness
+  `research/receipts/bridge/instrument.py`.
 - [ ] **V7.5. De-hardcode `csat_bridge.ml`.** It still contains P-256 machine-code definitions and
   a hand-written simulation prefix. Acceptable to validate the bridge; the production path must be
   driven by the witness and the machine-code analysis.
@@ -706,8 +712,25 @@ Everything else stays parked until step 7 produces a number.
 
 ## Order
 
-- [ ] **V7.9. Prove the generic `ref` lemma for add in a fresh process**, then run P-256 add end to
-  end through the bench judge and get `OK`. Record theorem, proof time, hypotheses, axiom delta.
+- [~] **V7.9. Prove the generic `ref` lemma for add, then P-256 add end to end.** Attempted and
+  **not achieved**: the judge returns `FAIL` (`CSAT: cadical did not report UNSAT, exit 10`). The
+  no-curve-constant check passed (20 statements, 0 hits). Diagnosis, measured: after the bridge the
+  LT residue has antecedent `&(m+n) < &p` over the joined inputs, and `IWORDIFY` picks a **257-bit**
+  word whose true value can reach `2^257-2`; `ival` is signed, so values `>= 2^256` read negative and
+  the branch condition is not the intended unsigned comparison. End-to-end 8.765 s. Branch timings:
+  true-branch **29.862 s** (closed), false-branch **22.188 s** (SAT). The generic `ref` lemma was
+  drafted but **not proved** (stalls on `SUB_CANCEL`, `MOD_SUB_ONE`, `MOD_ADD_GE_VAR`, `SUB_MOD`).
+- [ ] **V7.9a. Fix the width/signedness defect.** Either join into a width where `ival` is provably
+  non-negative for the reachable range, or carry an explicit unsigned interpretation through the
+  bridge; do not paper over it by narrowing the algorithm. Re-run P-256 add.
+- [ ] **V7.9b. Prove `ADD_REF_VAL`.** `0 < val pw /\ val x < val pw /\ val y < val pw ==>
+  val (ref_add pw x y) = (val x + val y) MOD val pw`. The missing arithmetic plumbing
+  (`SUB_CANCEL`, `MOD_SUB_ONE`, `MOD_ADD_GE_VAR`, `SUB_MOD`) is the job, not a new theory.
+  **Measured 2026-11-23 (negative):** the official judge on P-256 add is `FAIL` in 8.765 s with
+  CaDiCaL exit 10 (SAT) on the post-simulation residue. `.judge.txt`:
+  `.bench/eval-20261123_091448/arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT.judge.txt`.
+  The generic `ADD_REF_VAL` is drafted but **not proved** and is not in `bridge.ml`. Full account:
+  `research/receipts/bridge/REPORT.md`.
 - [ ] **V7.10. Then `sub` and `neg`** with the same shape.
 - [ ] **V7.11. Then P-384 addition** — a genuinely different correction structure — as a
   development target.

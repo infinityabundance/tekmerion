@@ -1,0 +1,42 @@
+Printf.printf "AXIOMS before=%d after=%d\n" ax0 (List.length (axioms (ter=%d\n" ax0 (List.length (axioms ()                                <())(axioms ()))(List.length (axioms ()));;Printf.printf "AXIOMS before=%d after=%d\n" ax0 (List.length (axioms ()));;
+Printf.printf "BRIDGE_CHECK_DONE seconds=%.3f\n%!" (Unix.gettimeofday onds=%.3f\n%!" (Unix.gettimeofday (                                  <)() -. bt0)(Unix.gettimeofday () -. bt0);;Printf.printf "BRIDGE_CHECK_DONE seconds=%.3f\n%!" (Unix.gettimeofday () -. bt0);;
+BRIDGE_CHECK ADD_MOD_LT OK
+BRIDGE_CHECK ADD_MOD_GE OK
+BRIDGE_CHECK ADD_GE_SUM OK
+BRIDGE_CHECK ADD_MOD_SPLIT OK
+BRIDGE_CHECK SUB_REM_LT OK
+BRIDGE_CHECK SUB_REM_GE OK
+BRIDGE_CHECK SUB_LT_SUM OK
+BRIDGE_CHECK SUB_GE_SUM OK
+BRIDGE_CHECK SUB_REM_SPLIT OK
+BRIDGE_CHECK NEG_MOD_ZERO OK
+BRIDGE_CHECK NEG_MOD_NZ OK
+BRIDGE_CHECK NEG_NZ_SUM OK
+BRIDGE_CHECK NEG_MOD_SPLIT OK
+BRIDGE_CHECK BRIDGE_SPEC_LEMMAS OK
+BRIDGE_CHECK EXP2_NZ OK
+BRIDGE_CHECK LT_EXP_MULT OK
+BRIDGE_CHECK VAL_JOIN_ZERO OK
+BRIDGE_CHECK INT_JOIN_ZERO OK
+BRIDGE_CHECK BITVAL_AS_VAL OK
+BRIDGE_CHECK REAL_TO_INT_CONV OK
+BRIDGE_CHECK NUM_TO_INT_CONV OK
+BRIDGE_CHECK INT_DISTRIB_CONV OK
+BRIDGE_CHECK INT_JOIN_ZERO_TH OK
+BRIDGE_CHECK INT_SHIFT_TO_JOIN_CONV OK
+BRIDGE_CHECK BRIDGE_SHIFTS_TO_JOINS_CONV OK
+BRIDGE_CHECK BRIDGE_TO_WORD_CONV OK
+BRIDGE_CHECK bridge_conditions OK
+BRIDGE_CHECK BRIDGE_SPLIT_CONDITIONS_TAC OK
+BRIDGE_CHECK BRIDGE_HAS_VAL OK
+BRIDGE_CHECK ELIM_DIGIT_EQS_TAC OK
+BRIDGE_CHECK BRIDGE_CSAT_TAC OK
+BRIDGE_CHECK BRIDGE_PREPARE_TAC OK
+BRIDGE_CHECK BRIDGE_FINISH_TAC OK
+BRIDGE_CHECK BRIDGE_ZERO_LT_TAC OK
+BRIDGE_CHECK BRIDGE_REWRITE_MODULUS OK
+BRIDGE_CHECK BRIDGE_ADD_TAC OK
+BRIDGE_CHECK BRIDGE_SUB_TAC OK
+BRIDGE_CHECK BRIDGE_NEG_TAC OK
+# AXIOMS before=3 after=3
+# BRIDGE_CHECK_DONE seconds=0.384

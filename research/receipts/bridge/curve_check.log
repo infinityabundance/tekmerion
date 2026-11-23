@@ -1,0 +1,41 @@
+line 41: CLEAN
+  !p m n. m < p /\ n < p /\ m + n < p ==> (m + n) MOD p = m + n
+line 49: CLEAN
+  !p m n. m < p /\ n < p /\ p <= m + n ==> (m + n) MOD p = (m + n) - p
+line 59: CLEAN
+  !p m n t. p <= m + n ==> ((t = (m + n) - p) <=> (t + p = m + n))
+line 70: CLEAN
+  !p m n s t.
+line 84: CLEAN
+  !p m n. 0 < p /\ m < p /\ n < p /\ m < n
+line 97: CLEAN
+  !p m n. 0 < p /\ m < p /\ n < p /\ ~(m < n)
+line 110: CLEAN
+  !p m n t. n < p /\ m < n ==> ((t = (m + p) - n) <=> (t + n = m + p))
+line 121: CLEAN
+  !m n t. ~(m < n) ==> ((t = m - n) <=> (t + n = m))
+line 131: CLEAN
+  !p m n s.
+line 145: CLEAN
+  !p n. 0 < p /\ n = 0 ==> (p - n) MOD p = 0
+line 149: CLEAN
+  !p n. 0 < p /\ n <= p /\ ~(n = 0) ==> (p - n) MOD p = (p - n)
+line 153: CLEAN
+  !p n t. n <= p ==> ((t = p - n) <=> (t + n = p))
+line 162: CLEAN
+  !p n s.
+line 190: CLEAN
+  !j:num. ~(2 EXP j = 0)
+line 194: CLEAN
+  !x j k:num. x < 2 EXP k ==> 2 EXP j * x < 2 EXP (j + k)
+line 201: CLEAN
+  !x:M word. dimindex(:M) + dimindex(:N) = dimindex(:P)
+line 209: CLEAN
+  !x:M word. dimindex(:M) + dimindex(:N) = dimindex(:P)
+line 216: CLEAN
+  !b. bitval b = val(word(bitval b):1 word)
+line 261: CLEAN
+  (&2):int
+line 376: CLEAN
+  (<):num->num->bool
+statements=20 hits=0

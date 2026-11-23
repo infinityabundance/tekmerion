@@ -1,0 +1,22 @@
+Printf.printf "PROBE_DONE\n%!";;
+# === add.residual: 14 assumptions
+ASM n < p_256
+ASM m < p_256
+ASM --(&2 pow 64) * &(bitval carry_s16) + &(val sum_s16) =
+ASM --(&2 pow 64) * &(bitval carry_s15) + &(val sum_s15) =
+ASM --(&2 pow 64) * &(bitval carry_s13) + &(val sum_s13) =
+ASM --(&2 pow 64) * &(bitval carry_s12) + &(val sum_s12) =
+ASM &2 pow 64 * &(bitval carry_s10) + &(val sum_s10) = &(val sum_s3) + &1
+ASM &2 pow 64 * &(bitval carry_s8) + &(val sum_s8) =
+ASM &2 pow 64 * &(bitval carry_s7) + &(val sum_s7) =
+ASM &2 pow 64 * &(bitval carry_s4) + &(val sum_s4) =
+ASM &2 pow 64 * &(bitval carry_s3) + &(val sum_s3) = &(val m_0) + &(val n_0)
+ASM val n_0 + 2 EXP 64 * val n_1 + 2 EXP 128 * val n_2 + 2 EXP 192 * val n_3 = n
+ASM val m_0 + 2 EXP 64 * val m_1 + 2 EXP 128 * val m_2 + 2 EXP 192 * val m_3 = m
+ASM nonoverlapping_modulo (2 EXP 64) (pc,92) (val z,8 * 4)
+GOAL (m + n) MOD p_256 =
+bignum_of_wordlist
+[if carry_s16 then sum_s3 else sum_s10;
+ if carry_s16 then sum_s4 else sum_s12;
+ if carry_s16 then sum_s7 else sum_s13; if carry_s16 then sum_s8 else sum_s15]
+# PROBE_DONE

@@ -228,11 +228,15 @@ let REAL_TO_INT_CONV =
    [GSYM int_of_num_th; GSYM int_neg_th; GSYM int_add_th; GSYM int_sub_th;
     GSYM int_mul_th; GSYM int_pow_th; GSYM int_eq];;
 
-(* num equation -> int equation, with `&' pushed inside sum/product/power *)
+(* num equation -> int equation, with `&' pushed inside sum/product/power.    *)
+(* INT_OF_NUM_ADD/MUL/POW are stated with `&' *outside* (`&m + &n = &(m + n)`), *)
+(* so they must be used in the GSYM direction here; using them forwards folds  *)
+(* the whole bignum back into a single `&(...)', which the shift-to-join       *)
+(* conversion cannot see (measured: every post-simulation stage stayed SAT).   *)
 let NUM_TO_INT_CONV =
   GEN_REWRITE_CONV TOP_DEPTH_CONV
    [GSYM INT_OF_NUM_EQ; GSYM INT_OF_NUM_LT; GSYM INT_OF_NUM_LE;
-    INT_OF_NUM_ADD; INT_OF_NUM_MUL; INT_OF_NUM_POW];;
+    GSYM INT_OF_NUM_ADD; GSYM INT_OF_NUM_MUL; GSYM INT_OF_NUM_POW];;
 
 (* (a + b) * c = a * c + b * c, needed because bignum_of_wordlist nests     *)
 (* its shifts around a sum, not around a single digit.                       *)
@@ -258,28 +262,48 @@ let INT_JOIN_ZERO_TH x k =
     prove(cond,
       CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
                RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
-  (* reduce dimindex(:N) on the left so the rule is syntactically applicable *)
-  CONV_RULE (LAND_CONV(RAND_CONV DIMINDEX_CONV)) (MP th1 side);;
+  (* reduce dimindex(:N) on the left so the rule is syntactically applicable.  *)
+  (* The left side of the equation is `&2 pow dimindex(:N) * &(val x)'; the     *)
+  (* exponent is the *left* operand of that product, so the path is            *)
+  (* LAND (LAND (RAND DIMINDEX)).  The old single LAND reached `&(val x)' and   *)
+  (* raised DIMINDEX_CONV, which DEPTH_CONV silently swallowed, leaving every  *)
+  (* shift unconverted and every SAT call SATISFIABLE.                        *)
+  CONV_RULE (LAND_CONV(LAND_CONV(RAND_CONV DIMINDEX_CONV))) (MP th1 side);;
 
 let INT_SHIFT_TO_JOIN_CONV : conv =
+  (* the second operand is either `&(val x)' or `&(bitval b)'; the latter is    *)
+  (* turned into `&(val(word(bitval b):1 word))' so both share one path.        *)
+  let operand q =
+    match q with
+      Comb(Const("int_of_num",_),Comb(Const("val",_),x)) -> (x, REFL q)
+    | Comb(Const("int_of_num",_),Comb(Const("bitval",_),_)) ->
+        let bth = RAND_CONV (GEN_REWRITE_CONV I [BITVAL_AS_VAL]) q in
+        (rand(rand(rand(concl bth))), bth)
+    | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: operand" in
+  let pow2 tm =
+    match tm with
+      Comb(Comb(Const("int_pow",_),two),n)
+        when aconv two `(&2):int` && is_numeral n -> dest_small_numeral n
+    | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: multiplier" in
+  let mul_left p th =
+    AP_TERM (mk_comb(`int_mul:int->int->int`, p)) th in
   let conv tm =
     match tm with
-      Comb(Comb(Const("*",_),p),q) when type_of tm = `:int` ->
+      Comb(Comb(Const("int_mul",_),p),q) when type_of tm = `:int` ->
         (match p with
-           Comb(Comb(Const("pow",_),two),n)
-             when aconv two `(&2):int` && is_numeral n ->
-             let k = dest_small_numeral n in
-             (match q with
-                Comb(Const("int_of_num",_),Comb(Const("val",_),x)) ->
-                  INT_JOIN_ZERO_TH x k
-              | Comb(Const("int_of_num",_),Comb(Const("bitval",_),_)) ->
-                  let bth = GEN_REWRITE_CONV I [BITVAL_AS_VAL] q in
-                  let q' = rand(concl bth) in
-                  let x = rand(rand q') in
-                  TRANS (AP_TERM (rator(rator tm)) bth)
-                        (INT_JOIN_ZERO_TH x k)
-              | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: operand")
-           | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: multiplier")
+           Comb(Comb(Const("int_pow",_),_),_) ->
+             let k = pow2 p in
+             let (x,bth) = operand q in
+             TRANS (mul_left p bth) (INT_JOIN_ZERO_TH x k)
+         | Comb(Const("int_neg",_),pt) ->
+             (* accumulator equations carry the shifted flag negatively       *)
+             let k = pow2 pt in
+             let (x,bth) = operand q in
+             let q' = rand(concl bth) in
+             let bth2 = mul_left p bth in
+             let negth = AP_TERM `(int_neg):int->int` (INT_JOIN_ZERO_TH x k) in
+             TRANS bth2 (TRANS (SPECL [pt; q'] INT_MUL_LNEG) negth)
+         | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: multiplier") 
     | _ -> failwith "INT_SHIFT_TO_JOIN_CONV" in
   conv;;
 
@@ -351,7 +375,11 @@ let BRIDGE_CSAT_TAC : tactic =
     let hyps = map (fun (_,th) -> concl th) asl in
     let imp = itlist (fun a b -> mk_imp(a,b)) hyps w in
     let th = prove(imp, CSAT_TAC) in
-    (MATCH_MP_TAC th THEN ASM_REWRITE_TAC[]) (asl,w);;
+    (* `th' is `hyps ==> w'.  MP_TAC puts that implication in front of the goal; *)
+    (* ASM_REWRITE_TAC then discharges every antecedent because each one is an    *)
+    (* assumption of the goal.  (MATCH_MP_TAC peels only one implication and so   *)
+    (* fails on the nested form: measured `MATCH_MP_TAC: No match'.)            *)
+    (MP_TAC th THEN ASM_REWRITE_TAC[]) (asl,w);;
 
 (* everything that precedes the SAT call, on the goal *)
 let BRIDGE_PREPARE_TAC (expand:tactic) : tactic =
