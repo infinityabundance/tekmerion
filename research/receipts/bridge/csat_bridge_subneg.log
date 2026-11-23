@@ -1,0 +1,15 @@
+    Printf.printf "STAGE_FAIL %s : %s\n" tag
+  stamp (op ^ ": start")(op ^ ": start");
+        Printf.printf "RESULT %s closed=1 hyps=%d seconds=%.3f\n"
+        Printf.printf "RESULT %s closed=0 seconds=%.3f\n"
+stamp "loading done";;
+Printf.printf "BRIDGE_DRIVER_DONE\n%!";;
+#   [   1.63] loading done
+#     [   1.63] add: start
+RESULT add closed=1 hyps=0 seconds=137.003
+#           [ 139.88] sub: start
+RESULT sub closed=1 hyps=0 seconds=94.877
+#     [ 236.00] neg: start
+STAGE_FAIL neg.bridge : CSAT: cadical did not report UNSAT, exit 10
+RESULT neg closed=0 seconds=24.728
+#   BRIDGE_DRIVER_DONE

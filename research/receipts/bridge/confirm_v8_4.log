@@ -1,0 +1,153 @@
+=== operand widths (v8_4_confirm2) ===
+  Printf.printf "VALWIDTH %s : %s\n%!"
+#             VALWIDTH word_join sum_s15 (word 0) : (256)word
+VALWIDTH word_join sum_s13 (word 0) : (192)word
+VALWIDTH word_join sum_s12 (word 0) : (128)word
+VALWIDTH z : (64)word
+VALWIDTH word_join (word (bitval carry_s3)) (word 0) : (65)word
+VALWIDTH n_1 : (64)word
+VALWIDTH m_1 : (64)word
+VALWIDTH word_join (word (bitval carry_s4)) (word 0) : (65)word
+VALWIDTH n_2 : (64)word
+VALWIDTH m_2 : (64)word
+VALWIDTH word_join (word (bitval carry_s7)) (word 0) : (65)word
+VALWIDTH n_3 : (64)word
+VALWIDTH m_3 : (64)word
+VALWIDTH word_join (word (bitval carry_s8)) (word 0) : (65)word
+VALWIDTH sum_s3 : (64)word
+VALWIDTH sum_s10 : (64)word
+VALWIDTH word_join (word (bitval carry_s10)) (word 0) : (65)word
+VALWIDTH sum_s4 : (64)word
+VALWIDTH sum_s12 : (64)word
+VALWIDTH word_join (word (bitval carry_s12)) (word 0) : (65)word
+VALWIDTH sum_s7 : (64)word
+VALWIDTH sum_s13 : (64)word
+VALWIDTH word_join (word (bitval carry_s13)) (word 0) : (65)word
+VALWIDTH sum_s8 : (64)word
+VALWIDTH sum_s15 : (64)word
+VALWIDTH word_join (word (bitval carry_s15)) (word 0) : (65)word
+VALWIDTH sum_s16 : (64)word
+VALWIDTH word_join n_3 (word 0) : (256)word
+VALWIDTH word_join n_2 (word 0) : (192)word
+VALWIDTH word_join n_1 (word 0) : (128)word
+VALWIDTH n_0 : (64)word
+VALWIDTH word_join m_3 (word 0) : (256)word
+VALWIDTH word_join m_2 (word 0) : (192)word
+VALWIDTH word_join m_1 (word 0) : (128)word
+VALWIDTH m_0 : (64)word
+=== comparison wordified at bit 260 (excerpt) ===
+99459:bit 260
+99475:~bit 260
+99479:(bit 260
+99495: ~bit 260
+=== flag equation and verdicts (v8_4_confirm3) ===
+# val flag_hyp : term =
+  `--([32m&[0m2 pow 64) * [32m&[0m0 + [32m&[0m([32mval[0m sum_s16) =
+   [32m&[0m([32mbitval[0m carry_s8) - [32m&[0m0 - [32m&[0m([32mbitval[0m carry_s15)`
+# FLAG_HYP --(&2 pow 64) * &0 + &(val sum_s16) =
+&(bitval carry_s8) - &0 - &(bitval carry_s15)
+val it : unit = ()
+#   val all : term -> (term -> bool) -> term list = <fun>
+#         val named_val : string -> term -> bool = <fun>
+#       val bv : string -> term = <fun>
+#   val vs : term = `[32mval[0m sum_s16`
+#   val ib : term -> term = <fun>
+# val iadd : term -> term -> term = <fun>
+#       val flag_eq_int : term =
+  `[32m&[0m([32mbitval[0m carry_s8) = [32m&[0m([32mbitval[0m carry_s15) + [32m&[0m([32mval[0m sum_s16)`
+# FLAG_EQ_INT &(bitval carry_s8) = &(bitval carry_s15) + &(val sum_s16)
+val it : unit = ()
+#     VARIANT V0_asis closed=false seconds=21.634 reason=CSAT: cadical did not report UNSAT, exit 10
+val it : unit = ()
+#     VARIANT V2_flag_int closed=true seconds=29.080 reason=
+val it : unit = ()
+#     val pnum : term =
+  `115792089210356248762697446949407573530086143415290314195533631308867097853951`
+# val pterm : term =
+  `[32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951`
+# val a_total : term =
+  `([32m&[0m([32mval[0m m_0) +
+    [32m&[0m([32mval[0m ([32mword_join[0m m_1 ([32mword[0m 0))) +
+    [32m&[0m([32mval[0m ([32mword_join[0m m_2 ([32mword[0m 0))) +
+    [32m&[0m([32mval[0m ([32mword_join[0m m_3 ([32mword[0m 0)))) +
+   [32m&[0m([32mval[0m n_0) +
+   [32m&[0m([32mval[0m ([32mword_join[0m n_1 ([32mword[0m 0))) +
+   [32m&[0m([32mval[0m ([32mword_join[0m n_2 ([32mword[0m 0))) +
+   [32m&[0m([32mval[0m ([32mword_join[0m n_3 ([32mword[0m 0)))`
+val b_total : term =
+  `[32m&[0m([32mval[0m sum_s10) +
+   [32m&[0m([32mval[0m ([32mword_join[0m sum_s12 ([32mword[0m 0))) +
+   [32m&[0m([32mval[0m ([32mword_join[0m sum_s13 ([32mword[0m 0))) +
+   [32m&[0m([32mval[0m ([32mword_join[0m sum_s15 ([32mword[0m 0)))`
+# val bplusp : term =
+  `([32m&[0m([32mval[0m sum_s10) +
+    [32m&[0m([32mval[0m ([32mword_join[0m sum_s12 ([32mword[0m 0))) +
+    [32m&[0m([32mval[0m ([32mword_join[0m sum_s13 ([32mword[0m 0))) +
+    [32m&[0m([32mval[0m ([32mword_join[0m sum_s15 ([32mword[0m 0)))) +
+   [32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951`
+#   val v4 : term =
+  `[32m&[0m([32mbitval[0m carry_s8) = [32m&[0m([32mbitval[0m carry_s15) + [32m&[0m([32mval[0m sum_s16)
+   ==> ~carry_s16
+   ==> ([32m&[0m([32mval[0m m_0) +
+        [32m&[0m([32mval[0m ([32mword_join[0m m_1 ([32mword[0m 0))) +
+        [32m&[0m([32mval[0m ([32mword_join[0m m_2 ([32mword[0m 0))) +
+        [32m&[0m([32mval[0m ([32mword_join[0m m_3 ([32mword[0m 0)))) +
+       [32m&[0m([32mval[0m n_0) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_1 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_2 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_3 ([32mword[0m 0))) <
+       [32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951
+   ==> [32m&[0m0 <
+       [32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951
+   ==> [32m&[0m([32mval[0m n_0) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_1 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_2 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_3 ([32mword[0m 0))) <
+       [32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951
+   ==> [32m&[0m([32mval[0m m_0) +
+       [32m&[0m([32mval[0m ([32mword_join[0m m_1 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m m_2 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m m_3 ([32mword[0m 0))) <
+       [32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951
+   ==> --([32m&[0m2 pow 64) * [32m&[0m0 + [32m&[0m([32mval[0m sum_s16) =
+       [32m&[0m([32mbitval[0m carry_s8) - [32m&[0m0 - [32m&[0m([32mbitval[0m carry_s15)
+   ==> -- [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s15)) ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m sum_s15) =
+       [32m&[0m([32mval[0m sum_s8) - [32m&[0m18446744069414584321 - [32m&[0m([32mbitval[0m carry_s13)
+   ==> -- [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s13)) ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m sum_s13) =
+       [32m&[0m([32mval[0m sum_s7) - [32m&[0m0 - [32m&[0m([32mbitval[0m carry_s12)
+   ==> -- [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s12)) ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m sum_s12) =
+       [32m&[0m([32mval[0m sum_s4) - [32m&[0m4294967295 - ([32m&[0m1 - [32m&[0m([32mbitval[0m carry_s10))
+   ==> [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s10)) ([32mword[0m 0))) + [32m&[0m([32mval[0m sum_s10) =
+       [32m&[0m([32mval[0m sum_s3) + [32m&[0m1
+   ==> [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s8)) ([32mword[0m 0))) + [32m&[0m([32mval[0m sum_s8) =
+       [32m&[0m([32mval[0m m_3) + [32m&[0m([32mval[0m n_3) + [32m&[0m([32mbitval[0m carry_s7)
+   ==> [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s7)) ([32mword[0m 0))) + [32m&[0m([32mval[0m sum_s7) =
+       [32m&[0m([32mval[0m m_2) + [32m&[0m([32mval[0m n_2) + [32m&[0m([32mbitval[0m carry_s4)
+   ==> [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s4)) ([32mword[0m 0))) + [32m&[0m([32mval[0m sum_s4) =
+       [32m&[0m([32mval[0m m_1) + [32m&[0m([32mval[0m n_1) + [32m&[0m([32mbitval[0m carry_s3)
+   ==> [32m&[0m([32mval[0m ([32mword_join[0m ([32mword[0m ([32mbitval[0m carry_s3)) ([32mword[0m 0))) + [32m&[0m([32mval[0m sum_s3) =
+       [32m&[0m([32mval[0m m_0) + [32m&[0m([32mval[0m n_0)
+   ==> [32mtrue[0m
+   ==> [32mtrue[0m
+   ==> [32mnonoverlapping_modulo[0m (2 EXP 64) (pc,92) ([32mval[0m z,8 * 4)
+   ==> ([32m&[0m([32mval[0m sum_s10) +
+        [32m&[0m([32mval[0m ([32mword_join[0m sum_s12 ([32mword[0m 0))) +
+        [32m&[0m([32mval[0m ([32mword_join[0m sum_s13 ([32mword[0m 0))) +
+        [32m&[0m([32mval[0m ([32mword_join[0m sum_s15 ([32mword[0m 0)))) +
+       [32m&[0m115792089210356248762697446949407573530086143415290314195533631308867097853951 =
+       ([32m&[0m([32mval[0m m_0) +
+        [32m&[0m([32mval[0m ([32mword_join[0m m_1 ([32mword[0m 0))) +
+        [32m&[0m([32mval[0m ([32mword_join[0m m_2 ([32mword[0m 0))) +
+        [32m&[0m([32mval[0m ([32mword_join[0m m_3 ([32mword[0m 0)))) +
+       [32m&[0m([32mval[0m n_0) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_1 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_2 ([32mword[0m 0))) +
+       [32m&[0m([32mval[0m ([32mword_join[0m n_3 ([32mword[0m 0)))`
+# VARIANT V4_entails_B_plus_p closed=true seconds=30.815 reason=
+val it : unit = ()
+#   PROBE_DONE
+val it : unit = ()
+# 

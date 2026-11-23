@@ -1,0 +1,12 @@
+Printf.printf "ADD_RESULT ok=%b proved=%b stack_entries=%d sat_calls=%ed=%b stack_entries=%d sat_calls=%d                                  < seconds=%.3f\n%!"Printf.printf "ADD_RESULT ok=%b proved=%b stack_entries=%d sat_calls=%d seconds=%.3f\n%!"
+     Printf.printf "ADD_CLOSED hyps=%d axioms_before=%d axioms_after=%%d axioms_before=%d axioms_after=%d                                  <\n%!"     Printf.printf "ADD_CLOSED hyps=%d axioms_before=%d axioms_after=%d\n%!"
+     Printf.printf "THEOREM_CONCL %s\n%!" (string_of_term (concl th)(concl th))(string_of_term (concl th))
+Printf.printf "PROBE_DONE\n%!";;
+#           SAT_1 OK seconds=30.804
+SAT_2 OK seconds=30.008
+SAT_3 OK seconds=34.967
+SAT_4 OK seconds=41.266
+#   ADD_RESULT ok=true proved=true stack_entries=4 sat_calls=4 seconds=137.344
+#           ADD_CLOSED hyps=0 axioms_before=3 axioms_after=3
+THEOREM_CONCL forall z x y m n pc.
+# PROBE_DONE

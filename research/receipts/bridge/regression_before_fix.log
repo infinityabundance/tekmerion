@@ -1,0 +1,9 @@
+  if ok then Printf.printf "BRIDGE_FLAG_REGRESSION %s PASS\n%!" name
+        Printf.printf "BRIDGE_FLAG_REGRESSION %s FAIL (equation was noEGRESSION %s FAIL (equation was not                                  < encoded)(equation was not encoded)\n%!"        Printf.printf "BRIDGE_FLAG_REGRESSION %s FAIL (equation was not encoded)\n%!"
+Printf.printf "BRIDGE_FLAG_REGRESSION_SUMMARY failures=%d\n%!" !failurN_SUMMARY failures=%d\n%!" !failure                                  <s;;Printf.printf "BRIDGE_FLAG_REGRESSION_SUMMARY failures=%d\n%!" !failures;;
+  reason CSAT: cadical did not report UNSAT, exit 10
+BRIDGE_FLAG_REGRESSION split_zero FAIL (equation was not encoded)
+  reason CSAT: cadical did not report UNSAT, exit 10
+BRIDGE_FLAG_REGRESSION split_one FAIL (equation was not encoded)
+BRIDGE_FLAG_REGRESSION unsplit_bitval PASS
+#   BRIDGE_FLAG_REGRESSION_SUMMARY failures=2

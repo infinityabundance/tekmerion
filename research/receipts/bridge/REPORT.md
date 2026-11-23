@@ -241,3 +241,176 @@ were not proved by `CHEAT_TAC`.
   `ref_add` with a 256-bit condition. The current `bridge.ml` is only a verified
   set of arithmetic bridges plus a SAT conversion that reaches, but does not
   close, the P-256 add residue.
+
+---
+
+# Follow-up 2026-11-23, branch `staging` — diagnosis withdrawn, judge `OK`
+
+This section supersedes §2, §4, §5 and §7 above. The earlier signedness
+hypothesis is **withdrawn**; two concrete defects were measured and fixed, and
+the official judge now returns `OK` on P-256 add.
+
+- `tools/bridge.ml` sha256 `894c05f41f8211d78de5af44edbead23992abb6a28a16e53cc94e513a3052c38`, 49 phrases.
+- `tools/csat_bridge.ml` now uses `top_thm()` in `run_op` (was `b()`, a
+  type error that meant `sub`/`neg` had never run).
+- New regression test: `tools/hol_tests/bridge_flag_wordify.ml`.
+
+## 1. The signedness hypothesis is false (V8.4)
+
+The failing residue is the carry_s16=false sub-branch of the *true* arithmetic
+branch (`m+n < p`). The old debug harness called it "the false branch" and did
+not notice that both printed residues carry `m+n < p`.
+
+Measured operand widths (`research/receipts/bridge/confirm_v8_4.log`, from
+`v8_4_confirm2.ml`):
+
+```
+VALWIDTH word_join (word (bitval carry)) (word 0) : (65)word
+VALWIDTH sum_* : (64)word
+VALWIDTH word_join m_1 (word 0) : (128)word ; m_2:192 ; m_3:256
+```
+
+`IWORDIFY_CONV` chooses **257** bits for `&p` (top bit clear, so `ival` is
+positive) and the eight-way sum is wordified at **bits 259/260**. The claim
+that the sum is 257 bits and reads negative is therefore false; the
+Comparison is faithful in width and sign.
+
+Controlled experiment on the exact residue (`v8_4_confirm3.ml`; int terms built
+from the residue's own subterms, because `&` in a quotation is `real_of_num`):
+
+| variant | result | seconds |
+|---|---|---|
+| V0 residue as produced | **SAT** | 21.634 |
+| V2 residue + `bitval c8 = bitval c15 + val s16` | **UNSAT** | 29.080 |
+| V4 V2's flag equation + equations ==> `B + p = A_total` | **UNSAT** | 30.815 |
+
+So the missing fact is the flag equation, not a signed comparison.
+
+### Root cause A: the split substitutes a numeral and the shift conversion rejected it
+
+`BRIDGE_SPLIT_CONDITIONS_TAC` replaces `bitval carry_s16` by the literal 0 or 1,
+so the accumulator equation becomes `--2^64 * &0 + val s16 = ...`.
+`INT_SHIFT_TO_JOIN_CONV` only accepted `&(val x)` and `&(bitval b)` operands, so
+that equation could not be wordified. BITBLAST left it as an opaque int atom;
+the flag it constrains was therefore free and the false sub-branch was
+satisfiable.
+
+Fix: `INT_SHIFT_TO_JOIN_CONV` now also accepts a numeral operand. `bits_of_num`
+places `&n` in a word narrow enough that `val(word n)` is exact, and the
+product becomes a join (`2^64 * &0` becomes the zero join), never a multiplier.
+
+### Root cause B: `BRIDGE_CSAT_TAC` never discharged its goal
+
+The old tail was `MP_TAC th THEN ASM_REWRITE_TAC[]`. That rewrites the
+antecedents away but leaves `w` itself as the goal, so the tactic reported
+success while closing nothing. Measured before the fix: four SAT refutations
+all succeeded and **four goals remained**. Fix: chain `MP` with the assumption
+theorems and `ACCEPT_TAC` the result.
+
+## 2. Failing-then-passing regression test
+
+`tools/hol_tests/bridge_flag_wordify.ml` proves, for the split flag equation,
+the consequence each literal forces: `c16=0 ==> val s16 <= 1` and
+`c16=1 ==> 2^64-2 <= val s16`, plus the unsplit disjunction. It runs without the
+ARM base and mentions no curve constant.
+
+| run | split_zero | split_one | unsplit_bitval |
+|---|---|---|---|
+| before the fix (`regression_before_fix.log`) | FAIL (SAT) | FAIL (SAT) | PASS |
+| after the fix (`regression_after_fix.log`) | PASS | PASS | PASS |
+
+This is the measured distinction the old conversion had: the bitval form was
+encoded, the literal form was not.
+
+## 3. `ADD_REF_VAL` proved and loaded (V8.5)
+
+`tools/bridge.ml` now contains `ref_add` and proves, in a fresh base:
+
+```
+ADD_REF_VAL : !pw x y. 0 < val pw /\ val x < val pw /\ val y < val pw
+              ==> val(ref_add pw x y) = (val x + val y) MOD val pw
+ADD_REF_VAL_WORD : for pw = word p, with p < 2^dimindex(:W)
+```
+
+`ref_add pw x y = let s = word_add x y in
+                  if word_ult s x \/ word_ule pw s then word_sub s pw else s`.
+
+Fresh process (`bridge_fresh.log`): **49/49 phrases `OK`** (25 `prove`
+results, `ref_add` is a definition, the rest are conversions/tactics/lists),
+`ADD_REF_VAL OK`, `ADD_REF_VAL_WORD OK`, **axioms 3 -> 3**, load 2.249 s.
+No-curve check (`curve_check.log`): **statements=28 hits=0**. The lemma
+statement mentions no curve name and no 5+ digit numeral.
+
+One proof detail: `REWRITE_TAC[ref_add]` leaves `LET_END`; the proof needs
+`LET_END_DEF` as well as `LET_DEF`. This is the only reason the earlier draft
+stalled at `MATCH_MP_TAC`.
+
+## 4. `INT_DISTRIB_CONV` (V8.6)
+
+`INT_DISTRIB_CONV` is not the defect: it distributes `+` over `*` correctly.
+The multiplier circuit came from `INT_SHIFT_TO_JOIN_CONV` refusing the literal
+operand produced by the case split. With that fixed, `2^64 * &0` and
+`2^64 * &1` are joins, not multipliers. Measured SAT times are unchanged for
+the sub-branches (below); the *failing* branch is now UNSAT rather than SAT.
+
+## 5. Official judge on P-256 add (V8.8)
+
+```
+retrieve-problem.py retrieve --outputdir work-add-p256 --name arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT
+make_inlined_answer.py .../answer.txt          # inlines the final bridge
+combine-answer-and-setup.py work-add-p256 1    # syntactic check PASSED
+run-answers.sh eval-20261123_114817 1
+collect-verdicts.py eval-20261123_114817 judge-verdicts-after-fix.csv
+```
+
+- Judge file `.bench/eval-20261123_114817/arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT.judge.txt` = **`OK`**.
+- `collect-verdicts.py` output: `OK,1` (`judge-verdicts-after-fix.csv`).
+- **End-to-end judge time: 23.838 s** (`PROFILE ... 23.838 OK`).
+
+Local bridge run (`run_add_bridge3.log`), no incremental compilation:
+
+| sub-branch | seconds |
+|---|---|
+| `m+n < p`, carry true | 30.804 |
+| `m+n < p`, carry false | 30.008 |
+| `p <= m+n`, first split | 34.967 |
+| `p <= m+n`, second split | 41.266 |
+| **total, 4 SAT calls** | **137.344** |
+
+`ADD_CLOSED hyps=0 axioms_before=3 axioms_after=3`. The judge is faster because
+the answer is native-compiled (`ocamlopt`), while this table is the interpreted
+HOL process.
+
+## 6. `sub` and `neg` (after the `OK`)
+
+`tools/csat_bridge.ml` (`csat_bridge_subneg.log`):
+
+| op | result | hypotheses | seconds |
+|---|---|---|---|
+| add | closed | 0 | 137.003 |
+| sub | closed | 0 | 94.877 |
+| neg | **CSAT SAT (exit 10)** | - | 24.728 |
+
+`sub` is a measured local success (not yet judge-run). `neg` is a measured
+negative: its residual still has an unencoded branch. It is not fixed here and
+is recorded as the next defect.
+
+## 7. `DEVELOPMENT_ONLY` (this follow-up)
+
+- P-256 machine-code words, goals and simulation prefixes in
+  `research/receipts/bridge/*.ml`, `tools/csat_bridge.ml` and the judge answer:
+  transcribed, not derived from a witness.
+- `sub_middle` (`FLAG_FROM_CARRY_LT`, `DECARRY_RULE`, `BOUNDER_TAC`): transcribed
+  from the human proof; development only.
+- The `p_256` numeral in drivers: a curve constant, outside every bridge lemma.
+- The inlined judge answer: packaging to satisfy the static syntax gate.
+
+## 8. Still wrong
+
+- `neg` does not close (SAT on the post-simulation residue).
+- The reference route is proved and loaded but the judge answer still drives
+  `BRIDGE_ADD_TAC` (the now-correct split); `ADD_REF_VAL` is not yet wired into
+  a `BRIDGE_*_REF_TAC`.
+- Benchmark `OK` is valid under the bench rules (`CHEAT_TAC` context); it is
+  **not** an axiom-free development. Replay in a full s2n-bignum context is a
+  separate result (D8).

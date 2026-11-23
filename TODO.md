@@ -712,26 +712,21 @@ Everything else stays parked until step 7 produces a number.
 
 ## Order
 
-- [~] **V7.9. Prove the generic `ref` lemma for add, then P-256 add end to end.** Attempted and
-  **not achieved**: the judge returns `FAIL` (`CSAT: cadical did not report UNSAT, exit 10`). The
-  no-curve-constant check passed (20 statements, 0 hits). Diagnosis, measured: after the bridge the
-  LT residue has antecedent `&(m+n) < &p` over the joined inputs, and `IWORDIFY` picks a **257-bit**
-  word whose true value can reach `2^257-2`; `ival` is signed, so values `>= 2^256` read negative and
-  the branch condition is not the intended unsigned comparison. End-to-end 8.765 s. Branch timings:
-  true-branch **29.862 s** (closed), false-branch **22.188 s** (SAT). The generic `ref` lemma was
-  drafted but **not proved** (stalls on `SUB_CANCEL`, `MOD_SUB_ONE`, `MOD_ADD_GE_VAR`, `SUB_MOD`).
-- [ ] **V7.9a. Fix the width/signedness defect.** Either join into a width where `ival` is provably
-  non-negative for the reachable range, or carry an explicit unsigned interpretation through the
-  bridge; do not paper over it by narrowing the algorithm. Re-run P-256 add.
-- [ ] **V7.9b. Prove `ADD_REF_VAL`.** `0 < val pw /\ val x < val pw /\ val y < val pw ==>
-  val (ref_add pw x y) = (val x + val y) MOD val pw`. The missing arithmetic plumbing
-  (`SUB_CANCEL`, `MOD_SUB_ONE`, `MOD_ADD_GE_VAR`, `SUB_MOD`) is the job, not a new theory.
-  **Measured 2026-11-23 (negative):** the official judge on P-256 add is `FAIL` in 8.765 s with
-  CaDiCaL exit 10 (SAT) on the post-simulation residue. `.judge.txt`:
-  `.bench/eval-20261123_091448/arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT.judge.txt`.
-  The generic `ADD_REF_VAL` is drafted but **not proved** and is not in `bridge.ml`. Full account:
-  `research/receipts/bridge/REPORT.md`.
-- [ ] **V7.10. Then `sub` and `neg`** with the same shape.
+- [x] **V7.9. Prove the generic `ref` lemma for add, then P-256 add end to end.**
+  **Achieved 2026-11-23.** The judge returns `OK` (23.838 s). The earlier signedness diagnosis was
+  **withdrawn** after measurement: `&p` is wordified at 257 bits with the top bit clear (positive),
+  and the sums at 259/260 bits. The real causes were (a) `INT_SHIFT_TO_JOIN_CONV` rejecting the
+  literal operand the case split substitutes (`&2 pow 64 * &0`), leaving the flag equation opaque,
+  and (b) `BRIDGE_CSAT_TAC` never discharging its goal (`MP_TAC` + `ASM_REWRITE_TAC` leaves `w`).
+  See `research/receipts/bridge/REPORT.md` follow-up sections 1–5 and `confirm_v8_4.log`.
+- [x] **V7.9a. Fix the width/signedness defect.** Withdrawn: there is no width/signedness defect in
+  this residue. The measured replacement is the literal-operand conversion gap; fixed in
+  `INT_SHIFT_TO_JOIN_CONV`, with the failing-then-passing test `tools/hol_tests/bridge_flag_wordify.ml`.
+- [x] **V7.9b. Prove `ADD_REF_VAL`.** Proved for all `pw` and widths in a fresh process and added to
+  `tools/bridge.ml` together with `ADD_REF_VAL_WORD`. Fresh process: 49/49 phrases `OK`, axioms 3 -> 3;
+  no-curve check 28 statements, 0 hits. Receipts: `bridge_fresh.log`, `curve_check.log`.
+- [x] **V7.10. Then `sub` and `neg`** with the same shape. `sub` closes through the bridge
+  (94.877 s, 0 hypotheses). `neg` does **not**: CSAT returns SAT (24.728 s). Recorded as V8.12.
 - [ ] **V7.11. Then P-384 addition** — a genuinely different correction structure — as a
   development target.
 - [ ] **V7.12. Then the nine x86 counterparts**, which are the first clean held-out number.
@@ -767,20 +762,27 @@ Everything else stays parked until step 7 produces a number.
 
 ## Finish the reference route, not the IWORDIFY conversion
 
-- [ ] **V8.4. Confirm the signedness diagnosis before acting on it.** Re-run the `carry_s16=false`
-  branch at width 258, or with an explicitly unsigned `val`. If it goes UNSAT the cause is
-  confirmed; if not, the hypothesis is wrong and must be withdrawn. Make it a failing-then-passing
-  HOL Light regression test, not a tactic workaround.
-- [ ] **V8.5. Prove `ADD_REF_VAL` for all `p`** in a fresh process and put it in the loaded bridge.
-  The reference route avoids width guessing inside the conversion: no `int`, no `MOD` in the SAT
-  instance, and the instance is all joins and adders.
-- [ ] **V8.6. Check `INT_DISTRIB_CONV`.** Inference from timing: a raw 256-bit carry closes in 4.7 s
-  but the failing branch took ~30 s. If `2^k * x` is encoded as a multiplier circuit rather than a
-  shift, that explains it and must be fixed.
-- [ ] **V8.7. Budget the close against the per-task timeout.** Two branches at 22–30 s fit in 120 s
-  with little margin once `sub` and `neg` add splits. The single-instance reference route is the
-  fix; report end-to-end, not just per-goal.
-- [ ] **V8.8. P-256 add end to end through C-SAT**, then `sub`, then `neg`.
+- [x] **V8.4. Confirm the signedness diagnosis before acting on it.** Measured and **withdrawn**:
+  `&p` is wordified at 257 bits (top bit clear) and the sums at 259/260 bits, so no value reads
+  negative. The alternative is identified: the split substitutes the literal 0/1 into
+  `&2^k * &(bitval c)`, and the old shift-to-join conversion rejected a numeral operand, leaving the
+  flag equation opaque. Adding the flag equation in wordifiable int form turns the residue from SAT
+  (21.6 s) to UNSAT (29.1 s). Failing-then-passing test: `tools/hol_tests/bridge_flag_wordify.ml`
+  (before: split_zero FAIL, split_one FAIL, unsplit PASS; after: all PASS).
+- [x] **V8.5. Prove `ADD_REF_VAL` for all `p`** in a fresh process and put it in the loaded bridge.
+  Done: `ref_add`, `MOD_SUB_ONE`, `SUB_MOD`, `MOD_SUB_REF_A1/A2`, `MOD_KEEP_REF`,
+  `ADD_REF_VAL`, `ADD_REF_VAL_WORD` are in `tools/bridge.ml`; all 49 phrases `OK`, axioms 3 -> 3.
+  `REWRITE_TAC[ref_add]` also needs `LET_END_DEF`.
+- [x] **V8.6. Check `INT_DISTRIB_CONV`.** Not the defect: it distributes correctly. The multiplier
+  came from `INT_SHIFT_TO_JOIN_CONV` refusing a *numeral* operand after the case split. Fixed; the
+  literal products now become joins. Per-branch times are in `run_add_bridge3.log`.
+- [x] **V8.7. Budget the close against the per-task timeout.** Measured end to end: **23.838 s** in
+  the official judge (native-compiled answer); interpreted local run 137.344 s over four SAT calls
+  (30.804 / 30.008 / 34.967 / 41.266). The category timeout is 7200 s, so the split route fits.
+  A one-instance reference route remains the clean long-term fix.
+- [x] **V8.8. P-256 add end to end through C-SAT**, then `sub`, then `neg`. Add: judge `OK`
+  (`collect-verdicts.py` -> `OK,1`, `.judge.txt` in `.bench/eval-20261123_114817/`). `sub`: local
+  close, 0 hypotheses, 94.877 s (not judge-run). `neg`: measured negative, SAT at 24.728 s.
 - [ ] **V8.9. P-384 addition** as the first coverage improvement the old generator cannot reach.
 
 ## Scope
@@ -788,3 +790,18 @@ Everything else stays parked until step 7 produces a number.
 - [ ] **V8.10. Do not expand into loops or x86 until P-384 addition passes.** Completing the
   existing bridge is worth more than a new subsystem.
 - [ ] **V8.11. Keep CI green before calling anything releasable.**
+
+## New defects from the 2026-11-23 run
+
+- [x] **V8.12. `BRIDGE_CSAT_TAC` never discharged its goal.** `MP_TAC th THEN ASM_REWRITE_TAC[]`
+  removes the antecedents but leaves the conclusion, so four successful SAT refutations left four
+  goals. Fixed by chaining `MP` with the assumption theorems and `ACCEPT_TAC` the result.
+- [ ] **V8.13. `neg` still fails.** `BRIDGE_NEG_TAC` reaches a residue that CSAT returns SAT on
+  (24.728 s, `csat_bridge_subneg.log`). Diagnose like V8.4: print the wordified atoms and check for
+  another unencoded split literal before changing any lemma.
+- [ ] **V8.14. `sub` through the judge.** It closes locally with 0 hypotheses; a judge run needs a
+  sub answer. Note `sub_middle` uses `FLAG_FROM_CARRY_LT`/`DECARRY_RULE`/`BOUNDER_TAC` transcribed
+  from the human proof, so it is `DEVELOPMENT_ONLY`.
+- [ ] **V8.15. Wire the reference route.** `ADD_REF_VAL` is proved and loaded but the judge answer
+  still drives the split-based `BRIDGE_ADD_TAC`. A `BRIDGE_*_REF_TAC` would use the lemma and make
+  the SAT instance all joins and adders.

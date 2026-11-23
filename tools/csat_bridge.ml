@@ -174,7 +174,7 @@ let run_op op goal sim red bridge =
     if trye (op^".red") red then begin
       showtag (op^".red");
       if trye (op^".bridge") (bridge ()) then begin
-        let th = b() in
+        let th = top_thm () in
         Printf.printf "RESULT %s closed=1 hyps=%d seconds=%.3f\n"
           op (List.length (hyp th)) (Unix.gettimeofday () -. tb)
       end else
