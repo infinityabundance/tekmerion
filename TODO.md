@@ -413,13 +413,18 @@ a tactic script to a small typed **witness**; a deterministic compiler emits the
 
 ## V3.0 — verify the measurements before citing them
 
-- [ ] **Recount FC at the bench pin** `s2n-bignum 5e0fc782`, using the bench's own rule
-  (`_CORRECT`, `ensures` in goal, exclude `SUBROUTINE`/`_EQUIV`). Confirm **898** total
-  (463 ARM + 435 x86), the straight-line share, the loop long tail, and the family counts.
-  The v3 figures (917; 73% straight-line; 323 family theorems) are from HEAD `0f792fe` and must
-  not be cited until reproduced at the pin. Commit the counting script.
-- [ ] **Held-out guard.** A script that refuses to open proof files for held-out curves
-  (25519, secp256k1, SM2) while development tooling runs.
+- [x] **Recount FC at the bench pin.** Reproduced at `5e0fc782`, per theorem, not just by
+  cardinality: **898 total (463 ARM + 435 x86)**, 898 matched against `.bench/problems.json`,
+  0 only-direct, 0 only-corpus. **Corrections to v3:** straight-line is **675 / 898 = 75.17%**
+  (v3 said 73%); medians are **ARM 92 / x86 77** (v3 said 91/76); loops are 223 (24.83%) and
+  concentrate in the long tail (131 of 164 proofs ≥ 300 lines, 79.88%; 93.7% of 600+).
+  **v3's 323 family count is not reproducible**: with name-then-file vocabulary it is 569, with
+  v3's listed vocabulary 382, by distinct theorem name 315. v3's 917/473/444 is also not the
+  bench rule's total at `0f792fe` (925/478/447). Cite the pin numbers, never the HEAD ones.
+  Script: `tools/fcdist.py`; receipt: `research/receipts/v3-recount-5e0fc782.md`.
+- [x] **Held-out guard.** `tools/heldout_guard.py`, fail-closed on `25519`, `secp256k1`, `p256k1`,
+  `sm2`; resolves symlinks and real paths; refuses missing/directory/outside-root inputs. Verified:
+  `secp256k1_jadd.ml` → rc 2, `p256_montjadd.ml` → rc 0.
 
 ## W — mechanisms
 
