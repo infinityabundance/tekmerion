@@ -80,13 +80,59 @@ def test_flag_writer_without_consumer_is_excluded():
 
 
 def test_compare_writing_xzr_is_excluded():
+    """A compare whose flag only masks a value is not a carry-chain link.
+
+    ``CMP`` here sets Z for ``CSETM``; ``SUBS`` does not read the carry, so the
+    compare feeds no carry chain and takes no accumulator relation.
+    """
     exec_steps = steps([
         ("cmp", "x2 #0x0"),
         ("csetm", "x2 ne"),
-        ("subs", "x4 x2 x4"),    # carry-in from 1, carry-out to 4
+        ("subs", "x4 x2 x4"),    # carry-in from 1 (not a carry read), out to 4
         ("csel", "x4 x4 x4 cc"),
     ])
     assert derive_accumulate(exec_steps) == [3]
+
+
+def test_flag_only_adcs_and_sbcs_xzr_are_chain_links():
+    """Regression: ``CMN``/``ADCS XZR`` select with a flag but write no value.
+
+    This is the shape that left the residual SAT instance with a free bit
+    (``add_p256k1``): the modular correction is chosen by the Z flag of a
+    flag-only chain, and the accumulator relation for those steps is what ties
+    the flag to the words.  Steps 1--3 are the flag-only forms; step 5 is the
+    first register write the chain reaches, so all four are chain links.
+    """
+    exec_steps = steps([
+        ("cmp", "x5 x4"),        # 1: flag-only, no destination
+        ("sbcs", "xzr x9 xzr"),  # 2: flag-only, XZR destination
+        ("adcs", "xzr x3 xzr"),  # 3: carry in from 2, out to 5
+        ("csel", "x4 x4 xzr ne"),
+        ("adcs", "x5 x5 x4"),    # 5: the register write the chain reaches
+        ("csel", "x5 x5 x4 eq"),
+    ])
+    assert derive_accumulate(exec_steps) == [1, 2, 3, 5]
+
+
+def test_flag_only_step_is_excluded_when_it_feeds_no_register_write():
+    """A flag-only link whose chain ends in a predicate takes no relation."""
+    exec_steps = steps([
+        ("cmp", "x5 #0x0"),      # 1: chain ends at a mask, not a write
+        ("csetm", "x4 ne"),
+        ("eor", "x5 x5 x4"),
+        ("stp", "x5 x6 [x0]"),
+    ])
+    assert derive_accumulate(exec_steps) == []
+
+
+def test_flag_only_carry_materialisation_is_excluded():
+    """``ADCS XZR, XZR, XZR`` widens the flag; it constrains no word."""
+    exec_steps = steps([
+        ("adcs", "xzr xzr xzr"),  # no real register source -> excluded
+        ("adcs", "x3 x3 xzr"),
+        ("csetm", "x4 ne"),
+    ])
+    assert derive_accumulate(exec_steps) == [2]
 
 
 # --------------------------------------------------------------------------
@@ -134,9 +180,9 @@ def test_writer_kills_carry_out_chain():
     """Negative case: a flag *writer* genuinely kills an earlier carry-out.
 
     ``ADDS`` defines C, but ``CMP`` overwrites the flags before anything reads
-    them, so ``ADDS``'s carry-out is dead.  The final ``ADCS`` is live, but it
-    is grounded by the ``CMP``, not by the ``ADDS`` -- which is why only step 3
-    accumulates.
+    them, so ``ADDS``'s carry-out is dead.  The ``CMP`` is itself a chain link
+    (the ``ADCS`` after it reads its carry as a carry-in), which is why steps 2
+    and 3 accumulate and step 1 does not.
     """
     exec_steps = steps([
         ("adds", "x4 x4 x6"),    # 1: C is overwritten by 2 before any reader
@@ -144,7 +190,7 @@ def test_writer_kills_carry_out_chain():
         ("adcs", "x8 x8 x9"),    # 3: carry-in from 2
         ("csetm", "x10 cc"),     # 4: consumes 3's carry-out
     ])
-    assert derive_accumulate(exec_steps) == [3]
+    assert derive_accumulate(exec_steps) == [2, 3]
 
 
 def test_no_accumulate_instructions_yields_empty():
