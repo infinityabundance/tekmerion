@@ -938,3 +938,162 @@ the Z flag, and `derive_steps` excludes `XZR` destinations, so that flag is unco
   drives this route. Judge: `OK`, **22.835 s** (split route: 23.838 s);
   `.bench/eval-20261123_133342/arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT.judge.txt`,
   `collect-verdicts.py` -> `OK,1`. Same interpreted harness: 130.651 s vs 137.344 s.
+
+---
+
+# PART IX — Tekmerion Native Assurance / TNPS (added 2026-11-23)
+
+The project's centre of gravity moves from "automation inside HOL Light" to an independent,
+Rust-native verification platform whose native result does **not** depend on HOL Light's runtime,
+tactics, search or kernel. HOL Light, OpenTheory, Dedukti, Lean and Rocq become interoperability
+targets and independent observers.
+
+## A. Non-negotiable trust boundary
+
+- [ ] **IX.1.** The native verifier declares its own verdict without HOL Light present. HOL Light
+  may independently confirm; it may not confer native truth.
+- [ ] **IX.2.** No GPU kernel, SAT/SMT/CAS engine, AI model, optimizer, distributed worker or
+  adapter can extend the trusted calculus. They propose; the checker accepts.
+- [ ] **IX.3.** Exactly one public top grade, **Tekmerion Sealed**, requiring: native check + complete
+  approved dependency closure + independent recheck + provenance + applicable policy. Lower internal
+  states (`Candidate`, `Native checked`, `Rejected/unresolved`) never carry the same label.
+- [ ] **IX.4.** Rigor is the strength of the proven guarantee and the completeness of assumptions,
+  not the number of tests or the difficulty of acceptance. Both strong logic and implementation
+  resilience are required.
+
+## B. Standards and precedents to study and align with
+
+DO-178C / DO-333 / DO-330; NASA-STD-8739.8B and the 2026-11-05 draft 8739.8C (evolving, not
+adopted); ECSS-E-ST-40C Rev.1 and ECSS-Q-ST-80C Rev.2 (2025-04-30); Common Criteria EAL7;
+ARP4754B (systems context, not certification); Candle/CakeML; CakeLPR; CakePB; seL4; CompCert;
+OpenTheory; Dedukti; SLSA; in-toto; Sigstore; NIST SP 800-193; NIST SSDF; GSN community standard;
+NVIDIA CUDA memory-error management and Compute Sanitizer; GPUVerify; Kontroli; verified
+compositional proof checking; online LRAT checking.
+
+- [ ] **IX.5.** Write `research/06-TNPS-CHARTER.md` mapping each authority to the requirement it
+  supplies, with primary-source receipts. Distinguish normative standards from evolving drafts.
+
+## C. TNPS contracts (four separately versioned documents)
+
+- [ ] **IX.6. Native logic**: types, terms, inference rules, definitions, admitted foundations.
+- [ ] **IX.7. Execution semantics**: instructions, memory, control flow, concurrency, arithmetic,
+  faults — exactly which program behaviour a proof establishes.
+- [ ] **IX.8. Proof certificates**: inference DAGs, local witnesses, premise references, exports.
+  Canonical encoding, hash domains, no duplicate-field ambiguity, no implicit coercion, no
+  executable payload, no hidden ambient state.
+- [ ] **IX.9. Assurance manifests**: artifact/semantics/checker digests, dependencies, provenance,
+  independent results, policy version, complete assumption list.
+- [ ] **IX.10.** Formal soundness target: `Check_TNPS(E, C, P) = Accept ==> E |= P`. Implementing the
+  checker and proving that implication are separate tasks.
+
+## D. The thirteen acceptance laws (normative MUST)
+
+- [ ] **IX.11.** No unchecked inference. **IX.12.** Complete dependency closure (placeholders,
+  `CHEAT_TAC`-style substitution and opaque external assertions invalidate full assurance).
+- [ ] **IX.13.** Exact theorem identity (typed proposition, assumptions, quantifiers, side
+  conditions, scope). **IX.14.** Exact program identity (bytes + ISA + environment digest).
+- [ ] **IX.15.** Verified semantic transformations (lowering, bit-blasting, rewrites, abstraction).
+- [ ] **IX.16.** Formally established checker soundness; long-term target includes parser and
+  executable-level refinement.
+- [ ] **IX.17.** Independent acceptance: a substantively independent implementation, not two runs of
+  the same library.
+- [ ] **IX.18.** Deterministic verdicts across scalar/SIMD/AVX2/AVX-512/multicore/CUDA.
+- [ ] **IX.19.** Fail closed on malformed input, missing dependencies, unsupported semantics,
+  overflow, resource exhaustion, device error, checker disagreement.
+- [ ] **IX.20.** Adversarial resistance: differential, property-based, malformed-input fuzzing,
+  mutation testing, negative-proof suites.
+- [ ] **IX.21.** Reproducible evidence: checker binary, build provenance, policy, tool versions,
+  dependency identities, offline reproduction.
+- [ ] **IX.22.** Explicit residual assumptions: hardware, faults, OS, privilege, environment,
+  foundations. **IX.23.** Independent assurance governance for trusted-rule changes.
+
+## E. Acceleration (evidence, never authority)
+
+- [ ] **IX.24.** Mandatory portable scalar reference checker; every accelerated path must agree
+  with it (equivalence tests, not assertions).
+- [ ] **IX.25.** Portable SIMD, then AVX2, then AVX-512, with runtime feature detection **including
+  OS-enabled register state**, and scalar-agreement tests.
+- [ ] **IX.26.** Blocked multicore replay over the certificate DAG: work-stealing on independent
+  nodes, deterministic canonical IDs, immutable checked-theorem handles, checked joins; a worker
+  failure or disagreement leaves the proof unaccepted.
+- [ ] **IX.27.** CUDA in two modes: (a) GPU computes/elaborates, CPU independently confirms every
+  inference; (b) verified accelerated checking only after implementation and translation evidence.
+  GPU results are untrusted inputs. Report end-to-end accepted-proof throughput, never kernel-only
+  timings.
+- [ ] **IX.28.** Fault-injection campaign: corrupt certificate blocks, dependencies, cache entries,
+  checker memory, execution results, distributed messages. Measure refuse/recover/improper-accept.
+
+## F. Adapters are observations, not truth
+
+- [ ] **IX.29.** OpenTheory article and HOL Light proof are **export targets**; a foreign acceptance
+  is an immutable observation record, never a native theorem.
+- [ ] **IX.30.** Translation must preserve meaning: explicit mappings for types, constants,
+  definitions, assumptions, rules; verified translator or target-side reconstruction.
+- [ ] **IX.31.** Unsupported semantics means refusal, never silent simplification or weakening.
+- [ ] **IX.32.** Dedukti and OpenTheory studied as interoperability precedents; no universal
+  interoperability is assumed.
+
+## G. Adversarial matrix and assurance case
+
+- [ ] **IX.33.** Implement the attack matrix as conformance tests: hidden invalid inference,
+  undeclared assumption, weakened spec, mutated bytes, wrong signedness/width, malformed certificate,
+  checker integer/memory error, scheduler inconsistency, GPU fault, tampered binary, compromised
+  build, valid proof of the wrong specification.
+- [ ] **IX.34.** Machine-readable assurance cases linked to certificates, hazards and source
+  artifacts; dependency change triggers impact analysis and revocation of affected claims.
+- [ ] **IX.35.** State plainly that a proof cannot establish that a specification reflects the true
+  mission requirements; that is a separate assurance activity.
+
+## H. Supply chain and preservation
+
+- [ ] **IX.36.** SLSA-style provenance + in-toto-style signed steps + Sigstore identities; bind the
+  **exact checking program**, not a self-reported version.
+- [ ] **IX.37.** Reproducible builds with independent rebuild comparison before critical releases.
+- [ ] **IX.38.** Offline verification with no server or vendor dependency.
+- [ ] **IX.39.** Stable public grammar, canonical serialization, versioned rules, reference test
+  vectors, migration requirements. Test: can an independent institution reconstruct the theorem,
+  dependencies, semantics and verdict decades later without the original implementation?
+
+## I. Frontier register
+
+- [ ] **IX.40.** `research/07-ASSURANCE-FRONTIER.md`: per dimension, the strongest known guarantee
+  and the evidence needed to match or exceed it — kernel soundness (Candle), certificate rigor
+  (CakeLPR/CakePB), binary correctness (seL4), compiler semantics (CompCert), parallel checking
+  (Kontroli, verified compositional checking, online LRAT), interoperability (OpenTheory/Dedukti),
+  lifecycle (DO-333/NASA/ECSS), supply chain (SLSA), fault resilience, autonomous coverage.
+- [ ] **IX.41.** Never claim logical priority over all possible checkers; claim audited dominance on
+  named dimensions with named evidence.
+
+## J. Milestones (in order)
+
+- [ ] **IX.42. Milestone A — native contract + scalar checker.** Minimal TNPS calculus, canonical
+  binary grammar, semantic identities, dependency rules, conformance tests. Portable Rust checker
+  verifies a real arithmetic certificate **with no HOL Light installed**, and rejects malformed
+  proofs. Acceptance: identical theorem semantics, complete replay, deliberate corruption rejected.
+- [ ] **IX.43. Milestone B — checker correctness.** Formally specify the logical core and critical
+  parser; independent checking route; dependencies closed to approved foundations; documented trusted
+  base and explicit implementation-proof gaps.
+- [ ] **IX.44. Milestone C — accelerated fabric.** Blocked multicore first if it pays, then SIMD,
+  AVX2, AVX-512, CUDA; equivalence, fault injection, deterministic verdicts at every step; no relaxed
+  rule and no new unverified dependency.
+- [ ] **IX.45. Milestone D — evaluated standard.** Native binary-level verification on ARM and x86;
+  checked HOL Light/OpenTheory export; adversarial suites; assurance manifests; independently
+  replayable public benchmarks; external implementations able to verify TNPS artifacts.
+- [ ] **IX.46. Decisive independence test.** A P-384 theorem checked natively on a machine with no
+  HOL Light, the same artifact then independently accepted by HOL Light, neither route using
+  transcribed intermediate steps, and a mutation rejected by the appropriate checker.
+
+## K. Current gaps this charter exposes
+
+- [ ] **IX.47.** Existing benchmark `OK`s use inherited `CHEAT_TAC` context; they are benchmark
+  acceptances, not dependency-closed results. TNPS's top grade must not inherit that ambiguity.
+- [ ] **IX.48.** The P-384 answer still contains transcribed simulation glue, a carry equation, a
+  comparison lemma and a mask rewrite (`DEVELOPMENT_ONLY`). Automating those is a prerequisite for a
+  native, non-transcribed result.
+- [ ] **IX.49.** The Rust engine is an evidence/lifecycle layer, not yet a proof kernel. Treating it
+  as one is a real construction task, not a rename.
+
+## Non-claims
+
+- This charter is not aviation, space or security certification, and adopting it certifies nothing.
+- No dimension of the frontier register is claimed as surpassed until the named evidence exists.
