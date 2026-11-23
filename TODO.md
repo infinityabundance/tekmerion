@@ -553,3 +553,101 @@ theorems as `CHEAT_TAC`; the invariant that matters is that the proof adds none.
 - No N1–N12 implementation, no dual-kernel work, no new Rust kernel, no proof-term-hole calculus,
   no GPU replay, no speculative-constant-time model, no expansion of the novelty register.
 - No synthetic evidence-lifecycle statistic presented as a frontier argument.
+
+---
+
+# PART VI — Programme v4: the coverage engine (added 2026-11-23)
+
+v3 proved the thesis on straight-line P-256. v4 is about coverage: new modulus classes,
+loops, and x86. Nothing here is claimable until a sealed full-set run.
+
+## Method — the R2 split is spent
+
+- [ ] **V4.1.** Treat the nine ARM R2 tasks as **development data**. Fixes motivated by their
+  failure traces are development, not held-out evidence — even if the files are later hidden.
+- [ ] **V4.2.** Fresh splits only: the nine **x86 counterparts** (never evaluated), operation
+  families on untouched curves, and the openssl-rs objects.
+- [ ] **V4.3. Freeze hygiene.** Push and **tag** the freeze commit before each held-out run. Run
+  each split **once**, in an isolated filesystem containing only ELF objects and
+  `problems.json`. Hashes recorded after the fact are not a freeze.
+
+## Wall 1 — C-SAT: close the arithmetic with certified SAT, not templates
+
+- [ ] **C1.** One generic bridge lemma per linear operation shape, from the `num`/`MOD`
+  specification to a word-level circuit statement. Modulus-agnostic: proved once.
+- [ ] **C2.** `BITBLAST_THEN` to a propositional goal, `CADICAL_PROVE`, and **kernel LRAT
+  replay**. `Examples/bitblast.ml` defines `BITBLAST_CADICAL` only inside a commented-out
+  block; s2n-bignum uses BDD `BITBLAST` in 55 files and CaDiCaL in none. Connect them.
+- [ ] **C3.** Measure close time per theorem against `timeout-map.json` **before** any claim.
+  If 256-bit replay is too slow, split per limb with the carry as the interface.
+- [ ] **C4.** Record the trust difference: the LCF kernel replays LRAT, so no compiler enters
+  the trusted base (unlike `bv_decide`, which verifies by reflection).
+- [ ] **C5.** Scope: linear families only (`add`, `sub`, `neg`, `double`, `half`, `optneg`,
+  `triple`, small-constant `cmul`). Multiplicative families need W4's algebraic closer.
+
+## Wall 2 — L-FIT: loop invariants from the postcondition
+
+- [ ] **L1.** Arithmetic core by prefixing the postcondition (`lowdigits`/`highdigits`).
+- [ ] **L2.** Fit live registers to affine forms in {i, n, m, pointers} on the **executable
+  model**, not on hardware.
+- [ ] **L3.** Frame each input's unread suffix by pointer advance.
+- [ ] **L4.** Filter every candidate on the model, then check initiation, preservation and exit
+  with `ENSURES_WHILE_UP_TAC`; loop body compiled by W1.
+- [ ] **L5.** Recount the "282 of 548 invariants use `lowdigits`/`highdigits`" figure **on the FC
+  set at the pin** before citing it (the current figure is whole-tree, HEAD, regex-based).
+
+## Wall 3 — x86
+
+- [ ] **X1.** Re-run W1 on the x86 object; map flags through a small ISA-semantics table
+  (x86 `sbb` carry vs ARM's inverted no-borrow). Witnesses are value statements, so they
+  should transport; everything else is re-derived.
+- [ ] **X2.** Evaluate the nine x86 counterparts **once**, after a tagged freeze. Report x86
+  conditional on ARM, with order ablated.
+
+## Defects and protocol from review
+
+- [ ] **D1. Carry-liveness bug in `derive_steps.py`.** `_carry_in_is_live()` stops at a carry
+  *reader*; reading does not kill the flag, so an intervening `ADC` can wrongly exclude a later
+  `ADCS`. Fix the reaching-definition analysis and add a regression test (`ADDS; ADC; ADCS`).
+  Later: condition-specific NZCV dependencies (CS/CC/HI/LS use C; EQ/NE use Z).
+- [ ] **D2. `w2_witnesses.py` invariant field is the postcondition**, not an inductive loop
+  invariant. Do not advertise loop verification until L-FIT actually synthesises one.
+- [ ] **D3. Modulus class as a typed witness field** (NIST/Solinas, pseudo-Mersenne,
+  Montgomery-friendly), with one close path per class.
+- [ ] **D4. Two held-out protocols:** LOCO *within* a class, and **leave-one-class-out**. The
+  second is the one a reviewer will respect.
+- [ ] **D5. Residue/quotient certificate (RQ) alternative.** For non-linear families, or where
+  bit-blasting is too slow: derive `input = output + p*q` from machine equations and prove
+  `0 <= output < p` separately. Untrusted algebra proposes; the kernel checks.
+- [ ] **D6. GitHub CI** for the generator and regression tests (currently all Python/OCaml
+  checks are manual).
+- [ ] **D7. Independent proof reconstruction.** Remove the `DEVELOPMENT_ONLY` skeleton
+  incrementally; measure which fragments can be selected mechanically from the witness and
+  residual goal rather than copied from example proofs.
+- [ ] **D8. Axiom closure.** Report benchmark `OK` and full-dependency replay as **two different
+  results**. The bench setup inherits thousands of `CHEAT_TAC` axioms; only the second supports
+  a security claim.
+
+## The claim v4 is built to win
+
+- [ ] **K1″.** Frozen arm Z (W1 + W2/C-SAT + W4 + L-FIT + W3), **zero model calls**, run once on
+  all **898 FC tasks** at pin `5e0fc782`, isolated, after a tagged freeze. Report OK/898,
+  `CHEATING` = 0, replay results, per-task close times, and results split between
+  development curves/classes and fresh held-out ones. Comparator: 5/898 (poster abstract).
+- [ ] **Secondary (cheap, same run).** Generated-vs-human check time on matched theorems;
+  draft `bstep` engine (PR #505) as comparator.
+- [ ] **Arms:** B0 frozen 0996c32 compiler; B1 + carry-liveness fix; B2 + machine-derived
+  quotient; B3 + independent range proof; B4 + counterexample branch refinement; A1 full
+  tactic-script agent at equal total budget.
+
+## Order of work (v4)
+
+1. D1 carry-liveness fix + D6 CI.
+2. C-SAT on training curves; measure LRAT replay against the timeouts.
+3. C-SAT on the spent nine (development), then freeze.
+4. X1 x86 W1 + the nine fresh x86 tasks — **the first clean held-out number**.
+5. Widen the linear families; freeze; evaluate on fresh curves.
+6. L-FIT on `bignum_add`-style loops.
+7. The sealed full-set run (K1″).
+
+Everything else stays parked until step 7 produces a number.
