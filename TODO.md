@@ -1066,10 +1066,21 @@ compositional proof checking; online LRAT checking.
 
 ## J. Milestones (in order)
 
-- [ ] **IX.42. Milestone A — native contract + scalar checker.** Minimal TNPS calculus, canonical
-  binary grammar, semantic identities, dependency rules, conformance tests. Portable Rust checker
-  verifies a real arithmetic certificate **with no HOL Light installed**, and rejects malformed
-  proofs. Acceptance: identical theorem semantics, complete replay, deliberate corruption rejected.
+- [x] **IX.42. Milestone A — native contract + scalar checker.** Implemented under `src/native/`:
+  typed word logic with derived content identity, deterministic Tseitin bit-blasting, a strict
+  RUP-only LRAT parser/checker, a canonical DAG certificate (`refl`, `sym`, `trans`, `congr`,
+  `bitblast`), and `check -> Result<Theorem>` where `Theorem` has no public constructor.
+  **Verified natively with no HOL Light, no OCaml and no process spawning at check time:**
+  8-bit `x + y = y + x` (CNF 4,247 B, LRAT 9,146 B, cert 27,209 B, check **121 µs**) and 64-bit
+  `(x + y) - y = x` (CNF 42,928 B, LRAT 72,822 B, cert 231,932 B, check **1.21 ms**), both in the
+  release profile. **19 tamper cases rejected with named errors** (hints, deletions, duplicates,
+  truncation, trailing bytes, cycles, unknown rules, dangling refs, altered CNF, transplanted proof,
+  out-of-range literals, `-0`, ill-typed terms). `cargo test --offline`: 26 native tests pass.
+  Trusted base: SHA-256 for identity, the Rust compiler/runtime, the term constructors, the
+  bit-blaster encoding, the RUP checker and five rules. CaDiCaL is **not** trusted; it only produced
+  fixtures offline. Receipts: `research/receipts/ix42-native-*`.
+  **Not done:** the bit-blaster and checker are tested, not formally verified (Milestone B); RAT is
+  refused; the logic is add/sub/equality only — no multiply, shifts, memory or ISA semantics.
 - [ ] **IX.43. Milestone B — checker correctness.** Formally specify the logical core and critical
   parser; independent checking route; dependencies closed to approved foundations; documented trusted
   base and explicit implementation-proof gaps.

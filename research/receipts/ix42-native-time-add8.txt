@@ -1,0 +1,6 @@
+   Compiling tekmerion v0.1.0 (/mnt/1tb_kingston/Tekmerion)
+    Finished `release` profile [optimized] target(s) in 1.44s
+     Running `target/release/examples/native_fixtures check tests/fixtures/native/add_comm_8.cert 1000`
+proposition: (eq bv8 (add bv8 (var bv8 x) (var bv8 y)) (add bv8 (var bv8 y) (var bv8 x)))
+digest: 41f6be858771cacfc227a079c45c28fff5cb273c1211bc087e123323f39f89fb
+checks: 1000 total: 121.469879ms mean: 121.469µs

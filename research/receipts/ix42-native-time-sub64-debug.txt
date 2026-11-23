@@ -1,0 +1,5 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running `target/debug/examples/native_fixtures check tests/fixtures/native/sub_add_64.cert 100`
+proposition: (eq bv64 (sub bv64 (add bv64 (var bv64 x) (var bv64 y)) (var bv64 y)) (var bv64 x))
+digest: 7c4653d3e3b63525644ca8d1e01688058c63f338b982769fb1a67ff297113854
+checks: 100 total: 868.671976ms mean: 8.686719ms

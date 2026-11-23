@@ -1,0 +1,18 @@
+  4247 tests/fixtures/native/add_comm_8.cnf
+  9146 tests/fixtures/native/add_comm_8.lrat
+ 27209 tests/fixtures/native/add_comm_8.cert
+ 42928 tests/fixtures/native/sub_add_64.cnf
+ 72822 tests/fixtures/native/sub_add_64.lrat
+231932 tests/fixtures/native/sub_add_64.cert
+388284 total
+  208 tests/fixtures/native/add_comm_8.lrat
+ 1251 tests/fixtures/native/sub_add_64.lrat
+ 1459 total
+5588fc0294cdb346fffb477b70c955518eee3cc1a9e5ada6c5ff2afa471ed2fe  tests/fixtures/native/add_comm_8.cert
+af929bb22462710ba2979b9e2ed827492316000b4ebe016be8bffae0866712f3  tests/fixtures/native/add_comm_8.cnf
+2ee291d5ecf9d3ec0c156a1a6c62729c5c93eb02a438e3aa0d3a11e9c2277dfa  tests/fixtures/native/add_comm_8.lrat
+cd107618ddc32644c074f23ed7cfd1d0eba28ef2c348a45f63ca5519cad136c5  tests/fixtures/native/sub_add_64.cert
+81ec27114d517ebe1eebfa56fe66280c150cbb0684136b9ac58c0ea6f72bc476  tests/fixtures/native/sub_add_64.cnf
+8dcb08d567f1a71db639886555f17bec99ee08e49b27399eb20e168ec7c0bfee  tests/fixtures/native/sub_add_64.lrat
+p cnf 121 370
+p cnf 1018 3117
