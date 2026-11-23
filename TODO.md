@@ -743,3 +743,45 @@ Everything else stays parked until step 7 produces a number.
 - [ ] **V7.14. Keep the certified HOL tactic/conversion machinery in OCaml.** Use Rust for the typed
   witness compiler, orchestration, immutable evidence and experiment accounting. Do not rewrite the
   trusted proof interface into Rust.
+
+---
+
+# PART VIII — CI hygiene, then finish the reference route (added 2026-11-23)
+
+## Repository hygiene (release blocker)
+
+- [x] **V8.1. Remove the machine-specific solver symlink and the scratch mass.**
+  `research/receipts/bridge/bin/cadical` was a committed symlink to an absolute path; `mutate.py`'s
+  `copytree` failed on the runner because the target does not exist there. Removed it, removed
+  `judge-work/` (1.4 MB) and the 6–7 MB debug logs, kept `REPORT.md` and the decisive logs, and
+  narrowed the harness to ignore `research/`, `*.log`, `.bench`, `target` with `symlinks=True`.
+  *Acceptance:* mutation harness green locally (16/16 and 5/5) and a green runner run after push.
+- [ ] **V8.2. Commit/receipt consistency.** The bridge report says no commit was made, but the work
+  was committed. Correct the report. Scratch artefacts never enter Git; receipts are `REPORT.md`
+  plus decisive logs, with hashes and compact reproduction instructions.
+- [ ] **V8.3. 18 of 38 bindings are theorems.** The other 20 are conversions and tactics that only
+  type-check. Every report must state that distinction; type-checking is not proof of behaviour.
+
+## Finish the reference route, not the IWORDIFY conversion
+
+- [ ] **V8.4. Confirm the signedness diagnosis before acting on it.** Re-run the `carry_s16=false`
+  branch at width 258, or with an explicitly unsigned `val`. If it goes UNSAT the cause is
+  confirmed; if not, the hypothesis is wrong and must be withdrawn. Make it a failing-then-passing
+  HOL Light regression test, not a tactic workaround.
+- [ ] **V8.5. Prove `ADD_REF_VAL` for all `p`** in a fresh process and put it in the loaded bridge.
+  The reference route avoids width guessing inside the conversion: no `int`, no `MOD` in the SAT
+  instance, and the instance is all joins and adders.
+- [ ] **V8.6. Check `INT_DISTRIB_CONV`.** Inference from timing: a raw 256-bit carry closes in 4.7 s
+  but the failing branch took ~30 s. If `2^k * x` is encoded as a multiplier circuit rather than a
+  shift, that explains it and must be fixed.
+- [ ] **V8.7. Budget the close against the per-task timeout.** Two branches at 22–30 s fit in 120 s
+  with little margin once `sub` and `neg` add splits. The single-instance reference route is the
+  fix; report end-to-end, not just per-goal.
+- [ ] **V8.8. P-256 add end to end through C-SAT**, then `sub`, then `neg`.
+- [ ] **V8.9. P-384 addition** as the first coverage improvement the old generator cannot reach.
+
+## Scope
+
+- [ ] **V8.10. Do not expand into loops or x86 until P-384 addition passes.** Completing the
+  existing bridge is worth more than a new subsystem.
+- [ ] **V8.11. Keep CI green before calling anything releasable.**

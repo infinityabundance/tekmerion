@@ -11,3 +11,8 @@
 .bench/
 __pycache__/
 *.pyc
+research/receipts/**/bin/
+research/receipts/**/judge-work/
+research/receipts/**/*_dev.log
+research/receipts/**/diag_atoms.log
+research/receipts/**/conv_test*.log

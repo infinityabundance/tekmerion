@@ -80,9 +80,15 @@ def main() -> int:
             shutil.copytree(
                 ROOT,
                 work,
-                # `.bench` holds benchmark artefacts (including dangling symlinks) and is
-                # never needed by the test suite.
-                ignore=shutil.ignore_patterns("target", ".git", ".bench", "*.md"),
+                # Only the crate and the tooling it tests are needed. `.bench` holds
+                # benchmark artefacts and `research` holds receipts, logs and a
+                # machine-specific solver symlink; neither is needed and both have
+                # broken the runner before. `symlinks=True` keeps any stray link a
+                # link instead of failing on a dangling target.
+                ignore=shutil.ignore_patterns(
+                    "target", ".git", ".bench", "research", "*.md", "*.log"
+                ),
+                symlinks=True,
             )
             for rel in FILES:
                 path = work / rel
