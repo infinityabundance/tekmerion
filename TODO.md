@@ -1937,20 +1937,26 @@ HOL Light's guarantee is enforced by OCaml's type system; a generated script is 
 OCaml. The bench's `axioms()` comparison catches none of the following. Long-recognised LCF
 risks: `Obj.magic`, `Marshal`, mutable strings/state.
 
-- [ ] **XII.F1.1. Closed tactic grammar.** Emit proofs in a typed, closed language (allow-listed
-  tactic combinators, term literals, named lemmas) with a printer to OCaml. Acceptance parses
-  the emitted OCaml with the OCaml front end (compiler-libs) and refuses any AST that is not
-  exactly the printer's output for a grammar program: no `let` rebinding of kernel/judge names,
-  no `Obj`, `Marshal`, `Sys`, `Unix`, no references/mutable state, no `external`.
-- [ ] **XII.F1.2. Firing controls.** Planted `Obj.magic` forgery; shadowed `check_axioms`;
-  rebinding of `prove`; a mutable-state trick. Each must be refused by the grammar gate *before*
-  HOL Light runs.
+- [x] **XII.F1.1 (gate implemented; grammar target open).** `tools/script_gate.py` parses with
+  the real OCaml front end through `hol.sh -pp` and refuses `Obj`/`Marshal`/`Unix`/`Sys.command`,
+  `external`, and any binding or parameter named after a kernel/judge primitive; `--profile
+  strict` also refuses `Sys`, `ref`, `:=` and file I/O. **Measurement: 0/26 answers pass even
+  the denylist** (`Unix` 52, `Sys.command` 78, `ref` 260, `:=` 182; zero `Obj`/`Marshal`/
+  `external`/rebinding). The emitted proof runs the solver as a subprocess at check time, so F1
+  needs the architectural change below, not a syntax tweak. Receipt `ix-f1-script-gate.md`.
+- [ ] **XII.F1.1b. Closed proof-term artifact (the actual fix).** Emit only a closed tactic
+  term; take the LRAT as a **certificate input**; load the support library from the judge; no
+  subprocess and no file I/O at check time. Then require the strict gate to accept all 27.
+- [x] **XII.F1.2. Firing controls.** 12 tests (`tools/test_script_gate.py`): `Obj.magic`,
+  `Marshal`, `Sys.command`, `external`, shadowed `check_axioms`, rebound `prove`, kernel name as
+  a parameter, `ref`/`:=` under strict, `Sys.getenv` under strict; plus the authoritative
+  front-end control. All fire.
 - [ ] **XII.F1.3. Milestone: one sealed s2n-bignum theorem accepted by Candle.** Candle is a
   fully verified HOL Light clone (every exported fact valid in HOL) parsing the same OCaml
   variant. First obstacle: loading the s2n-bignum libraries. Taking OCaml out of the trust base
   for that result is the highest-value single outcome in the programme.
-- [ ] **XII.F1.4.** Gate every emitted answer in the existing pipeline (not only in tests) and
-  record the refusal rate.
+- [~] **XII.F1.4.** Gate is implemented and tested; it is **not yet wired into the emitter**
+  (that would refuse every current answer). Wire it after XII.F1.1b, then require it.
 
 ## XII.F2 — Export the derivation, not just the verdict
 
