@@ -569,6 +569,13 @@ impl TaskResult {
     }
 
     fn inference_delta(&self) -> Option<i64> {
+        self.stamp_report
+            .as_ref()
+            .and_then(|r| r.inference_body_delta.or(r.inference_delta))
+    }
+
+    /// The first-line delta, which includes the shared HOL Light bootstrap.
+    fn inference_delta_whole_file(&self) -> Option<i64> {
         self.stamp_report.as_ref().and_then(|r| r.inference_delta)
     }
 }
@@ -589,6 +596,11 @@ pub struct StampReport {
     pub inference_before: Option<i64>,
     pub inference_after: Option<i64>,
     pub inference_delta: Option<i64>,
+    /// Mark taken immediately after the shared `needs "<arch>/proofs/base.ml"`
+    /// line, so the proof-body delta excludes the shared bootstrap.
+    pub inference_body_before: Option<i64>,
+    /// `inference_count () - inference_body_before`.
+    pub inference_body_delta: Option<i64>,
     /// `(id, digest, conclusion)` from `STAMP_REGISTRY`.
     pub registry: Vec<(i64, String, String)>,
     /// `(name, ids)` from `STAMP_NAME` for the three basic axioms.
@@ -662,6 +674,10 @@ fn parse_stamp(text: &str) -> Option<StampReport> {
             r.inference_after = parse_i64(rest);
         } else if let Some(rest) = line.strip_prefix("STAMP_INFERENCES ") {
             r.inference_delta = parse_i64(rest);
+        } else if let Some(rest) = line.strip_prefix("STAMP_INF_BODY_BEFORE ") {
+            r.inference_body_before = parse_i64(rest);
+        } else if let Some(rest) = line.strip_prefix("STAMP_INF_BODY ") {
+            r.inference_body_delta = parse_i64(rest);
         } else if let Some(rest) = line.strip_prefix("STAMP_REGISTRY ") {
             let mut it = rest.splitn(3, ' ');
             match (it.next(), it.next(), it.next()) {
@@ -799,6 +815,20 @@ impl StampReport {
                 "inference delta {delta} != after {after} - before {before} (= {})",
                 after - before
             ));
+        }
+        // The optional proof-body pair must agree with the same final count.
+        if let (Some(b), Some(d)) = (self.inference_body_before, self.inference_body_delta) {
+            if after < b {
+                return Err(format!(
+                    "body inference counter went backwards: before {b}, after {after}"
+                ));
+            }
+            if after - b != d {
+                return Err(format!(
+                    "body inference delta {d} != after {after} - body before {b} (= {})",
+                    after - b
+                ));
+            }
         }
         Ok(())
     }
@@ -942,7 +972,82 @@ fn log_dir(gen: &Path, arch: &str) -> PathBuf {
     gen.join(format!("logs-{arch}"))
 }
 
-fn build_logged(s: &SweepArgs, p: &Planned, logs: &Path) -> Result<TaskResult, String> {
+/// Restores the original proof file when it goes out of scope, including on
+/// an early error return or a panic.
+struct ProofFileGuard {
+    path: PathBuf,
+    original: Vec<u8>,
+}
+
+impl Drop for ProofFileGuard {
+    fn drop(&mut self) {
+        let _ = fs::write(&self.path, &self.original);
+    }
+}
+
+/// Instrument an existing proof file in place (XIV.B1). The first mark is the
+/// literal first line; the body mark is inserted immediately after the shared
+/// `needs "<arch>/proofs/base.ml"` line so the comparable delta excludes the
+/// shared HOL Light bootstrap that the generated side also excludes.
+fn instrument_proof(path: &Path, theorem: &str, base: &str) -> Result<ProofFileGuard, String> {
+    let original = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let text = String::from_utf8(original.clone())
+        .map_err(|e| format!("{} is not UTF-8: {e}", path.display()))?;
+    let mark = format!("stamp_mark_{base}");
+    let body = format!("stamp_body_{base}");
+    let mut out = String::with_capacity(text.len() + 4096);
+    out.push_str(&format!("let {mark} = inference_count ();;\n"));
+    let mut inserted = false;
+    for line in text.split_inclusive('\n') {
+        out.push_str(line);
+        if !inserted && line.trim_start().starts_with("needs \"") {
+            out.push_str(&format!("let {body} = inference_count ();;\n"));
+            inserted = true;
+        }
+    }
+    if !inserted {
+        out.push_str(&format!("let {body} = inference_count ();;\n"));
+    }
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&format!(
+        r#"
+Printf.printf "STAMP_BEGIN %s\n%!" "{theorem}";;
+Printf.printf "STAMP %s %s\n%!" "{theorem}" (stamp_string {theorem});;
+Printf.printf "STAMP_INF_BEFORE %d\n%!" {mark};;
+Printf.printf "STAMP_INF_AFTER %d\n%!" (inference_count ());;
+Printf.printf "STAMP_INFERENCES %d\n%!" (inference_count () - {mark});;
+Printf.printf "STAMP_INF_BODY_BEFORE %d\n%!" {body};;
+Printf.printf "STAMP_INF_BODY %d\n%!" (inference_count () - {body});;
+List.iter
+(fun (id,dg,txt) -> Printf.printf "STAMP_REGISTRY %d %s %s\n%!" id dg txt)
+(axiom_registry ());;
+List.iter
+(fun (nm,th) -> Printf.printf "STAMP_NAME %s %s\n%!" nm
+(String.concat "," (List.map string_of_int (stamp_of th))))
+["ETA_AX",ETA_AX; "SELECT_AX",SELECT_AX; "INFINITY_AX",INFINITY_AX];;
+Printf.printf "STAMP_FOOTPRINT_BEGIN statement-level footprint, not the transitive derivation closure\n%!";;
+List.iter
+(fun (sym,what) -> Printf.printf "STAMP_FOOTPRINT %s %s\n%!" sym what)
+(footprint_of {theorem});;
+Printf.printf "val {theorem} : thm = %s\n%!" (string_of_thm {theorem});;
+"#
+    ));
+    let guard = ProofFileGuard {
+        path: path.to_path_buf(),
+        original,
+    };
+    fs::write(path, out.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(guard)
+}
+
+fn build_logged(
+    s: &SweepArgs,
+    p: &Planned,
+    logs: &Path,
+    instrument: bool,
+) -> Result<TaskResult, String> {
     let target = format!("{}/{}.correct", p.dir, p.base);
     let log = logs.join(format!("{}_{}_{}.log", p.dir, p.op, p.fam));
     let correct = s
@@ -956,6 +1061,23 @@ fn build_logged(s: &SweepArgs, p: &Planned, logs: &Path) -> Result<TaskResult, S
     if s.force {
         let _ = fs::remove_file(&correct);
     }
+
+    // The guard restores the proof file after `make` (or on any error below).
+    let _guard = if instrument {
+        let proof = s
+            .dropin
+            .join(&p.arch)
+            .join("proofs")
+            .join(format!("{}.ml", p.base));
+        let theorem = format!(
+            "BIGNUM_{}_{}_SUBROUTINE_CORRECT",
+            p.op.to_uppercase(),
+            p.fam.to_uppercase()
+        );
+        Some(instrument_proof(&proof, &theorem, &p.base)?)
+    } else {
+        None
+    };
 
     let out = fs::File::create(&log).map_err(|e| format!("{}: {e}", log.display()))?;
     let err = out
@@ -1002,7 +1124,7 @@ fn build_logged(s: &SweepArgs, p: &Planned, logs: &Path) -> Result<TaskResult, S
         .as_deref()
         .and_then(parse_stamp)
         .or_else(|| parse_stamp(&log_text));
-    let stamp_required = s.stamp;
+    let stamp_required = s.stamp || instrument;
 
     Ok(TaskResult {
         arch: p.arch.clone(),
@@ -1089,7 +1211,7 @@ fn task_json_line(r: &TaskResult) -> String {
         })
         .unwrap_or_default();
     format!(
-        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"footprint\": [{}], \"log\": {}}}",
+        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"inference_delta_whole_file\": {}, \"footprint\": [{}], \"log\": {}}}",
         json_str(&r.arch),
         json_str(&r.dir),
         json_str(&r.op),
@@ -1104,6 +1226,7 @@ fn task_json_line(r: &TaskResult) -> String {
         json_opt_str(r.stamp_report.as_ref().and_then(|s| s.stamp_theorem.as_deref())),
         json_opt_str_array(r.axioms()),
         json_opt_i64(r.inference_delta()),
+        json_opt_i64(r.inference_delta_whole_file()),
         footprint.join(", "),
         json_str(&r.log),
     )
@@ -1197,6 +1320,13 @@ fn git_pin(dir: &Path) -> String {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
         _ => "unknown".to_string(),
     }
+}
+
+fn kernel_build_name(dir: &Path) -> String {
+    dir.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string()
 }
 
 fn print_summary(results: &[TaskResult]) {
@@ -1331,7 +1461,7 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
 
         let logs = log_dir(&parsed.gen, &p.arch);
         fs::create_dir_all(&logs).map_err(|e| format!("{}: {e}", logs.display()))?;
-        let result = build_logged(&parsed, p, &logs)?;
+        let result = build_logged(&parsed, p, &logs, false)?;
         if let Some(report) = &result.stamp_report {
             summary.absorb(report);
         }
@@ -1416,8 +1546,10 @@ pub fn run(args: &[String]) -> i32 {
         "measure" => measure(rest),
         "stamp-table" => stamp_table(rest),
         "checktime-table" => checktime_table(rest),
+        "matched-table" => matched_table(rest),
+        "obligation" => obligation(rest),
         _ => Err(
-            "usage: dropin <assemble|build|sweep|measure|stamp-table|checktime-table> [options]\n\
+            "usage: dropin <assemble|build|sweep|measure|stamp-table|checktime-table|matched-table|obligation> [options]\n\
              \n\
              sweep: dropin sweep --arch <x86|arm|all> [--answers <dir>] [--dir <dropin-dir>]
              \x20      [--gen <gen-dir>] [--hol <hol-dir>] [--force] [--timeout <secs>]
@@ -1425,10 +1557,18 @@ pub fn run(args: &[String]) -> i32 {
              \n\
              measure: dropin measure --tree <dir> --arch <x86|arm|all> [--hol <hol-dir>]
              \x20        [--force] [--timeout <secs>] [--json <path>] [--label <name>]
+             \x20        [--instrument] [--only arch.dir.op]
              \n\
              stamp-table: dropin stamp-table --json <sweep-json>
              \n\
-             checktime-table: dropin checktime-table --human <json> --generated <json>"
+             checktime-table: dropin checktime-table --human <json> --generated <json>
+             \x20        [--human-kernel K] [--generated-kernel K]
+             \n\
+             matched-table: dropin matched-table --human <json> --generated <json>
+             \x20        [--json <path>] [--human-kernel K] [--generated-kernel K]
+             \n\
+             obligation: dropin obligation --human-tree <dir> --generated-tree <dir>
+             \x20        [--json <path>]"
                 .to_string(),
         ),
     };
@@ -1610,6 +1750,11 @@ pub struct MeasureArgs {
     pub label: String,
     /// Log root: `<gen>/logs-<arch>/<dir>_<op>_<fam>.log`.
     pub gen: PathBuf,
+    /// Instrument the existing proof file in place before `make`, then restore
+    /// it. Used to run the human proof under the stamp kernel (XIV.B1).
+    pub instrument: bool,
+    /// Optional single-task filter, `arch.dir.op` (e.g. `arm.sm2.neg`).
+    pub only: Option<String>,
 }
 
 impl MeasureArgs {
@@ -1634,7 +1779,7 @@ impl MeasureArgs {
             force: self.force,
             timeout: self.timeout,
             json: self.json.clone(),
-            stamp: false,
+            stamp: self.instrument,
         }
     }
 }
@@ -1650,6 +1795,8 @@ pub fn parse_measure_args(args: &[String]) -> Result<MeasureArgs, String> {
     let mut timeout: u64 = 900;
     let mut json: Option<PathBuf> = None;
     let mut label = String::from("measure");
+    let mut instrument = false;
+    let mut only: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -1689,6 +1836,14 @@ pub fn parse_measure_args(args: &[String]) -> Result<MeasureArgs, String> {
                 force = true;
                 i += 1;
             }
+            "--instrument" => {
+                instrument = true;
+                i += 1;
+            }
+            "--only" => {
+                only = Some(sweep_value(args, i, "--only")?);
+                i += 2;
+            }
             other => return Err(format!("unknown argument {other:?}")),
         }
     }
@@ -1721,6 +1876,8 @@ pub fn parse_measure_args(args: &[String]) -> Result<MeasureArgs, String> {
         json: json.map(|p| anchored(&repo, p)),
         label,
         gen,
+        instrument,
+        only,
     })
 }
 
@@ -1762,7 +1919,12 @@ fn measure_json(m: &MeasureArgs, generated_at: u64, results: &[TaskResult]) -> S
     ));
     out.push_str("  \"cores\": 1,\n");
     out.push_str(&format!("  \"force\": {},\n", m.force));
-    out.push_str("  \"stamp\": false,\n");
+    out.push_str(&format!("  \"stamp\": {},\n", m.instrument));
+    out.push_str(&format!("  \"instrument\": {},\n", m.instrument));
+    out.push_str(&format!(
+        "  \"kernel_build\": {},\n",
+        json_str(&kernel_build_name(&m.hol))
+    ));
     out.push_str(&format!("  \"timeout_seconds\": {},\n", m.timeout));
     out.push_str("  \"tasks\": [\n");
     for (i, r) in results.iter().enumerate() {
@@ -1804,14 +1966,26 @@ pub fn measure(args: &[String]) -> Result<i32, String> {
     }
 
     let s = m.as_sweep();
-    let planned = plan(&s);
+    let planned: Vec<Planned> = plan(&s)
+        .into_iter()
+        .filter(|p| match &m.only {
+            None => true,
+            Some(sel) => {
+                let parts: Vec<&str> = sel.split('.').collect();
+                parts.len() == 3 && parts[0] == p.arch && parts[1] == p.dir && parts[2] == p.op
+            }
+        })
+        .collect();
+    if planned.is_empty() {
+        return Err(format!("--only {:?} matches no planned task", m.only));
+    }
     let total = planned.len();
     let mut results: Vec<TaskResult> = Vec::new();
 
     for p in &planned {
         let logs = log_dir(&s.gen, &p.arch);
         fs::create_dir_all(&logs).map_err(|e| format!("{}: {e}", logs.display()))?;
-        let result = build_logged(&s, p, &logs)?;
+        let result = build_logged(&s, p, &logs, m.instrument)?;
         println!(
             "  {}: exit={} theorem={} seconds={} (label {})",
             result.label(),
@@ -1857,40 +2031,396 @@ const CHECKTIME_BUDGET_SECONDS: f64 = 120.0;
 /// The XII.F9.2 warning line: 70% of the budget.
 const CHECKTIME_WARN_FRACTION: f64 = 0.70;
 
-/// One `tasks[]` entry from a sweep/measure receipt.
+// ---------------------------------------------------------------------------
+// Typed comparability (XIV.A1-XIV.A3)
+// ---------------------------------------------------------------------------
+
+/// Which tree produced a measurement. The provenance is part of the scope so
+/// that a human measurement cannot be silently paired with another generated
+/// one, or a tree with itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TreeKind {
+    Human,
+    Generated,
+}
+
+impl TreeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TreeKind::Human => "human",
+            TreeKind::Generated => "generated",
+        }
+    }
+}
+
+/// Everything about *how* a proof was measured that must agree before two
+/// numbers may be put in the same aggregate. `tree_kind` must be the
+/// complementary human/generated pair; the remaining fields must be equal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeasurementScope {
+    pub tree_kind: TreeKind,
+    pub s2n_pin: String,
+    /// `make -j` value. Every matched run here is `-j1`.
+    pub jobs: u32,
+    /// `make -B`, so a stale `.correct` cannot contribute a number.
+    pub force: bool,
+    /// The HOL Light build used (`hol-light-stamp2`, ...).
+    pub kernel_build: String,
+}
+
+/// One measured task, with the theorem identity and the conditions of
+/// measurement carried alongside the numbers (XIV.A2).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeasuredProof {
+    /// The exact theorem name printed by the run, not a derived label.
+    pub theorem: String,
+    pub exit: Option<i32>,
+    pub check_axioms: bool,
+    pub theorem_proved: bool,
+    pub seconds: Option<f64>,
+    pub inferences: Option<u64>,
+    pub scope: MeasurementScope,
+}
+
+/// Every reason two measurements may be refused a comparison.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComparisonError {
+    TheoremIdentityMismatch {
+        human: String,
+        generated: String,
+    },
+    HumanExitNotZero {
+        exit: Option<i32>,
+    },
+    GeneratedExitNotZero {
+        exit: Option<i32>,
+    },
+    HumanAxiomsNotChecked,
+    GeneratedAxiomsNotChecked,
+    HumanTheoremNotProved,
+    GeneratedTheoremNotProved,
+    WrongTreeKind {
+        expected: TreeKind,
+        found: TreeKind,
+    },
+    ScopeMismatch {
+        field: &'static str,
+        human: String,
+        generated: String,
+    },
+}
+
+impl std::fmt::Display for ComparisonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComparisonError::TheoremIdentityMismatch { human, generated } => write!(
+                f,
+                "theorem identity differs: human {human:?}, generated {generated:?}"
+            ),
+            ComparisonError::HumanExitNotZero { exit } => {
+                write!(f, "human judgment failed: exit={}", fmt_exit(*exit))
+            }
+            ComparisonError::GeneratedExitNotZero { exit } => {
+                write!(f, "generated judgment failed: exit={}", fmt_exit(*exit))
+            }
+            ComparisonError::HumanAxiomsNotChecked => {
+                write!(f, "human judgment failed: check_axioms is false")
+            }
+            ComparisonError::GeneratedAxiomsNotChecked => {
+                write!(f, "generated judgment failed: check_axioms is false")
+            }
+            ComparisonError::HumanTheoremNotProved => {
+                write!(f, "human judgment failed: the theorem was not proved")
+            }
+            ComparisonError::GeneratedTheoremNotProved => {
+                write!(f, "generated judgment failed: the theorem was not proved")
+            }
+            ComparisonError::WrongTreeKind { expected, found } => write!(
+                f,
+                "measurement tree kind is {} but {} was required",
+                found.as_str(),
+                expected.as_str()
+            ),
+            ComparisonError::ScopeMismatch {
+                field,
+                human,
+                generated,
+            } => write!(
+                f,
+                "measurement scope differs in {field}: human {human:?}, generated {generated:?}"
+            ),
+        }
+    }
+}
+
+fn fmt_exit(exit: Option<i32>) -> String {
+    exit.map(|e| e.to_string())
+        .unwrap_or_else(|| "missing".to_string())
+}
+
+/// A comparison that may only exist when the two measurements are of the
+/// identical theorem, both succeeded, and the measurement conditions agree.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchedComparison {
+    pub human: MeasuredProof,
+    pub generated: MeasuredProof,
+}
+
+impl MatchedComparison {
+    pub fn theorem(&self) -> &str {
+        &self.human.theorem
+    }
+
+    /// `generated / human`, only when both numbers exist and human is non-zero.
+    pub fn seconds_ratio(&self) -> Option<f64> {
+        ratio(self.human.seconds, self.generated.seconds)
+    }
+
+    /// `generated / human` primitive inferences, same guard.
+    pub fn inference_ratio(&self) -> Option<f64> {
+        match (self.human.inferences, self.generated.inferences) {
+            (Some(h), Some(g)) if h > 0 => Some(g as f64 / h as f64),
+            _ => None,
+        }
+    }
+}
+
+fn ratio(human: Option<f64>, generated: Option<f64>) -> Option<f64> {
+    match (human, generated) {
+        (Some(h), Some(g)) if h > 0.0 => Some(g / h),
+        _ => None,
+    }
+}
+
+/// All the reasons the pair is not a `MatchedComparison`, in a fixed order.
+/// The first element is what `compare` returns.
+pub fn comparison_reasons(
+    human: &MeasuredProof,
+    generated: &MeasuredProof,
+) -> Vec<ComparisonError> {
+    let mut out = Vec::new();
+    if human.theorem != generated.theorem {
+        out.push(ComparisonError::TheoremIdentityMismatch {
+            human: human.theorem.clone(),
+            generated: generated.theorem.clone(),
+        });
+    }
+    if human.exit != Some(0) {
+        out.push(ComparisonError::HumanExitNotZero { exit: human.exit });
+    }
+    if !human.check_axioms {
+        out.push(ComparisonError::HumanAxiomsNotChecked);
+    }
+    if !human.theorem_proved {
+        out.push(ComparisonError::HumanTheoremNotProved);
+    }
+    if generated.exit != Some(0) {
+        out.push(ComparisonError::GeneratedExitNotZero {
+            exit: generated.exit,
+        });
+    }
+    if !generated.check_axioms {
+        out.push(ComparisonError::GeneratedAxiomsNotChecked);
+    }
+    if !generated.theorem_proved {
+        out.push(ComparisonError::GeneratedTheoremNotProved);
+    }
+    if human.scope.tree_kind != TreeKind::Human {
+        out.push(ComparisonError::WrongTreeKind {
+            expected: TreeKind::Human,
+            found: human.scope.tree_kind,
+        });
+    }
+    if generated.scope.tree_kind != TreeKind::Generated {
+        out.push(ComparisonError::WrongTreeKind {
+            expected: TreeKind::Generated,
+            found: generated.scope.tree_kind,
+        });
+    }
+    let a = &human.scope;
+    let b = &generated.scope;
+    if a.s2n_pin != b.s2n_pin {
+        out.push(ComparisonError::ScopeMismatch {
+            field: "s2n_bignum_pin",
+            human: a.s2n_pin.clone(),
+            generated: b.s2n_pin.clone(),
+        });
+    }
+    if a.jobs != b.jobs {
+        out.push(ComparisonError::ScopeMismatch {
+            field: "jobs",
+            human: a.jobs.to_string(),
+            generated: b.jobs.to_string(),
+        });
+    }
+    if a.force != b.force {
+        out.push(ComparisonError::ScopeMismatch {
+            field: "force",
+            human: a.force.to_string(),
+            generated: b.force.to_string(),
+        });
+    }
+    if a.kernel_build != b.kernel_build {
+        out.push(ComparisonError::ScopeMismatch {
+            field: "kernel_build",
+            human: a.kernel_build.clone(),
+            generated: b.kernel_build.clone(),
+        });
+    }
+    out
+}
+
+/// The typed precondition. A `MatchedComparison` cannot be constructed any
+/// other way, so a caller cannot aggregate a non-matching row by accident.
+pub fn compare(
+    human: &MeasuredProof,
+    generated: &MeasuredProof,
+) -> Result<MatchedComparison, ComparisonError> {
+    match comparison_reasons(human, generated).into_iter().next() {
+        Some(reason) => Err(reason),
+        None => Ok(MatchedComparison {
+            human: human.clone(),
+            generated: generated.clone(),
+        }),
+    }
+}
+
+/// One `tasks[]` entry from a sweep/measure receipt. Acceptance is carried
+/// through instead of discarded, so a rejected measurement can never
+/// contribute a number (XIV.A2).
 #[derive(Debug, Clone, PartialEq)]
 struct TimedTask {
     arch: String,
     dir: String,
     op: String,
     fam: String,
+    theorem: Option<String>,
+    exit: Option<i32>,
+    check_axioms: bool,
     seconds: Option<f64>,
+    inferences: Option<u64>,
+    /// Present only for instrumented runs: the delta from the first line,
+    /// which includes the shared HOL Light bootstrap.
+    inferences_whole_file: Option<u64>,
     log: String,
 }
 
-fn read_timed_tasks(path: &Path) -> Result<(Option<String>, Vec<TimedTask>), String> {
+impl TimedTask {
+    fn key(&self) -> (String, String, String, String) {
+        (
+            self.arch.clone(),
+            self.dir.clone(),
+            self.op.clone(),
+            self.fam.clone(),
+        )
+    }
+}
+
+/// A whole receipt file: its measurement scope plus its rows.
+#[derive(Debug, Clone, PartialEq)]
+struct TimedFile {
+    tree: Option<String>,
+    scope: MeasurementScope,
+    tasks: Vec<TimedTask>,
+}
+
+fn json_u64(v: &json::Json) -> Option<u64> {
+    match v {
+        json::Json::Num(n) if *n >= 0.0 => Some(*n as u64),
+        _ => None,
+    }
+}
+
+fn json_i32(v: &json::Json) -> Option<i32> {
+    match v {
+        json::Json::Num(n) => Some(*n as i32),
+        _ => None,
+    }
+}
+
+fn json_bool(v: &json::Json) -> Option<bool> {
+    match v {
+        json::Json::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+
+/// Read a receipt with its top-level measurement conditions. `kernel_fallback`
+/// is used only when the file predates the `kernel_build` field.
+fn read_timed_tasks(
+    path: &Path,
+    kind: TreeKind,
+    kernel_fallback: &str,
+) -> Result<TimedFile, String> {
     let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let j = json::parse(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     let tree = j.get("tree").and_then(|v| v.as_str()).map(str::to_string);
+    let s2n_pin = j
+        .get("s2n_bignum_pin")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    let jobs = j.get("cores").and_then(json_u64).unwrap_or(1) as u32;
+    let force = j.get("force").and_then(json_bool).unwrap_or(false);
+    let kernel_build = j
+        .get("kernel_build")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if kernel_fallback.is_empty() {
+                let stamp = j.get("stamp").and_then(json_bool).unwrap_or(false);
+                if stamp {
+                    "stamp-kernel".to_string()
+                } else {
+                    "unstamped".to_string()
+                }
+            } else {
+                kernel_fallback.to_string()
+            }
+        });
+    let scope = MeasurementScope {
+        tree_kind: kind,
+        s2n_pin,
+        jobs,
+        force,
+        kernel_build,
+    };
     let empty = Vec::new();
     let tasks = j.get("tasks").and_then(|v| v.as_array()).unwrap_or(&empty);
     let mut out = Vec::with_capacity(tasks.len());
     for t in tasks {
         let field = |k: &str| t.get(k).and_then(|v| v.as_str()).unwrap_or("?").to_string();
+        let theorem = t
+            .get("theorem")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let exit = t.get("exit").and_then(json_i32);
+        let check_axioms = t.get("check_axioms").and_then(json_bool).unwrap_or(false);
         let seconds = match t.get("seconds") {
             Some(json::Json::Num(n)) => Some(*n),
             _ => None,
         };
+        let inferences = t.get("inference_delta").and_then(json_u64);
+        let inferences_whole_file = t.get("inference_delta_whole_file").and_then(json_u64);
         out.push(TimedTask {
             arch: field("arch"),
             dir: field("dir"),
             op: field("op"),
             fam: field("family"),
+            theorem,
+            exit,
+            check_axioms,
             seconds,
+            inferences,
+            inferences_whole_file,
             log: field("log"),
         });
     }
-    Ok((tree, out))
+    Ok(TimedFile {
+        tree,
+        scope,
+        tasks: out,
+    })
 }
 
 fn median(mut xs: Vec<f64>) -> Option<f64> {
@@ -1928,18 +2458,20 @@ fn fam_rank(f: &str) -> usize {
         .unwrap_or(ARM_FAMILIES.len())
 }
 
-/// One joined human/generated row. Both numbers are optional so a failed or
-/// absent task is reported as `n/a` instead of being dropped.
+/// One joined human/generated row. The verdict is `None` only when a side is
+/// absent; otherwise it is exactly what `compare` said.
 #[derive(Debug, Clone, PartialEq)]
 struct Pair {
     arch: String,
     dir: String,
     op: String,
     fam: String,
-    human: Option<f64>,
-    generated: Option<f64>,
-    human_log: Option<String>,
-    generated_log: Option<String>,
+    human: Option<TimedTask>,
+    generated: Option<TimedTask>,
+    human_proof: Option<MeasuredProof>,
+    generated_proof: Option<MeasuredProof>,
+    verdict: Option<Result<MatchedComparison, ComparisonError>>,
+    reasons: Vec<ComparisonError>,
 }
 
 impl Pair {
@@ -1947,20 +2479,78 @@ impl Pair {
         format!("{}/{}_{}", self.dir, self.op, self.fam)
     }
 
-    /// generated / human, only when both exist and human is non-zero.
-    fn ratio(&self) -> Option<f64> {
-        match (self.human, self.generated) {
-            (Some(h), Some(g)) if h > 0.0 => Some(g / h),
+    fn matched(&self) -> Option<&MatchedComparison> {
+        match &self.verdict {
+            Some(Ok(m)) => Some(m),
             _ => None,
+        }
+    }
+
+    fn human_seconds(&self) -> Option<f64> {
+        self.human.as_ref().and_then(|t| t.seconds)
+    }
+
+    fn generated_seconds(&self) -> Option<f64> {
+        self.generated.as_ref().and_then(|t| t.seconds)
+    }
+
+    fn human_inferences(&self) -> Option<u64> {
+        self.human.as_ref().and_then(|t| t.inferences)
+    }
+
+    fn generated_inferences(&self) -> Option<u64> {
+        self.generated.as_ref().and_then(|t| t.inferences)
+    }
+
+    fn refused(&self) -> bool {
+        !matches!(self.verdict, Some(Ok(_)))
+    }
+
+    /// A single line for the unmatched list: the first refusal, with the
+    /// remaining reasons named so nothing is hidden.
+    fn refusal_reason(&self) -> String {
+        if self.human.is_none() {
+            return "no human measurement".to_string();
+        }
+        if self.generated.is_none() {
+            return "no generated measurement".to_string();
+        }
+        let first = match &self.verdict {
+            Some(Err(e)) => e.to_string(),
+            Some(Ok(_)) => return "matched".to_string(),
+            None => "not compared".to_string(),
+        };
+        let extra: Vec<String> = self
+            .reasons
+            .iter()
+            .skip(1)
+            .map(ToString::to_string)
+            .collect();
+        if extra.is_empty() {
+            first
+        } else {
+            format!("{first}; also: {}", extra.join("; "))
         }
     }
 }
 
-fn pair_rows(human: &[TimedTask], generated: &[TimedTask]) -> Vec<Pair> {
+/// Build a `MeasuredProof` from a row and the scope of the file it came from.
+fn measured(task: &TimedTask, scope: &MeasurementScope) -> MeasuredProof {
+    MeasuredProof {
+        theorem: task.theorem.clone().unwrap_or_default(),
+        exit: task.exit,
+        check_axioms: task.check_axioms,
+        theorem_proved: task.theorem.is_some(),
+        seconds: task.seconds,
+        inferences: task.inferences,
+        scope: scope.clone(),
+    }
+}
+
+fn pair_rows(human: &TimedFile, generated: &TimedFile) -> Vec<Pair> {
     use std::collections::BTreeMap;
-    let key = |t: &TimedTask| (t.arch.clone(), t.dir.clone(), t.op.clone(), t.fam.clone());
-    let hmap: BTreeMap<_, _> = human.iter().map(|t| (key(t), t)).collect();
-    let gmap: BTreeMap<_, _> = generated.iter().map(|t| (key(t), t)).collect();
+    let hmap: BTreeMap<_, _> = human.tasks.iter().map(|t| (t.key(), t)).collect();
+    let gmap: BTreeMap<_, _> = generated.tasks.iter().map(|t| (t.key(), t)).collect();
     let mut keys: Vec<_> = hmap.keys().chain(gmap.keys()).cloned().collect();
     keys.sort();
     keys.dedup();
@@ -1975,15 +2565,23 @@ fn pair_rows(human: &[TimedTask], generated: &[TimedTask]) -> Vec<Pair> {
         .map(|k| {
             let h = hmap.get(&k);
             let g = gmap.get(&k);
+            let human_proof = h.map(|t| measured(t, &human.scope));
+            let generated_proof = g.map(|t| measured(t, &generated.scope));
+            let (verdict, reasons) = match (&human_proof, &generated_proof) {
+                (Some(hp), Some(gp)) => (Some(compare(hp, gp)), comparison_reasons(hp, gp)),
+                _ => (None, Vec::new()),
+            };
             Pair {
                 arch: k.0,
                 dir: k.1,
                 op: k.2,
                 fam: k.3,
-                human: h.and_then(|t| t.seconds),
-                generated: g.and_then(|t| t.seconds),
-                human_log: h.map(|t| t.log.clone()),
-                generated_log: g.map(|t| t.log.clone()),
+                human: h.map(|t| (*t).clone()),
+                generated: g.map(|t| (*t).clone()),
+                human_proof,
+                generated_proof,
+                verdict,
+                reasons,
             }
         })
         .collect()
@@ -1997,155 +2595,284 @@ fn fmt_ratio(v: Option<f64>) -> String {
     v.map(|x| format!("{x:.2}")).unwrap_or_else(|| "n/a".into())
 }
 
-/// Aggregate + median ratio for a group of rows. Summary numbers are computed
-/// from the same per-task values the table prints, never typed in by hand.
+/// An aggregate over **matched pairs only**. Every `add` takes a
+/// `MatchedComparison`, so an unmatched row cannot enter. Each metric has its
+/// own denominator: a matched pair contributes to the seconds total only when
+/// both times exist, and to the inference total only when both counts exist.
 #[derive(Default)]
 struct Group {
     n: usize,
-    human: f64,
-    generated: f64,
-    ratios: Vec<f64>,
+    seconds_n: usize,
+    inference_n: usize,
+    human_seconds: f64,
+    generated_seconds: f64,
+    human_inferences: u128,
+    generated_inferences: u128,
+    seconds_ratios: Vec<f64>,
+    inference_ratios: Vec<f64>,
 }
 
 impl Group {
-    fn add(&mut self, p: &Pair) {
+    fn add(&mut self, m: &MatchedComparison) {
         self.n += 1;
-        if let Some(h) = p.human {
-            self.human += h;
+        if let (Some(h), Some(g)) = (m.human.seconds, m.generated.seconds) {
+            self.seconds_n += 1;
+            self.human_seconds += h;
+            self.generated_seconds += g;
+            if h > 0.0 {
+                self.seconds_ratios.push(g / h);
+            }
         }
-        if let Some(g) = p.generated {
-            self.generated += g;
-        }
-        if let Some(r) = p.ratio() {
-            self.ratios.push(r);
+        if let (Some(h), Some(g)) = (m.human.inferences, m.generated.inferences) {
+            self.inference_n += 1;
+            self.human_inferences += h as u128;
+            self.generated_inferences += g as u128;
+            if h > 0 {
+                self.inference_ratios.push(g as f64 / h as f64);
+            }
         }
     }
 
-    fn aggregate(&self) -> Option<f64> {
-        (self.human > 0.0).then(|| self.generated / self.human)
+    fn seconds_aggregate(&self) -> Option<f64> {
+        (self.seconds_n > 0 && self.human_seconds > 0.0)
+            .then(|| self.generated_seconds / self.human_seconds)
+    }
+
+    fn inference_aggregate(&self) -> Option<f64> {
+        (self.inference_n > 0 && self.human_inferences > 0)
+            .then(|| self.generated_inferences as f64 / self.human_inferences as f64)
     }
 }
 
-/// Render the matched table and its statistics. Pure so it can be tested
-/// without the `.bench` trees.
-fn render_checktime(
-    human_tree: Option<&str>,
-    human: &[TimedTask],
-    generated: &[TimedTask],
-) -> String {
+fn refusal_code(e: &ComparisonError) -> &'static str {
+    match e {
+        ComparisonError::TheoremIdentityMismatch { .. } => "theorem identity",
+        ComparisonError::HumanExitNotZero { .. } => "human exit",
+        ComparisonError::GeneratedExitNotZero { .. } => "generated exit",
+        ComparisonError::HumanAxiomsNotChecked => "human check_axioms",
+        ComparisonError::GeneratedAxiomsNotChecked => "generated check_axioms",
+        ComparisonError::HumanTheoremNotProved => "human theorem",
+        ComparisonError::GeneratedTheoremNotProved => "generated theorem",
+        ComparisonError::WrongTreeKind { .. } => "tree kind",
+        ComparisonError::ScopeMismatch { .. } => "scope",
+    }
+}
+
+fn fmt_u64(v: Option<u64>) -> String {
+    v.map(|x| x.to_string()).unwrap_or_else(|| "n/a".into())
+}
+
+fn fmt_match_verdict(p: &Pair) -> String {
+    if p.human.is_none() {
+        "no human row".to_string()
+    } else if p.generated.is_none() {
+        "no generated row".to_string()
+    } else {
+        match &p.verdict {
+            Some(Ok(_)) => "matched".to_string(),
+            Some(Err(e)) => format!("refused: {}", refusal_code(e)),
+            None => "not compared".to_string(),
+        }
+    }
+}
+
+/// Render the matched check-time table. Pure so it can be tested without the
+/// `.bench` trees.
+fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
     let rows = pair_rows(human, generated);
     let mut out = String::new();
 
-    out.push_str("## Matched check-time table\n\n");
+    out.push_str("## Matched check-time table (XIV.A)\n\n");
     out.push_str(
-        "`human s` and `generated s` are the `Running time:` value parsed from each task's\n\
-         `.correct` file. `ratio` is `generated / human`; `% of 120 s` is the generated\n\
-         time against the `XII.F9.2` budget.\n\n",
+        "A row contributes to an aggregate only when `compare` returns a\n\
+         `MatchedComparison`: exact theorem identity, both judgments successful,\n\
+         and identical measurement scopes. `human s` and `generated s` are the\n\
+         `Running time:` value parsed from each task's `.correct` file.\n\n",
     );
-    out.push_str("| arch | task | human s | generated s | ratio | % of 120 s |\n");
-    out.push_str("|---|---|---:|---:|---:|---:|\n");
+    out.push_str(
+        "| arch | task | human theorem | generated theorem | human s | generated s | verdict |\n",
+    );
+    out.push_str("|---|---|---|---|---:|---:|---|\n");
     for p in &rows {
-        let pct = p
-            .generated
-            .map(|g| format!("{:.1}", g / CHECKTIME_BUDGET_SECONDS * 100.0));
         out.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
             p.arch,
             p.label(),
-            fmt_secs(p.human),
-            fmt_secs(p.generated),
-            fmt_ratio(p.ratio()),
-            pct.unwrap_or_else(|| "n/a".into()),
+            p.human_proof
+                .as_ref()
+                .map(|m| m.theorem.as_str())
+                .unwrap_or("n/a"),
+            p.generated_proof
+                .as_ref()
+                .map(|m| m.theorem.as_str())
+                .unwrap_or("n/a"),
+            fmt_secs(p.human_seconds()),
+            fmt_secs(p.generated_seconds()),
+            fmt_match_verdict(p),
         ));
     }
+
+    let matched: Vec<&MatchedComparison> = rows.iter().filter_map(|p| p.matched()).collect();
+    let matched_count = matched.len();
+    let both_rows = rows
+        .iter()
+        .filter(|p| p.human.is_some() && p.generated.is_some())
+        .count();
+    let unmatched: Vec<&Pair> = rows.iter().filter(|p| p.refused()).collect();
 
     let mut all = Group::default();
-    for p in &rows {
-        all.add(p);
+    for m in &matched {
+        all.add(m);
     }
-    let ratios: Vec<f64> = rows.iter().filter_map(|p| p.ratio()).collect();
-    let min = rows
-        .iter()
-        .filter_map(|p| p.ratio().map(|r| (r, p)))
-        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-    let max = rows
-        .iter()
-        .filter_map(|p| p.ratio().map(|r| (r, p)))
-        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-    let paired = ratios.len();
 
-    out.push_str("\n### Ratio statistics\n\n");
+    out.push_str("\n### Measurement counts (XIV.A3/A4)\n\n");
+    out.push_str("| quantity | value |\n|---|---:|\n");
+    out.push_str(&format!("| human rows parsed | {} |\n", human.tasks.len()));
+    out.push_str(&format!(
+        "| generated rows parsed | {} |\n",
+        generated.tasks.len()
+    ));
+    out.push_str(&format!("| task rows (union of keys) | {} |\n", rows.len()));
+    out.push_str(&format!("| rows with both sides present | {both_rows} |\n"));
+    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
+    out.push_str(&format!(
+        "| unmatched rows | {} |\n",
+        rows.len() - matched_count
+    ));
+
+    out.push_str("\n### Matched aggregates (denominator: n matched pairs)\n\n");
     out.push_str("| metric | value |\n|---|---:|\n");
-    out.push_str(&format!("| paired tasks | {paired} of {} |\n", rows.len()));
-    out.push_str(&format!("| human total s | {:.3} |\n", all.human));
-    out.push_str(&format!("| generated total s | {:.3} |\n", all.generated));
-    out.push_str(&format!(
-        "| aggregate ratio (generated total / human total) | {} |\n",
-        fmt_ratio(all.aggregate())
-    ));
-    out.push_str(&format!(
-        "| per-task ratio median | {} |\n",
-        fmt_ratio(median(ratios.clone()))
-    ));
-    match min {
-        Some((r, p)) => out.push_str(&format!(
-            "| per-task ratio min | {r:.2} ({} {}) |\n",
-            p.arch,
-            p.label()
-        )),
-        None => out.push_str("| per-task ratio min | n/a |\n"),
-    }
-    match max {
-        Some((r, p)) => out.push_str(&format!(
-            "| per-task ratio max | {r:.2} ({} {}) |\n",
-            p.arch,
-            p.label()
-        )),
-        None => out.push_str("| per-task ratio max | n/a |\n"),
-    }
-
-    out.push_str("\n### Ratio by operation\n\n");
-    out.push_str(
-        "| op | tasks | human total s | generated total s | aggregate ratio | median ratio |\n",
-    );
-    out.push_str("|---|---:|---:|---:|---:|---:|\n");
-    for op in SWEEP_OPS {
-        let mut g = Group::default();
-        for p in rows.iter().filter(|p| p.op == op) {
-            g.add(p);
-        }
+    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
+    if matched_count == 0 {
+        out.push_str("| human total s (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| generated total s (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| aggregate seconds ratio | n/a (n=0; not published) |\n");
+        out.push_str("| per-task seconds ratio median | n/a (n=0) |\n");
+        out.push_str("| human total inferences (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| generated total inferences (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| aggregate inference ratio | n/a (n=0; not published) |\n");
+        out.push_str("| per-task inference ratio median | n/a (n=0) |\n");
+    } else {
         out.push_str(&format!(
-            "| {op} | {} | {:.3} | {:.3} | {} | {} |\n",
-            g.n,
-            g.human,
-            g.generated,
-            fmt_ratio(g.aggregate()),
-            fmt_ratio(median(g.ratios.clone())),
+            "| human total s (n={}) | {:.3} |\n",
+            all.seconds_n, all.human_seconds
+        ));
+        out.push_str(&format!(
+            "| generated total s (n={}) | {:.3} |\n",
+            all.seconds_n, all.generated_seconds
+        ));
+        out.push_str(&format!(
+            "| aggregate seconds ratio (n={}) | {} |\n",
+            all.seconds_n,
+            fmt_ratio(all.seconds_aggregate())
+        ));
+        out.push_str(&format!(
+            "| per-task seconds ratio median (n={}) | {} |\n",
+            all.seconds_n,
+            fmt_ratio(median(all.seconds_ratios.clone()))
+        ));
+        out.push_str(&format!(
+            "| human total inferences (n={}) | {} |\n",
+            all.inference_n, all.human_inferences
+        ));
+        out.push_str(&format!(
+            "| generated total inferences (n={}) | {} |\n",
+            all.inference_n, all.generated_inferences
+        ));
+        out.push_str(&format!(
+            "| aggregate inference ratio (n={}) | {} |\n",
+            all.inference_n,
+            fmt_ratio(all.inference_aggregate())
+        ));
+        out.push_str(&format!(
+            "| per-task inference ratio median (n={}) | {} |\n",
+            all.inference_n,
+            fmt_ratio(median(all.inference_ratios.clone()))
         ));
     }
 
-    out.push_str("\n### Ratio by family\n\n");
-    out.push_str(
-        "| family | tasks | human total s | generated total s | aggregate ratio | median ratio |\n",
-    );
-    out.push_str("|---|---:|---:|---:|---:|---:|\n");
-    let mut fams: Vec<String> = rows.iter().map(|p| p.fam.clone()).collect();
-    fams.sort_by_key(|f| fam_rank(f));
-    fams.dedup();
-    for fam in &fams {
-        let mut g = Group::default();
-        for p in rows.iter().filter(|p| &p.fam == fam) {
-            g.add(p);
+    out.push_str("\n### Unmatched rows (excluded from every aggregate)\n\n");
+    if unmatched.is_empty() {
+        out.push_str("None: every row is a matched pair.\n");
+    } else {
+        out.push_str(
+            "| arch | task | human theorem | generated theorem | human s | generated s | reason |\n",
+        );
+        out.push_str("|---|---|---|---|---:|---:|---|\n");
+        for p in &unmatched {
+            out.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} |\n",
+                p.arch,
+                p.label(),
+                p.human_proof
+                    .as_ref()
+                    .map(|m| m.theorem.as_str())
+                    .unwrap_or("n/a"),
+                p.generated_proof
+                    .as_ref()
+                    .map(|m| m.theorem.as_str())
+                    .unwrap_or("n/a"),
+                fmt_secs(p.human_seconds()),
+                fmt_secs(p.generated_seconds()),
+                p.refusal_reason(),
+            ));
         }
-        out.push_str(&format!(
-            "| {fam} | {} | {:.3} | {:.3} | {} | {} |\n",
-            g.n,
-            g.human,
-            g.generated,
-            fmt_ratio(g.aggregate()),
-            fmt_ratio(median(g.ratios.clone())),
-        ));
     }
+
+    out.push_str(
+        "\n### Descriptive side totals (all parsed rows; NOT an aggregate over matched pairs)\n\n",
+    );
+    out.push_str("| side | rows | rows with the value | total |\n|---|---:|---:|---:|\n");
+    let h_secs: f64 = human.tasks.iter().filter_map(|t| t.seconds).sum();
+    let g_secs: f64 = generated.tasks.iter().filter_map(|t| t.seconds).sum();
+    let h_inf: u128 = human
+        .tasks
+        .iter()
+        .filter_map(|t| t.inferences)
+        .map(|v| v as u128)
+        .sum();
+    let g_inf: u128 = generated
+        .tasks
+        .iter()
+        .filter_map(|t| t.inferences)
+        .map(|v| v as u128)
+        .sum();
+    out.push_str(&format!(
+        "| human seconds | {} | {} | {:.3} s |\n",
+        human.tasks.len(),
+        human.tasks.iter().filter(|t| t.seconds.is_some()).count(),
+        h_secs
+    ));
+    out.push_str(&format!(
+        "| generated seconds | {} | {} | {:.3} s |\n",
+        generated.tasks.len(),
+        generated
+            .tasks
+            .iter()
+            .filter(|t| t.seconds.is_some())
+            .count(),
+        g_secs
+    ));
+    out.push_str(&format!(
+        "| human inferences | {} | {} | {} |\n",
+        human.tasks.len(),
+        human
+            .tasks
+            .iter()
+            .filter(|t| t.inferences.is_some())
+            .count(),
+        h_inf
+    ));
+    out.push_str(&format!(
+        "| generated inferences | {} | {} | {} |\n",
+        generated.tasks.len(),
+        generated
+            .tasks
+            .iter()
+            .filter(|t| t.inferences.is_some())
+            .count(),
+        g_inf
+    ));
 
     let warn = CHECKTIME_BUDGET_SECONDS * CHECKTIME_WARN_FRACTION;
     out.push_str(&format!(
@@ -2154,15 +2881,20 @@ fn render_checktime(
     ));
     let over: Vec<&Pair> = rows
         .iter()
-        .filter(|p| p.generated.is_some_and(|g| g > warn))
+        .filter(|p| p.matched().is_some())
+        .filter(|p| p.generated_seconds().is_some_and(|g| g > warn))
         .collect();
-    if over.is_empty() {
-        out.push_str(&format!("No generated task exceeds {warn:.0} s.\n"));
+    if matched_count == 0 {
+        out.push_str("No matched generated task to test (n=0).\n");
+    } else if over.is_empty() {
+        out.push_str(&format!(
+            "No matched generated task exceeds {warn:.0} s (n={matched_count}).\n"
+        ));
     } else {
         out.push_str("| arch | task | generated s | % of 120 s | over 70% | over 100% |\n");
         out.push_str("|---|---|---:|---:|---|---|\n");
         for p in over {
-            let g = p.generated.unwrap_or(0.0);
+            let g = p.generated_seconds().unwrap_or(0.0);
             out.push_str(&format!(
                 "| {} | {} | {:.3} | {:.1} | {} | {} |\n",
                 p.arch,
@@ -2185,7 +2917,7 @@ fn render_checktime(
     out.push_str("| arch | task | human `.correct` | generated make log |\n");
     out.push_str("|---|---|---|---|\n");
     for p in &rows {
-        let correct = match human_tree {
+        let correct = match human.tree.as_deref() {
             Some(t) => format!("{t}/{}/{}/bignum_{}_{}.correct", p.arch, p.dir, p.op, p.fam),
             None => "(tree not recorded)".to_string(),
         };
@@ -2194,35 +2926,803 @@ fn render_checktime(
             p.arch,
             p.label(),
             correct,
-            p.generated_log.as_deref().unwrap_or("n/a"),
+            p.generated
+                .as_ref()
+                .map(|t| t.log.as_str())
+                .unwrap_or("n/a"),
         ));
     }
 
     out.push_str(&format!(
-        "\nPAIRED {paired}/{} INCOMPLETE {}\n",
+        "\nMATCHED {matched_count}/{} PAIRS; UNMATCHED {}; HUMAN ROWS {}; GENERATED ROWS {}\n",
         rows.len(),
-        rows.len() - paired
+        rows.len() - matched_count,
+        human.tasks.len(),
+        generated.tasks.len(),
     ));
     out
 }
 
-/// `dropin checktime-table --human <json> --generated <json>`.
+/// `dropin checktime-table --human <json> --generated <json>
+/// [--human-kernel K] [--generated-kernel K]`.
 pub fn checktime_table(args: &[String]) -> Result<i32, String> {
     let human_path = arg_value(args, "--human").ok_or("--human is required")?;
     let generated_path = arg_value(args, "--generated").ok_or("--generated is required")?;
-    let (tree, human) = read_timed_tasks(Path::new(human_path))?;
-    let (_, generated) = read_timed_tasks(Path::new(generated_path))?;
-    if human.is_empty() || generated.is_empty() {
+    let human_kernel = arg_value(args, "--human-kernel").unwrap_or("");
+    let generated_kernel = arg_value(args, "--generated-kernel").unwrap_or("");
+    let human = read_timed_tasks(Path::new(human_path), TreeKind::Human, human_kernel)?;
+    let generated = read_timed_tasks(
+        Path::new(generated_path),
+        TreeKind::Generated,
+        generated_kernel,
+    )?;
+    if human.tasks.is_empty() || generated.tasks.is_empty() {
         return Err(format!(
             "need both task lists: human={} generated={}",
-            human.len(),
-            generated.len()
+            human.tasks.len(),
+            generated.tasks.len()
         ));
     }
-    let text = render_checktime(tree.as_deref(), &human, &generated);
+    let text = render_checktime(&human, &generated);
     print!("{text}");
-    let paired = text.contains("INCOMPLETE 0\n");
-    Ok(if paired { 0 } else { 1 })
+    let rows = pair_rows(&human, &generated);
+    let matched = rows.iter().filter(|p| p.matched().is_some()).count();
+    Ok(if !rows.is_empty() && matched == rows.len() {
+        0
+    } else {
+        1
+    })
+}
+
+fn json_opt_u64(v: Option<u64>) -> String {
+    v.map(|n| n.to_string())
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_str_slice(items: &[String]) -> String {
+    let body: Vec<String> = items.iter().map(|s| json_str(s)).collect();
+    format!("[{}]", body.join(", "))
+}
+
+/// Render the inference table. This is the XIV.B2 artefact: only matched
+/// pairs are aggregated, and the denominator is printed on every total.
+fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
+    let rows = pair_rows(human, generated);
+    let matched: Vec<&MatchedComparison> = rows.iter().filter_map(|p| p.matched()).collect();
+    let matched_count = matched.len();
+    let unmatched: Vec<&Pair> = rows.iter().filter(|p| p.refused()).collect();
+    let mut all = Group::default();
+    for m in &matched {
+        all.add(m);
+    }
+
+    let mut out = String::new();
+    out.push_str("## Matched inference table (XIV.B2)\n\n");
+    out.push_str(
+        "A row is published only as a pair. `compare` requires the exact theorem\n\
+         identity, both judgments successful (`exit == 0`, `check_axioms`, theorem\n\
+         proved), and identical measurement scopes. `human inf` is the proof-body\n\
+         primitive-inference delta: the shared HOL Light bootstrap is excluded on\n\
+         both sides.\n\n",
+    );
+    out.push_str(
+        "| arch | task | human theorem | generated theorem | human inf | generated inf | human s | generated s | verdict |\n",
+    );
+    out.push_str("|---|---|---|---|---:|---:|---:|---:|---|\n");
+    for p in &rows {
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+            p.arch,
+            p.label(),
+            p.human_proof
+                .as_ref()
+                .map(|m| m.theorem.as_str())
+                .unwrap_or("n/a"),
+            p.generated_proof
+                .as_ref()
+                .map(|m| m.theorem.as_str())
+                .unwrap_or("n/a"),
+            fmt_u64(p.human_inferences()),
+            fmt_u64(p.generated_inferences()),
+            fmt_secs(p.human_seconds()),
+            fmt_secs(p.generated_seconds()),
+            fmt_match_verdict(p),
+        ));
+    }
+
+    out.push_str("\n### Counts\n\n");
+    out.push_str("| quantity | value |\n|---|---:|\n");
+    out.push_str(&format!("| human rows parsed | {} |\n", human.tasks.len()));
+    out.push_str(&format!(
+        "| generated rows parsed | {} |\n",
+        generated.tasks.len()
+    ));
+    out.push_str(&format!("| task rows (union of keys) | {} |\n", rows.len()));
+    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
+    out.push_str(&format!(
+        "| unmatched rows | {} |\n",
+        rows.len() - matched_count
+    ));
+
+    out.push_str("\n### Matched totals (denominator: n matched pairs)\n\n");
+    out.push_str("| metric | value |\n|---|---:|\n");
+    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
+    if matched_count == 0 {
+        out.push_str("| human inferences (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| generated inferences (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| aggregate inference ratio | n/a (n=0; not published) |\n");
+        out.push_str("| per-task inference ratio median | n/a (n=0) |\n");
+        out.push_str("| human seconds (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| generated seconds (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| aggregate seconds ratio | n/a (n=0; not published) |\n");
+    } else {
+        out.push_str(&format!(
+            "| human inferences (n={}) | {} |\n",
+            all.inference_n, all.human_inferences
+        ));
+        out.push_str(&format!(
+            "| generated inferences (n={}) | {} |\n",
+            all.inference_n, all.generated_inferences
+        ));
+        out.push_str(&format!(
+            "| aggregate inference ratio (n={}) | {} |\n",
+            all.inference_n,
+            fmt_ratio(all.inference_aggregate())
+        ));
+        out.push_str(&format!(
+            "| per-task inference ratio median (n={}) | {} |\n",
+            all.inference_n,
+            fmt_ratio(median(all.inference_ratios.clone()))
+        ));
+        out.push_str(&format!(
+            "| human seconds (n={}) | {:.3} |\n",
+            all.seconds_n, all.human_seconds
+        ));
+        out.push_str(&format!(
+            "| generated seconds (n={}) | {:.3} |\n",
+            all.seconds_n, all.generated_seconds
+        ));
+        out.push_str(&format!(
+            "| aggregate seconds ratio (n={}) | {} |\n",
+            all.seconds_n,
+            fmt_ratio(all.seconds_aggregate())
+        ));
+    }
+
+    out.push_str("\n### Unmatched rows (excluded from every aggregate)\n\n");
+    if unmatched.is_empty() {
+        out.push_str("None: every row is a matched pair.\n");
+    } else {
+        out.push_str(
+            "| arch | task | human theorem | generated theorem | human inf | generated inf | reason |\n",
+        );
+        out.push_str("|---|---|---|---|---:|---:|---|\n");
+        for p in &unmatched {
+            out.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} |\n",
+                p.arch,
+                p.label(),
+                p.human_proof
+                    .as_ref()
+                    .map(|m| m.theorem.as_str())
+                    .unwrap_or("n/a"),
+                p.generated_proof
+                    .as_ref()
+                    .map(|m| m.theorem.as_str())
+                    .unwrap_or("n/a"),
+                fmt_u64(p.human_inferences()),
+                fmt_u64(p.generated_inferences()),
+                p.refusal_reason(),
+            ));
+        }
+    }
+
+    out.push_str(
+        "\n### Descriptive side totals (all parsed rows; NOT an aggregate over matched pairs)\n\n",
+    );
+    out.push_str(
+        "| side | rows | rows with inferences | total inferences |\n|---|---:|---:|---:|\n",
+    );
+    let h_inf: u128 = human
+        .tasks
+        .iter()
+        .filter_map(|t| t.inferences)
+        .map(|v| v as u128)
+        .sum();
+    let g_inf: u128 = generated
+        .tasks
+        .iter()
+        .filter_map(|t| t.inferences)
+        .map(|v| v as u128)
+        .sum();
+    out.push_str(&format!(
+        "| human | {} | {} | {} |\n",
+        human.tasks.len(),
+        human
+            .tasks
+            .iter()
+            .filter(|t| t.inferences.is_some())
+            .count(),
+        h_inf
+    ));
+    out.push_str(&format!(
+        "| generated | {} | {} | {} |\n",
+        generated.tasks.len(),
+        generated
+            .tasks
+            .iter()
+            .filter(|t| t.inferences.is_some())
+            .count(),
+        g_inf
+    ));
+
+    out.push_str(&format!(
+        "\nMATCHED {matched_count}/{} PAIRS; UNMATCHED {}; HUMAN ROWS {}; GENERATED ROWS {}\n",
+        rows.len(),
+        rows.len() - matched_count,
+        human.tasks.len(),
+        generated.tasks.len(),
+    ));
+    out
+}
+
+fn matched_json(
+    human: &TimedFile,
+    generated: &TimedFile,
+    human_path: &str,
+    generated_path: &str,
+) -> String {
+    let rows = pair_rows(human, generated);
+    let matched: Vec<&MatchedComparison> = rows.iter().filter_map(|p| p.matched()).collect();
+    let matched_count = matched.len();
+    let mut all = Group::default();
+    for m in &matched {
+        all.add(m);
+    }
+    let mut out = String::new();
+    out.push_str("{\n");
+    out.push_str(&format!("  \"generated_at\": {},\n", now_unix()));
+    out.push_str("  \"label\": \"ix60-matched-inference\",\n");
+    out.push_str(&format!("  \"human_file\": {},\n", json_str(human_path)));
+    out.push_str(&format!(
+        "  \"generated_file\": {},\n",
+        json_str(generated_path)
+    ));
+    out.push_str(&format!(
+        "  \"human_kernel_build\": {},\n",
+        json_str(&human.scope.kernel_build)
+    ));
+    out.push_str(&format!(
+        "  \"generated_kernel_build\": {},\n",
+        json_str(&generated.scope.kernel_build)
+    ));
+    out.push_str(&format!(
+        "  \"human_tree\": {},\n",
+        json_opt_str(human.tree.as_deref())
+    ));
+    out.push_str(&format!(
+        "  \"scope\": {{\"s2n_bignum_pin\": {}, \"jobs\": {}, \"force\": {}}},\n",
+        json_str(&human.scope.s2n_pin),
+        human.scope.jobs,
+        human.scope.force
+    ));
+    out.push_str(&format!(
+        "  \"counts\": {{\"human_rows\": {}, \"generated_rows\": {}, \"task_rows\": {}, \"matched_pairs\": {}, \"unmatched\": {}}},\n",
+        human.tasks.len(),
+        generated.tasks.len(),
+        rows.len(),
+        matched_count,
+        rows.len() - matched_count
+    ));
+    let (hi, gi, ir, hs, gs, sr) = if matched_count == 0 {
+        (None, None, None, None, None, None)
+    } else {
+        (
+            Some(all.human_inferences),
+            Some(all.generated_inferences),
+            all.inference_aggregate(),
+            Some(all.human_seconds),
+            Some(all.generated_seconds),
+            all.seconds_aggregate(),
+        )
+    };
+    out.push_str(&format!(
+        "  \"matched_totals\": {{\"denominator\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"inference_ratio\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"seconds_ratio\": {}}},\n",
+        matched_count,
+        hi.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+        gi.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+        json_opt_num(ir),
+        json_opt_num(hs),
+        json_opt_num(gs),
+        json_opt_num(sr),
+    ));
+    out.push_str("  \"tasks\": [\n");
+    for (i, p) in rows.iter().enumerate() {
+        let comma = if i + 1 == rows.len() { "" } else { "," };
+        let reasons: Vec<String> = p.reasons.iter().map(ToString::to_string).collect();
+        out.push_str(&format!(
+            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"human_theorem\": {}, \"generated_theorem\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"human_inferences_whole_file\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"matched\": {}, \"verdict\": {}, \"reasons\": {}}}{}\n",
+            json_str(&p.arch),
+            json_str(&p.dir),
+            json_str(&p.op),
+            json_str(&p.fam),
+            json_opt_str(p.human_proof.as_ref().map(|m| m.theorem.as_str())),
+            json_opt_str(p.generated_proof.as_ref().map(|m| m.theorem.as_str())),
+            json_opt_u64(p.human_inferences()),
+            json_opt_u64(p.generated_inferences()),
+            json_opt_u64(p.human.as_ref().and_then(|t| t.inferences_whole_file)),
+            json_opt_num(p.human_seconds()),
+            json_opt_num(p.generated_seconds()),
+            p.matched().is_some(),
+            json_str(&p.refusal_reason()),
+            json_str_slice(&reasons),
+            comma
+        ));
+    }
+    out.push_str("  ],\n");
+    out.push_str(&format!(
+        "  \"ok\": {},\n  \"total\": {}\n}}\n",
+        matched_count,
+        rows.len()
+    ));
+    out
+}
+
+/// `dropin matched-table --human <json> --generated <json> [--json <path>]
+/// [--human-kernel K] [--generated-kernel K]`.
+pub fn matched_table(args: &[String]) -> Result<i32, String> {
+    let human_path = arg_value(args, "--human").ok_or("--human is required")?;
+    let generated_path = arg_value(args, "--generated").ok_or("--generated is required")?;
+    let human_kernel = arg_value(args, "--human-kernel").unwrap_or("");
+    let generated_kernel = arg_value(args, "--generated-kernel").unwrap_or("");
+    let human = read_timed_tasks(Path::new(human_path), TreeKind::Human, human_kernel)?;
+    let generated = read_timed_tasks(
+        Path::new(generated_path),
+        TreeKind::Generated,
+        generated_kernel,
+    )?;
+    if human.tasks.is_empty() || generated.tasks.is_empty() {
+        return Err(format!(
+            "need both task lists: human={} generated={}",
+            human.tasks.len(),
+            generated.tasks.len()
+        ));
+    }
+    let text = render_matched(&human, &generated);
+    print!("{text}");
+    if let Some(path) = arg_value(args, "--json") {
+        let path = Path::new(path);
+        ensure_parent(path)?;
+        let body = matched_json(&human, &generated, human_path, generated_path);
+        fs::write(path, body.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    let rows = pair_rows(&human, &generated);
+    let matched = rows.iter().filter(|p| p.matched().is_some()).count();
+    Ok(if !rows.is_empty() && matched == rows.len() {
+        0
+    } else {
+        1
+    })
+}
+
+// ---------------------------------------------------------------------------
+// obligation: decide whether the human and generated proofs prove the same
+// statement (XIII.E3). Everything here is a string comparison of the two
+// conclusions printed by the built `.correct` files.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ObligationVerdict {
+    SameStatement,
+    HumanStronger,
+    HumanWeaker,
+    Incomparable,
+    Unclassified,
+    Missing,
+}
+
+impl ObligationVerdict {
+    fn as_str(self) -> &'static str {
+        match self {
+            ObligationVerdict::SameStatement => "same statement",
+            ObligationVerdict::HumanStronger => "different: human strictly stronger",
+            ObligationVerdict::HumanWeaker => "different: human strictly weaker",
+            ObligationVerdict::Incomparable => {
+                "different: neither strictly stronger nor strictly weaker (incomparable)"
+            }
+            ObligationVerdict::Unclassified => "different: unclassified",
+            ObligationVerdict::Missing => "missing conclusion",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct Markers {
+    human_returnaddress: bool,
+    generated_returnaddress: bool,
+    human_pc_returnaddress: bool,
+    generated_pc_offset: bool,
+    human_frame_abi: bool,
+    generated_frame_abi: bool,
+    human_x30_pre: bool,
+    human_rsp_pre: bool,
+    human_stack_load_pre: bool,
+    human_rsp_post: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FirstDifference {
+    /// Character offset (not bytes) of the first mismatch in the normalised
+    /// conclusions.
+    offset: usize,
+    human: String,
+    generated: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Obligation {
+    arch: String,
+    dir: String,
+    op: String,
+    fam: String,
+    human_theorem: String,
+    generated_theorem: String,
+    human_conclusion: Option<String>,
+    generated_conclusion: Option<String>,
+    same: bool,
+    first_difference: Option<FirstDifference>,
+    markers: Markers,
+    verdict: ObligationVerdict,
+    description: String,
+    error: Option<String>,
+}
+
+fn normalise_conclusion(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Extract `val <name> : thm = |- <conclusion>` from a `.correct` file. The
+/// conclusion may span many lines; it ends at the next top-level `val` line or
+/// at a known non-conclusion output marker.
+fn extract_conclusion(text: &str, name: &str) -> Option<String> {
+    let prefix = format!("val {name} : thm = |- ");
+    let bare = format!("val {name} : thm =");
+    let mut collecting = false;
+    let mut buf = String::new();
+    for line in text.lines() {
+        if !collecting {
+            if let Some(rest) = line.strip_prefix(&prefix) {
+                collecting = true;
+                buf.push_str(rest);
+            } else if line.starts_with(&bare) {
+                // The marker exists but carries no `|- ` conclusion.
+                return Some(String::new());
+            }
+            continue;
+        }
+        if line.starts_with("val ")
+            || line.starts_with("Running time:")
+            || line.starts_with("STAMP_")
+            || line.starts_with("CPU time")
+            || line.starts_with("File ")
+            || line.starts_with("Exception")
+        {
+            break;
+        }
+        buf.push(' ');
+        buf.push_str(line);
+    }
+    if collecting {
+        Some(normalise_conclusion(&buf))
+    } else {
+        None
+    }
+}
+
+fn first_difference(human: &str, generated: &str) -> Option<FirstDifference> {
+    if human == generated {
+        return None;
+    }
+    let h: Vec<char> = human.chars().collect();
+    let g: Vec<char> = generated.chars().collect();
+    let mut i = 0;
+    while i < h.len() && i < g.len() && h[i] == g[i] {
+        i += 1;
+    }
+    let start = i.saturating_sub(60);
+    let human_ctx: String = h[start..(i + 60).min(h.len())].iter().collect();
+    let generated_ctx: String = g[start..(i + 60).min(g.len())].iter().collect();
+    Some(FirstDifference {
+        offset: i,
+        human: human_ctx,
+        generated: generated_ctx,
+    })
+}
+
+fn markers_of(human: &str, generated: &str) -> Markers {
+    Markers {
+        human_returnaddress: human.contains("returnaddress"),
+        generated_returnaddress: generated.contains("returnaddress"),
+        human_pc_returnaddress: human.contains("read PC s = returnaddress")
+            || human.contains("read RIP s = returnaddress"),
+        generated_pc_offset: generated.contains("read PC s = word (pc +")
+            || generated.contains("read RIP s = word (pc +"),
+        human_frame_abi: human.contains("MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI"),
+        generated_frame_abi: generated.contains("MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI"),
+        human_x30_pre: human.contains("read X30 s = returnaddress"),
+        human_rsp_pre: human.contains("read RSP s = stackpointer"),
+        human_stack_load_pre: human
+            .contains("read (memory :> bytes64 stackpointer) s = returnaddress"),
+        human_rsp_post: human.contains("read RSP s = word_add stackpointer (word 8)"),
+    }
+}
+
+fn describe_obligation(m: &Markers) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !m.human_returnaddress && !m.generated_returnaddress {
+        parts.push("neither conclusion mentions `returnaddress`".to_string());
+    } else if m.human_returnaddress && !m.generated_returnaddress {
+        parts.push("the human conclusion quantifies a caller-provided `returnaddress` (and, on x86, `stackpointer`) that the generated conclusion does not mention".to_string());
+    }
+    if m.human_x30_pre {
+        parts.push("the human precondition assumes `read X30 s = returnaddress`".to_string());
+    }
+    if m.human_rsp_pre || m.human_stack_load_pre {
+        parts.push("the human precondition assumes the stack pointer and the saved return address in memory".to_string());
+    }
+    if m.human_pc_returnaddress {
+        parts.push("the human postcondition asserts `PC = returnaddress`".to_string());
+    }
+    if m.generated_pc_offset {
+        parts.push("the generated postcondition asserts `PC = pc + N` for a fixed N".to_string());
+    }
+    if m.human_rsp_post {
+        parts.push("the human postcondition asserts `RSP = stackpointer + 8`".to_string());
+    }
+    if m.human_frame_abi && !m.generated_frame_abi {
+        parts.push("the human frame is `MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI` (broader: it permits every ABI-clobberable register), while the generated frame is an explicit `MAYCHANGE` list (narrower)".to_string());
+    }
+    parts.join("; ")
+}
+
+fn obligation_verdict(human: &str, generated: &str, m: &Markers) -> ObligationVerdict {
+    if human == generated {
+        return ObligationVerdict::SameStatement;
+    }
+    let human_extra_post = m.human_pc_returnaddress && !m.generated_returnaddress;
+    let human_extra_pre = m.human_x30_pre || m.human_rsp_pre || m.human_stack_load_pre;
+    let human_broader_frame = m.human_frame_abi && !m.generated_frame_abi;
+    match (human_extra_post, human_extra_pre, human_broader_frame) {
+        (true, true, _) | (true, _, true) => ObligationVerdict::Incomparable,
+        (true, false, false) => ObligationVerdict::HumanStronger,
+        (false, true, _) | (false, _, true) => ObligationVerdict::HumanWeaker,
+        (false, false, false) => ObligationVerdict::Unclassified,
+    }
+}
+
+fn build_obligation(
+    arch: &str,
+    dir: &str,
+    op: &str,
+    fam: &str,
+    human_path: &Path,
+    generated_path: &Path,
+) -> Obligation {
+    let human_theorem = format!(
+        "BIGNUM_{}_{}_SUBROUTINE_CORRECT",
+        op.to_uppercase(),
+        fam.to_uppercase()
+    );
+    let generated_theorem = format!(
+        "BIGNUM_{}_{}_CORRECT",
+        op.to_uppercase(),
+        fam.to_uppercase()
+    );
+    let mut o = Obligation {
+        arch: arch.to_string(),
+        dir: dir.to_string(),
+        op: op.to_string(),
+        fam: fam.to_string(),
+        human_theorem: human_theorem.clone(),
+        generated_theorem: generated_theorem.clone(),
+        human_conclusion: None,
+        generated_conclusion: None,
+        same: false,
+        first_difference: None,
+        markers: Markers::default(),
+        verdict: ObligationVerdict::Missing,
+        description: String::new(),
+        error: None,
+    };
+    let human_text = match fs::read_to_string(human_path) {
+        Ok(t) => t,
+        Err(e) => {
+            o.error = Some(format!("{}: {e}", human_path.display()));
+            return o;
+        }
+    };
+    let generated_text = match fs::read_to_string(generated_path) {
+        Ok(t) => t,
+        Err(e) => {
+            o.error = Some(format!("{}: {e}", generated_path.display()));
+            return o;
+        }
+    };
+    let h = extract_conclusion(&human_text, &human_theorem);
+    let g = extract_conclusion(&generated_text, &generated_theorem);
+    if h.is_none() || g.is_none() {
+        o.error = Some(format!(
+            "conclusion not found: human={} generated={}",
+            h.is_some(),
+            g.is_some()
+        ));
+        o.human_conclusion = h;
+        o.generated_conclusion = g;
+        return o;
+    }
+    let h = h.unwrap();
+    let g = g.unwrap();
+    o.same = h == g;
+    o.first_difference = first_difference(&h, &g);
+    o.markers = markers_of(&h, &g);
+    o.verdict = obligation_verdict(&h, &g, &o.markers);
+    o.description = describe_obligation(&o.markers);
+    o.human_conclusion = Some(h);
+    o.generated_conclusion = Some(g);
+    o
+}
+
+fn obligation_json(obligations: &[Obligation], human_tree: &str, generated_tree: &str) -> String {
+    let same = obligations.iter().filter(|o| o.same).count();
+    let missing = obligations
+        .iter()
+        .filter(|o| o.verdict == ObligationVerdict::Missing)
+        .count();
+    let mut out = String::new();
+    out.push_str("{\n");
+    out.push_str(&format!("  \"generated_at\": {},\n", now_unix()));
+    out.push_str(&format!("  \"human_tree\": {},\n", json_str(human_tree)));
+    out.push_str(&format!(
+        "  \"generated_tree\": {},\n",
+        json_str(generated_tree)
+    ));
+    out.push_str(&format!(
+        "  \"counts\": {{\"tasks\": {}, \"same\": {}, \"different\": {}, \"missing\": {}}},\n",
+        obligations.len(),
+        same,
+        obligations.len() - same - missing,
+        missing
+    ));
+    out.push_str("  \"tasks\": [\n");
+    for (i, o) in obligations.iter().enumerate() {
+        let comma = if i + 1 == obligations.len() { "" } else { "," };
+        let fd = o
+            .first_difference
+            .as_ref()
+            .map(|d| {
+                format!(
+                    "{{\"offset\": {}, \"human\": {}, \"generated\": {}}}",
+                    d.offset,
+                    json_str(&d.human),
+                    json_str(&d.generated)
+                )
+            })
+            .unwrap_or_else(|| "null".to_string());
+        out.push_str(&format!(
+            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"human_theorem\": {}, \"generated_theorem\": {}, \"same\": {}, \"verdict\": {}, \"first_difference\": {}, \"description\": {}, \"human_conclusion\": {}, \"generated_conclusion\": {}, \"error\": {}}}{}\n",
+            json_str(&o.arch),
+            json_str(&o.dir),
+            json_str(&o.op),
+            json_str(&o.fam),
+            json_str(&o.human_theorem),
+            json_str(&o.generated_theorem),
+            o.same,
+            json_str(o.verdict.as_str()),
+            fd,
+            json_str(&o.description),
+            json_opt_str(o.human_conclusion.as_deref()),
+            json_opt_str(o.generated_conclusion.as_deref()),
+            json_opt_str(o.error.as_deref()),
+            comma
+        ));
+    }
+    out.push_str("  ]\n}\n");
+    out
+}
+
+/// `dropin obligation --human-tree <dir> --generated-tree <dir> [--json P]`.
+pub fn obligation(args: &[String]) -> Result<i32, String> {
+    let human_tree =
+        PathBuf::from(arg_value(args, "--human-tree").ok_or("--human-tree is required")?);
+    let generated_tree =
+        PathBuf::from(arg_value(args, "--generated-tree").ok_or("--generated-tree is required")?);
+    let planned = plan(&SweepArgs {
+        arch: "all".to_string(),
+        answers: None,
+        dropin: repo_root().join(".bench/dropin"),
+        gen: repo_root().join(".bench/dropin-gen"),
+        hol: repo_root().join(".bench/hol-light-stamp2"),
+        dry_run: false,
+        force: true,
+        timeout: 900,
+        json: None,
+        stamp: false,
+    });
+    let mut obligations = Vec::with_capacity(planned.len());
+    for p in &planned {
+        let human_path = human_tree
+            .join(&p.arch)
+            .join(&p.dir)
+            .join(format!("{}.correct", p.base));
+        let generated_path = generated_tree
+            .join(&p.arch)
+            .join(&p.dir)
+            .join(format!("{}.correct", p.base));
+        obligations.push(build_obligation(
+            &p.arch,
+            &p.dir,
+            &p.op,
+            &p.fam,
+            &human_path,
+            &generated_path,
+        ));
+    }
+
+    let same = obligations.iter().filter(|o| o.same).count();
+    let missing = obligations
+        .iter()
+        .filter(|o| o.verdict == ObligationVerdict::Missing)
+        .count();
+    println!("## Obligation comparison (XIII.E3)\n");
+    println!("| arch | task | human theorem | generated theorem | same? | verdict |");
+    println!("|---|---|---|---|---|---|");
+    for o in &obligations {
+        println!(
+            "| {} | {}/{}_{} | {} | {} | {} | {} |",
+            o.arch,
+            o.dir,
+            o.op,
+            o.fam,
+            o.human_theorem,
+            o.generated_theorem,
+            py_bool(o.same),
+            o.verdict.as_str()
+        );
+    }
+    println!("\n### Per-task evidence\n");
+    for o in &obligations {
+        println!("#### {}/{} {}", o.arch, o.dir, o.op);
+        if let Some(err) = &o.error {
+            println!("- error: {err}\n");
+            continue;
+        }
+        if let Some(d) = &o.first_difference {
+            println!("- first difference at character {}:", d.offset);
+            println!("  - human:     `{}`", d.human);
+            println!("  - generated: `{}`", d.generated);
+        }
+        println!("- description: {}", o.description);
+        println!("- verdict: {}\n", o.verdict.as_str());
+    }
+    println!(
+        "OBLIGATIONS total={} same={} different={} missing={}",
+        obligations.len(),
+        same,
+        obligations.len() - same - missing,
+        missing
+    );
+
+    if let Some(path) = arg_value(args, "--json") {
+        let path = Path::new(path);
+        ensure_parent(path)?;
+        let body = obligation_json(
+            &obligations,
+            &human_tree.display().to_string(),
+            &generated_tree.display().to_string(),
+        );
+        fs::write(path, body.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    Ok(if missing == 0 { 0 } else { 1 })
 }
 
 #[cfg(test)]
@@ -2474,6 +3974,50 @@ mod tests {
         assert_eq!(run(&args(&["sweep", "--help"])), 2);
     }
 
+    #[test]
+    fn proof_body_mark_is_parsed_and_reported_separately() {
+        let text = "STAMP_BEGIN X\nSTAMP X \nSTAMP_INF_BEFORE 10\n\
+                    STAMP_INF_AFTER 250\nSTAMP_INFERENCES 240\n\
+                    STAMP_INF_BODY_BEFORE 100\nSTAMP_INF_BODY 150\n\
+                    STAMP_FOOTPRINT_BEGIN statement-level footprint, not the transitive derivation closure\n";
+        let r = parse_stamp(text).expect("stamp lines present");
+        assert_eq!(r.inference_delta, Some(240));
+        assert_eq!(r.inference_body_before, Some(100));
+        assert_eq!(r.inference_body_delta, Some(150));
+        assert!(r.validate(Some("X")).is_ok());
+        let mut bad = r;
+        bad.inference_body_delta = Some(151);
+        let err = bad.validate(Some("X")).unwrap_err();
+        assert!(err.contains("body inference delta"), "{err}");
+    }
+
+    #[test]
+    fn instrument_proof_marks_the_first_line_and_the_body_then_restores() {
+        let dir = std::env::temp_dir().join(format!("tek-ix60-instr-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("bignum_add_p256.ml");
+        let original = "(* c *)\nneeds \"arm/proofs/base.ml\";;\nlet T = 1;;\n";
+        fs::write(&p, original).unwrap();
+        {
+            let _g = instrument_proof(&p, "BIGNUM_ADD_P256_SUBROUTINE_CORRECT", "bignum_add_p256")
+                .unwrap();
+            let text = fs::read_to_string(&p).unwrap();
+            assert!(text.starts_with("let stamp_mark_bignum_add_p256 = inference_count ();;\n"));
+            let body_at = text
+                .find("let stamp_body_bignum_add_p256 = inference_count ();;")
+                .unwrap();
+            let needs_at = text.find("needs \"arm/proofs/base.ml\";;").unwrap();
+            assert!(
+                body_at > needs_at,
+                "body mark must follow the shared bootstrap"
+            );
+            assert!(text.contains("STAMP_INF_BODY_BEFORE"));
+            assert!(text.contains("(string_of_thm BIGNUM_ADD_P256_SUBROUTINE_CORRECT)"));
+        }
+        assert_eq!(fs::read_to_string(&p).unwrap(), original);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     fn valid_stamp(theorem: &str) -> StampReport {
         StampReport {
             begun: true,
@@ -2487,6 +4031,8 @@ mod tests {
             inference_before: Some(100),
             inference_after: Some(250),
             inference_delta: Some(150),
+            inference_body_before: None,
+            inference_body_delta: None,
             registry: vec![
                 (1, "aaaa".to_string(), "(eta : bool)".to_string()),
                 (2, "bbbb".to_string(), "(select : bool)".to_string()),
@@ -2868,7 +4414,17 @@ mod tests {
         assert_eq!(j.get("ok").unwrap(), &json::Json::Num(1.0));
     }
 
-    // --- checktime-table -------------------------------------------------
+    // --- typed comparability (XIV.A) -------------------------------------
+
+    fn scope_of(kind: TreeKind) -> MeasurementScope {
+        MeasurementScope {
+            tree_kind: kind,
+            s2n_pin: "5e0fc782".to_string(),
+            jobs: 1,
+            force: true,
+            kernel_build: "hol-light-stamp2".to_string(),
+        }
+    }
 
     fn timed(arch: &str, dir: &str, op: &str, fam: &str, secs: Option<f64>) -> TimedTask {
         TimedTask {
@@ -2876,9 +4432,194 @@ mod tests {
             dir: dir.to_string(),
             op: op.to_string(),
             fam: fam.to_string(),
+            theorem: Some(format!(
+                "BIGNUM_{}_{}_CORRECT",
+                op.to_uppercase(),
+                fam.to_uppercase()
+            )),
+            exit: Some(0),
+            check_axioms: true,
             seconds: secs,
+            inferences: secs.map(|s| (s * 1_000_000.0) as u64),
+            inferences_whole_file: None,
             log: format!("logs-{arch}/{dir}_{op}_{fam}.log"),
         }
+    }
+
+    fn tfile(kind: TreeKind, tasks: Vec<TimedTask>) -> TimedFile {
+        TimedFile {
+            tree: Some("/h".to_string()),
+            scope: scope_of(kind),
+            tasks,
+        }
+    }
+
+    fn proof(theorem: &str, kind: TreeKind) -> MeasuredProof {
+        MeasuredProof {
+            theorem: theorem.to_string(),
+            exit: Some(0),
+            check_axioms: true,
+            theorem_proved: true,
+            seconds: Some(10.0),
+            inferences: Some(1_000),
+            scope: scope_of(kind),
+        }
+    }
+
+    fn matched() -> (MeasuredProof, MeasuredProof) {
+        (
+            proof("BIGNUM_ADD_P521_CORRECT", TreeKind::Human),
+            proof("BIGNUM_ADD_P521_CORRECT", TreeKind::Generated),
+        )
+    }
+
+    #[test]
+    fn compare_accepts_the_positive_case() {
+        let (h, g) = matched();
+        let m = compare(&h, &g).expect("identical theorem, success, same scope");
+        assert_eq!(m.theorem(), "BIGNUM_ADD_P521_CORRECT");
+        assert_eq!(m.inference_ratio(), Some(1.0));
+        assert!(comparison_reasons(&h, &g).is_empty());
+    }
+
+    #[test]
+    fn compare_refuses_a_different_theorem_identity() {
+        let (h, mut g) = matched();
+        g.theorem = "BIGNUM_ADD_P521_SUBROUTINE_CORRECT".to_string();
+        assert_eq!(
+            compare(&h, &g),
+            Err(ComparisonError::TheoremIdentityMismatch {
+                human: "BIGNUM_ADD_P521_CORRECT".to_string(),
+                generated: "BIGNUM_ADD_P521_SUBROUTINE_CORRECT".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn compare_refuses_each_failed_judgment() {
+        let (h, g) = matched();
+        let mut bad = h.clone();
+        bad.exit = Some(2);
+        assert_eq!(
+            compare(&bad, &g),
+            Err(ComparisonError::HumanExitNotZero { exit: Some(2) })
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.exit = Some(124);
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::GeneratedExitNotZero { exit: Some(124) })
+        );
+
+        let (h, g) = matched();
+        let mut bad = h.clone();
+        bad.check_axioms = false;
+        assert_eq!(
+            compare(&bad, &g),
+            Err(ComparisonError::HumanAxiomsNotChecked)
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.check_axioms = false;
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::GeneratedAxiomsNotChecked)
+        );
+
+        let (h, g) = matched();
+        let mut bad = h.clone();
+        bad.theorem_proved = false;
+        assert_eq!(
+            compare(&bad, &g),
+            Err(ComparisonError::HumanTheoremNotProved)
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.theorem_proved = false;
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::GeneratedTheoremNotProved)
+        );
+    }
+
+    #[test]
+    fn compare_refuses_a_wrong_tree_kind() {
+        let (h, g) = matched();
+        let mut bad = h.clone();
+        bad.scope.tree_kind = TreeKind::Generated;
+        assert_eq!(
+            compare(&bad, &g),
+            Err(ComparisonError::WrongTreeKind {
+                expected: TreeKind::Human,
+                found: TreeKind::Generated,
+            })
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.scope.tree_kind = TreeKind::Human;
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::WrongTreeKind {
+                expected: TreeKind::Generated,
+                found: TreeKind::Human,
+            })
+        );
+    }
+
+    #[test]
+    fn compare_refuses_each_scope_difference() {
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.scope.s2n_pin = "deadbeef".to_string();
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::ScopeMismatch {
+                field: "s2n_bignum_pin",
+                human: "5e0fc782".into(),
+                generated: "deadbeef".into(),
+            })
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.scope.jobs = 2;
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::ScopeMismatch {
+                field: "jobs",
+                human: "1".into(),
+                generated: "2".into(),
+            })
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.scope.force = false;
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::ScopeMismatch {
+                field: "force",
+                human: "true".into(),
+                generated: "false".into(),
+            })
+        );
+
+        let (h, g) = matched();
+        let mut bad = g.clone();
+        bad.scope.kernel_build = "hol-light".to_string();
+        assert_eq!(
+            compare(&h, &bad),
+            Err(ComparisonError::ScopeMismatch {
+                field: "kernel_build",
+                human: "hol-light-stamp2".into(),
+                generated: "hol-light".into(),
+            })
+        );
     }
 
     #[test]
@@ -2890,42 +4631,230 @@ mod tests {
     }
 
     #[test]
-    fn checktime_table_pairs_rows_and_flags_the_budget() {
-        let human = vec![
-            timed("arm", "p521", "add", "p521", Some(3.0)),
-            timed("arm", "p521", "neg", "p521", Some(1.0)),
-            timed("arm", "p521", "sub", "p521", None),
+    fn checktime_table_excludes_a_refused_row_from_every_aggregate() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![
+                timed("arm", "p521", "add", "p521", Some(3.0)),
+                timed("arm", "p521", "sub", "p521", Some(1.0)),
+            ],
+        );
+        let mut gt = vec![
+            timed("arm", "p521", "add", "p521", Some(12.0)),
+            timed("arm", "p521", "sub", "p521", Some(5.0)),
         ];
-        let generated = vec![
-            timed("arm", "p521", "add", "p521", Some(122.0)),
-            timed("arm", "p521", "neg", "p521", Some(10.0)),
-            timed("arm", "p521", "sub", "p521", Some(50.0)),
-        ];
-        let text = render_checktime(Some("/h"), &human, &generated);
-        // Paired rows print both numbers and the derived ratio.
-        assert!(text.contains("| arm | p521/add_p521 | 3.000 | 122.000 | 40.67 | 101.7 |"));
-        // The order is add, sub, neg.
-        let add = text.find("p521/add_p521 | 3.000").unwrap();
-        let sub = text.find("p521/sub_p521").unwrap();
-        let neg = text.find("p521/neg_p521").unwrap();
-        assert!(add < sub && sub < neg, "{text}");
-        // An absent human time is reported, not silently dropped.
-        assert!(text.contains("| arm | p521/sub_p521 | n/a | 50.000 | n/a | 41.7 |"));
-        // The overrun is flagged both ways.
-        assert!(text.contains("| arm | p521/add_p521 | 122.000 | 101.7 | True | True |"));
-        assert!(text.contains("INCOMPLETE 1"));
-        // Provenance names the human `.correct` file.
-        assert!(text.contains("`/h/arm/p521/bignum_add_p521.correct`"));
+        gt[1].theorem = Some("BIGNUM_SUB_P521_SUBROUTINE_CORRECT".to_string());
+        let generated = tfile(TreeKind::Generated, gt);
+        let text = render_checktime(&human, &generated);
+        assert!(
+            text.contains(
+                "| arm | p521/add_p521 | BIGNUM_ADD_P521_CORRECT | BIGNUM_ADD_P521_CORRECT | 3.000 | 12.000 | matched |"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "| arm | p521/sub_p521 | BIGNUM_SUB_P521_CORRECT | BIGNUM_SUB_P521_SUBROUTINE_CORRECT | 1.000 | 5.000 | refused: theorem identity |"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("| matched pairs (n) | 1 |"), "{text}");
+        assert!(text.contains("| human total s (n=1) | 3.000 |"), "{text}");
+        assert!(
+            text.contains("| generated total s (n=1) | 12.000 |"),
+            "{text}"
+        );
+        assert!(
+            text.contains("| aggregate seconds ratio (n=1) | 4.00 |"),
+            "{text}"
+        );
+        assert!(text.contains("| unmatched rows | 1 |"), "{text}");
+        assert!(text.contains("theorem identity differs"), "{text}");
+        assert!(
+            text.contains("MATCHED 1/2 PAIRS; UNMATCHED 1; HUMAN ROWS 2; GENERATED ROWS 2"),
+            "{text}"
+        );
+        // The refused row's 1 s / 5 s must not appear in a total.
+        assert!(text.contains("| human total s (n=1) | 3.000 |"), "{text}");
     }
 
     #[test]
-    fn checktime_table_reports_no_overrun_when_all_are_fast() {
-        let human = vec![timed("x86", "sm2", "add", "sm2", Some(2.0))];
-        let generated = vec![timed("x86", "sm2", "add", "sm2", Some(4.0))];
-        let text = render_checktime(None, &human, &generated);
-        assert!(text.contains("No generated task exceeds 84 s"), "{text}");
-        assert!(text.contains("| 2.00 |"), "{text}");
-        assert!(text.contains("PAIRED 1/1 INCOMPLETE 0"));
-        assert!(text.contains("(tree not recorded)"));
+    fn a_missing_row_cannot_yield_a_pair_or_a_ratio() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![
+                timed("x86", "sm2", "add", "sm2", Some(2.0)),
+                timed("x86", "sm2", "neg", "sm2", Some(3.0)),
+            ],
+        );
+        let generated = tfile(
+            TreeKind::Generated,
+            vec![timed("x86", "sm2", "add", "sm2", Some(4.0))],
+        );
+        let text = render_checktime(&human, &generated);
+        assert!(text.contains("| human rows parsed | 2 |"), "{text}");
+        assert!(text.contains("| generated rows parsed | 1 |"), "{text}");
+        assert!(text.contains("| task rows (union of keys) | 2 |"), "{text}");
+        assert!(text.contains("| matched pairs (n) | 1 |"), "{text}");
+        assert!(text.contains("| unmatched rows | 1 |"), "{text}");
+        assert!(text.contains("no generated row"), "{text}");
+        assert!(text.contains("| human total s (n=1) | 2.000 |"), "{text}");
+        assert!(text.contains("MATCHED 1/2 PAIRS"), "{text}");
+        assert!(!text.contains("human total s (n=2)"), "{text}");
+    }
+
+    #[test]
+    fn checktime_budget_only_uses_matched_pairs() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![timed("x86", "sm2", "add", "sm2", Some(2.0))],
+        );
+        let generated = tfile(
+            TreeKind::Generated,
+            vec![timed("x86", "sm2", "add", "sm2", Some(100.0))],
+        );
+        let text = render_checktime(&human, &generated);
+        assert!(
+            text.contains("| x86 | sm2/add_sm2 | 100.000 | 83.3 | True | False |"),
+            "{text}"
+        );
+        assert!(text.contains("MATCHED 1/1 PAIRS"), "{text}");
+        assert!(
+            text.contains("`/h/x86/sm2/bignum_add_sm2.correct`"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn zero_matched_pairs_publishes_no_ratio() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![timed("arm", "p256", "add", "p256", Some(3.0))],
+        );
+        let mut gt = timed("arm", "p256", "add", "p256", Some(9.0));
+        gt.theorem = Some("BIGNUM_ADD_P256_SUBROUTINE_CORRECT".to_string());
+        let generated = tfile(TreeKind::Generated, vec![gt]);
+        let text = render_matched(&human, &generated);
+        assert!(text.contains("| matched pairs (n) | 0 |"), "{text}");
+        assert!(
+            text.contains("aggregate inference ratio | n/a (n=0; not published)"),
+            "{text}"
+        );
+        assert!(text.contains("MATCHED 0/1 PAIRS"), "{text}");
+
+        let j = matched_json(&human, &generated, "h.json", "g.json");
+        let v = json::parse(j.as_bytes()).expect("matched JSON must parse");
+        assert_eq!(
+            v.get("counts").unwrap().get("matched_pairs").unwrap(),
+            &json::Json::Num(0.0)
+        );
+        assert_eq!(
+            v.get("matched_totals").unwrap().get("inference_ratio"),
+            Some(&json::Json::Null)
+        );
+        let task = &v.get("tasks").unwrap().as_array().unwrap()[0];
+        assert_eq!(
+            task.get("human_theorem").unwrap().as_str(),
+            Some("BIGNUM_ADD_P256_CORRECT")
+        );
+        assert_eq!(
+            task.get("generated_theorem").unwrap().as_str(),
+            Some("BIGNUM_ADD_P256_SUBROUTINE_CORRECT")
+        );
+        assert_eq!(task.get("matched").unwrap(), &json::Json::Bool(false));
+    }
+
+    // --- obligation (XIII.E3) --------------------------------------------
+
+    #[test]
+    fn extract_conclusion_normalises_and_stops_at_the_next_marker() {
+        let text = "noise\nval BIGNUM_ADD_P256_CORRECT : thm = |- forall z x.\n\
+                    a /\\ b\n       ==> c\n\
+                    val OTHER : thm = |- T\nRunning time: 1.0 sec\n";
+        let c = extract_conclusion(text, "BIGNUM_ADD_P256_CORRECT").unwrap();
+        assert_eq!(c, "forall z x. a /\\ b ==> c");
+        assert_eq!(extract_conclusion(text, "MISSING"), None);
+        assert_eq!(
+            extract_conclusion(text, "BIGNUM_ADD_P256_SUBROUTINE_CORRECT"),
+            None
+        );
+    }
+
+    #[test]
+    fn first_difference_is_the_first_character_mismatch() {
+        let d = first_difference("abcdef", "abXdef").expect("different");
+        assert_eq!(d.offset, 2);
+        assert_eq!(first_difference("same", "same"), None);
+    }
+
+    #[test]
+    fn obligation_verdict_is_incomparable_when_the_human_adds_a_post_and_a_broader_frame() {
+        let h = "forall z x pc returnaddress. \
+                 read X30 s = returnaddress /\\ ensures arm (read PC s = returnaddress) \
+                 (MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI ,, MAYCHANGE [memory])";
+        let g = "forall z x pc. ensures arm (read PC s = word (pc + 88)) \
+                 (MAYCHANGE [PC; X3] ,, MAYCHANGE [memory])";
+        let m = markers_of(h, g);
+        assert!(m.human_x30_pre);
+        assert!(m.human_pc_returnaddress);
+        assert!(m.generated_pc_offset);
+        assert!(m.human_frame_abi && !m.generated_frame_abi);
+        assert_eq!(
+            obligation_verdict(h, g, &m),
+            ObligationVerdict::Incomparable
+        );
+        assert_eq!(
+            obligation_verdict(h, h, &markers_of(h, h)),
+            ObligationVerdict::SameStatement
+        );
+        let d = describe_obligation(&m);
+        assert!(d.contains("returnaddress"), "{d}");
+        assert!(
+            d.contains("MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI"),
+            "{d}"
+        );
+    }
+
+    #[test]
+    fn obligation_json_records_the_verdict_and_counts() {
+        let different = Obligation {
+            arch: "arm".into(),
+            dir: "p256".into(),
+            op: "add".into(),
+            fam: "p256".into(),
+            human_theorem: "BIGNUM_ADD_P256_SUBROUTINE_CORRECT".into(),
+            generated_theorem: "BIGNUM_ADD_P256_CORRECT".into(),
+            human_conclusion: Some("h".into()),
+            generated_conclusion: Some("g".into()),
+            same: false,
+            first_difference: Some(FirstDifference {
+                offset: 0,
+                human: "h".into(),
+                generated: "g".into(),
+            }),
+            markers: Markers::default(),
+            verdict: ObligationVerdict::Incomparable,
+            description: "different".into(),
+            error: None,
+        };
+        let mut same = different.clone();
+        same.same = true;
+        same.verdict = ObligationVerdict::SameStatement;
+        let body = obligation_json(&[different, same], "/h", "/g");
+        let j = json::parse(body.as_bytes()).unwrap();
+        assert_eq!(
+            j.get("counts").unwrap().get("same").unwrap(),
+            &json::Json::Num(1.0)
+        );
+        assert_eq!(
+            j.get("counts").unwrap().get("different").unwrap(),
+            &json::Json::Num(1.0)
+        );
+        let tasks = j.get("tasks").unwrap().as_array().unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(
+            tasks[0].get("verdict").unwrap().as_str(),
+            Some("different: neither strictly stronger nor strictly weaker (incomparable)")
+        );
     }
 }

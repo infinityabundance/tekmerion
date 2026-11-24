@@ -2314,7 +2314,10 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
   — **25** tasks, not 26 (18 ARM + 7 x86; missing x86 `secp256k1/neg` and `sm2/neg`;
   verified with `grep -c '"dir"'` = 25). It is **not a receipt**; no ratio may be
   published until the statements are compared. See `XIV.B` for the deterministic
-  replacement metric.
+  replacement metric. — **Decided 2026-11-24 (IX.60):** all 27 conclusions differ and
+  are incomparable (extra return-address pre/postconditions and a broader ABI frame on
+  the human side). There is no matched baseline and no ratio; the pair of inference
+  counts is published side by side in `research/receipts/ix60-matched-inference.md`.
 - [ ] **XIII.E4.** Parametric carry lemmas: proved once over width and modulus by
   induction over limbs, instantiated per theorem; replaces per-theorem SAT replay.
 - [ ] **XIII.E5.** Emit proofs that do not search: separate successful derivations from
@@ -2401,43 +2404,58 @@ corrections are owed and are recorded here rather than edited out of history.
 Source-inspection findings on `src/tools/dropin.rs`. The table can currently produce a
 ratio, and exit 0, over populations that are not the same theorem.
 
-- [ ] **XIV.A1. Comparability must be a typed precondition.** Add
+- [x] **XIV.A1. Comparability must be a typed precondition.** Add
   `compare(human: &MeasuredProof, generated: &MeasuredProof) -> Result<MatchedComparison,
   ComparisonError>`. Constructing `MatchedComparison` must require: exact **theorem
   identity** (not architecture + directory + operation + curve), executable identity,
   identical measurement scope, identical checking configuration, and both judgments
   successful. `checktime_table` must not be able to exit 0 without a `MatchedComparison`
-  per row it reports.
-- [ ] **XIV.A2. `read_timed_tasks()` must retain acceptance.** It currently discards the
+  per row it reports. — **Done (IX.60):** `dropin.rs` has `MeasuredProof`,
+  `MeasurementScope`, `MatchedComparison`, `ComparisonError` and `compare`; a unit test
+  refuses each variant. `checktime-table` exits 0 only when every row is matched.
+- [x] **XIV.A2. `read_timed_tasks()` must retain acceptance.** It currently discards the
   exit status and the axiom-check result, so a failed or rejected measurement can still
-  contribute a time. Carry both through and exclude rejected measurements.
-- [ ] **XIV.A3. Aggregates only over matched pairs.** When a generated time exists and
+  contribute a time. Carry both through and exclude rejected measurements. — **Done
+  (IX.60):** `TimedTask` carries `theorem`, `exit`, `check_axioms`, `seconds` and
+  `inferences`; `compare` refuses a row whose judgment failed.
+- [x] **XIV.A3. Aggregates only over matched pairs.** When a generated time exists and
   its human counterpart does not, the generated time must not enter the numerator of any
   aggregate. Report `n` pairs, list unmatched measurements separately, and label every
-  aggregate with its denominator.
-- [ ] **XIV.A4. Counts recomputed from files, with a test.** The printed task count must
+  aggregate with its denominator. — **Done (IX.60):** aggregates take a
+  `MatchedComparison`; the table prints `n`, the per-metric denominators, and every
+  unmatched row with its refusal reason.
+- [x] **XIV.A4. Counts recomputed from files, with a test.** The printed task count must
   equal the number of rows parsed; add a test that a pair file with a missing row cannot
-  yield a ratio for it.
+  yield a ratio for it. — **Done (IX.60):** the counts section prints human rows parsed,
+  generated rows parsed and the union; `a_missing_row_cannot_yield_a_pair_or_a_ratio`
+  covers the missing-row case.
 
 ## XIV.B — Matched inference counts (the deterministic F3 number)
 
 The reviewer's point, and it is right: wall-clock is the wrong metric and the comparison
 already exists in deterministic form.
 
-- [ ] **XIV.B1.** Run the **human** tree under the axiom-stamp kernel and fill
+- [x] **XIV.B1.** Run the **human** tree under the axiom-stamp kernel and fill
   `inference_delta` for the human side. Every human row is `null` today while the
   generated side is counted (3,697,462,655 total; 681,707,202 for `arm/p521/add_p521`).
-- [ ] **XIV.B2.** Publish per-task human vs generated primitive-inference counts and the
+  — **Done (IX.60):** all 27 human tasks measured at `-j1 --force` under
+  `.bench/hol-light-stamp2`; proof-body counts are in
+  `research/receipts/ix60-matched-inference.json`.
+- [x] **XIV.B2.** Publish per-task human vs generated primitive-inference counts and the
   total ratio, as the F3 result. Deterministic, machine-independent, and it needs no
   wall-clock comparison to be publishable. It still requires `XIII.E3`'s goal comparison
-  before it is called a comparison of *the same obligation*.
+  before it is called a comparison of *the same obligation*. — **Done (IX.60):** per-task
+  counts and side totals are published. **No ratio is published**: `XIII.E3` decided the
+  obligations differ (incomparable), so a quotient would not be a proof-cost ratio.
 - [ ] **XIV.B3.** Separate **successful derivation** inferences from **discarded search**
   inferences (two counters, or a phase switch), so "derivation size" and "search cost"
   are distinct numbers. Today one counter mixes them (`XIII.E5`).
-- [ ] **XIV.B4.** Report the five costs separately, never as one number: search time;
+- [x] **XIV.B4.** Report the five costs separately, never as one number: search time;
   successful derivation size; discarded inference work; solver-free replay time; total
   construction + verification cost. Design principle: **expensive discovery is
-  acceptable; paying the discovery cost again at verification is not.**
+  acceptable; paying the discovery cost again at verification is not.** — **Done
+  (IX.60 §3):** the table reports the two measured costs and marks the other three
+  *not measured*; the counter is explicitly labelled work, not proof-tree size.
 
 ## XIV.C — Ordering resolution (supersedes `XIII.I`)
 

@@ -182,3 +182,17 @@ Prerequisites: `.bench/dropin` (upstream s2n-bignum at `5e0fc782`, objects built
 `.bench/dropin-gen/answers{,-arm}/`. To check the plan without invoking `make`, use
 `--dry-run` instead of `--force`; it prints `DRY-RUN 27/27 assembled; make not invoked`.
 A single architecture is `--arch arm` (18 tasks) or `--arch x86` (9 tasks).
+
+---
+
+## Addendum (IX.60, 2026-11-24): these times are not a matched comparison
+
+`research/receipts/ix60-matched-inference.md` measures the human tree under the
+axiom-stamp kernel and compares the two theorem statements mechanically. All 27
+human `BIGNUM_*_SUBROUTINE_CORRECT` conclusions differ from the generated
+`BIGNUM_*_CORRECT` conclusions (incomparable contracts: extra return-address
+pre/postconditions and a broader ABI frame on the human side), so the comparison
+machinery refuses a `MatchedComparison` for every row and no ratio is published.
+The `seconds` above remain the only wall-clock data, but they are not a
+same-obligation ratio. IX.60 publishes the deterministic primitive-inference
+counts side by side instead.
