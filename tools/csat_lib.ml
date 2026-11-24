@@ -18,6 +18,184 @@
 let csat_now () = Unix.gettimeofday ();;
 let csat_debug = ref false;;
 
+(* --- backward-closure LRAT trim (IX.63) ---------------------------------- *)
+(*
+   Between the solver writing its LRAT and the kernel replaying it, keep only
+   the additions the empty clause depends on through positive RUP hints, in
+   the original file order, and drop every deletion line.  A kept clause may
+   still be hinted by a kept clause, so the replay is the same kernel code on
+   a smaller file.
+
+   Conservative by construction.  If any hint in the file is negative (RAT),
+   or the last addition does not assert the empty clause, or the file is not
+   understood (blank/duplicate ids/malformed line/IO error), the file is left
+   untouched and `CSAT_TRIM skipped=<reason>` is printed.  There is no
+   fallback on replay failure: a wrong closure makes LRAT_REFUTE_GEN fail,
+   which is the intended behaviour.
+
+   This block is delimited by BEGIN/END CSAT_TRIM_STANDALONE so that
+   tests/csat_trim_selftest.sh can exercise exactly the shipped text outside
+   HOL Light.  Keep it free of HOL Light names and of structure items other
+   than `let` (the emitted answer inlines each phrase as a nested binding). *)
+(* BEGIN CSAT_TRIM_STANDALONE *)
+let csat_lrat_tokens s =
+  let n = String.length s and out = ref [] and buf = Buffer.create 24 in
+  let flush () =
+    if Buffer.length buf > 0 then
+      (out := Buffer.contents buf :: !out; Buffer.clear buf) in
+  for i = 0 to n - 1 do
+    match s.[i] with
+    | ' ' | '\t' | '\r' -> flush ()
+    | c -> Buffer.add_char buf c
+  done;
+  flush ();
+  List.rev !out;;
+
+let csat_lrat_parse raw toks =
+  let all_nonneg ts =
+    List.for_all
+      (fun t -> try int_of_string t >= 0 with _ -> false) ts in
+  match toks with
+  | id_s :: "d" :: rest ->
+      (try
+         if int_of_string id_s = 0 || not (all_nonneg rest) then None
+         else Some (int_of_string id_s, None, raw)
+       with _ -> None)
+  | id_s :: rest ->
+      (try
+         let id = int_of_string id_s in
+         if id = 0 then None else
+         let rec first_zero acc = function
+           | [] -> None
+           | "0" :: tl -> Some (List.rev acc, tl)
+           | t :: tl -> first_zero (t :: acc) tl in
+         match first_zero [] rest with
+         | None -> None
+         | Some (lits, tail) ->
+             List.iter (fun t -> ignore (int_of_string t)) lits;
+             let hs = List.fold_left
+               (fun acc t ->
+                  let v = int_of_string t in
+                  if v = 0 then acc else v :: acc)
+               [] tail in
+             Some (id, Some (Array.of_list (List.rev hs)), raw)
+       with _ -> None)
+  | [] -> None;;
+
+(* (id, hints option, raw) for every non-blank line, plus the file size. *)
+let csat_lrat_read path =
+  try
+    let ic = open_in_bin path in
+    let n = in_channel_length ic in
+    let text = really_input_string ic n in
+    close_in ic;
+    let parsed = ref [] and start = ref 0 and bad = ref None in
+    let add_line stop =
+      let raw = String.sub text !start (stop - !start) in
+      let toks = csat_lrat_tokens raw in
+      if toks <> [] then
+        (match csat_lrat_parse raw toks with
+         | None -> bad := Some "malformed"
+         | Some p -> parsed := p :: !parsed) in
+    for i = 0 to n - 1 do
+      if text.[i] = '\n' then (add_line i; start := i + 1)
+    done;
+    if !start < n then add_line n;
+    match !bad with
+    | Some r -> Error r
+    | None -> Ok (Array.of_list (List.rev !parsed), n)
+  with _ -> Error "io_error";;
+
+let csat_trim_lrat path =
+  let skipped reason =
+    Printf.printf "CSAT_TRIM skipped=%s\n%!" reason in
+  match csat_lrat_read path with
+  | Error reason -> skipped reason
+  | Ok (parsed, before_bytes) ->
+      let m = Array.length parsed in
+      if m = 0 then skipped "empty_lrat" else
+      let ids = Array.init m (fun i -> let (x,_,_) = parsed.(i) in x)
+      and hints = Array.init m (fun i -> let (_,x,_) = parsed.(i) in x)
+      and raws = Array.init m (fun i -> let (_,_,x) = parsed.(i) in x) in
+      let additions = ref 0 and last = ref (-1) in
+      for i = 0 to m - 1 do
+        if hints.(i) <> None then (incr additions; last := i)
+      done;
+      if !additions = 0 then skipped "no_additions" else
+      let root = !last in
+      let root_lits =
+        match csat_lrat_tokens raws.(root) with
+        | _ :: rest ->
+            let rec count = function
+              | "0" :: _ -> 0
+              | _ :: tl -> 1 + count tl
+              | [] -> 0 in
+            count rest
+        | [] -> 0 in
+      if root_lits <> 0 then skipped "no_empty_clause" else
+      let has_negative =
+        let found = ref false in
+        Array.iter
+          (function
+            | None -> ()
+            | Some hs -> Array.iter (fun v -> if v < 0 then found := true) hs)
+          hints;
+        !found in
+      if has_negative then skipped "negative_hint" else
+      let index = Hashtbl.create (2 * !additions + 1) in
+      let dup = ref false in
+      for i = 0 to m - 1 do
+        if hints.(i) <> None then
+          (if Hashtbl.mem index ids.(i) then dup := true;
+           Hashtbl.replace index ids.(i) i)
+      done;
+      if !dup then skipped "duplicate_id" else
+      let keep = Array.make m false in
+      let steps_after = ref 0 in
+      let stack = ref [root] in
+      while !stack <> [] do
+        match !stack with
+        | [] -> ()
+        | pos :: rest ->
+            stack := rest;
+            if not keep.(pos) then
+              (keep.(pos) <- true;
+               incr steps_after;
+               match hints.(pos) with
+               | None -> ()
+               | Some hs ->
+                   Array.iter
+                     (fun h ->
+                        if h > 0 then
+                          try
+                            let j = Hashtbl.find index h in
+                            if not keep.(j) then stack := j :: !stack
+                          with Not_found -> ())
+                     hs)
+      done;
+      let buf = Buffer.create (before_bytes / 2 + 1) in
+      for i = 0 to m - 1 do
+        if keep.(i) then
+          (Buffer.add_string buf raws.(i); Buffer.add_char buf '\n')
+      done;
+      let out = Buffer.contents buf in
+      (try
+         let tmp = path ^ ".trim" in
+         let oc = open_out_bin tmp in
+         output_string oc out;
+         close_out oc;
+         Sys.rename tmp path;
+         Printf.printf
+           "CSAT_TRIM before=%d after=%d steps_before=%d steps_after=%d\n%!"
+           before_bytes (String.length out) !additions !steps_after
+       with _ ->
+         (try Sys.remove (path ^ ".trim") with _ -> ());
+         skipped "write_error");;
+(* END CSAT_TRIM_STANDALONE *)
+
+(* Disabled only by a controlled comparison run (T4), never by the emitter. *)
+let csat_trim_enabled = ref true;;
+
 (* --- native-LRAT refuter ------------------------------------------------- *)
 
 let CSAT_REFUTE_GEN amap tm =
@@ -31,6 +209,7 @@ let CSAT_REFUTE_GEN amap tm =
   if rc <> 20 then
     (ignore (Sys.command ("rm -f "^cnfname^" "^lratname^" "^logname));
      failwith ("CSAT: cadical did not report UNSAT, exit "^string_of_int rc));
+  let _ = if !csat_trim_enabled then csat_trim_lrat lratname in
   let res = LRAT_REFUTE_GEN amap cnfname lratname in
   let _ = if !csat_debug then ()
           else ignore (Sys.command

@@ -1,9 +1,17 @@
-//! Byte-identity acceptance tests for the Rust emitters.
+//! Byte-identity tests for the Rust emitters.
 //!
 //! The reference answers under `.bench/dropin-gen/answers{,-arm}` were produced
 //! by the Python emitters at the pinned inputs. For every task the Rust emitter
 //! in `--mode answer` must reproduce the file byte for byte, under the same
 //! guard mode and manifest. The tests skip themselves when `.bench` is absent.
+//!
+//! IX.63 boundary: `tools/csat_lib.ml` gained the backward-closure LRAT trim, so
+//! the inlined answer text changed. The `.bench` reference answers were
+//! regenerated with that library text; these tests therefore pin emitter
+//! consistency with the post-IX.63 answers, not byte identity with the Python
+//! originals. That older baseline is retired and recorded in
+//! `research/receipts/slice-b-rust-emitters.md` ("IX.63 retirement"). The
+//! theorems are unchanged (IX.63 T4).
 
 use std::fs;
 use std::path::{Path, PathBuf};

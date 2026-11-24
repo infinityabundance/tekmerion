@@ -100,6 +100,29 @@ wrote .../bignum_add_p256.answer.txt mode=answer task=arm.bignum_add_p256.BIGNUM
 The same 27 files are re-checked in `tests/tools_emit.rs`, which skips when
 `.bench` is absent (CI).
 
+### IX.63 retirement of the byte-identity baseline (2026-11-24)
+
+**The 27/27 byte-identity claim above is retired as of the IX.63 commit.** It was
+true for the state recorded in this receipt, and it is not deleted or disputed:
+it is the boundary marker for the migration property.
+
+Why it stops holding: `tools/csat_lib.ml` is inlined verbatim into every emitted
+answer, and IX.63 added the backward-closure LRAT trim inside `CSAT_REFUTE_GEN`
+(`research/receipts/ix63-trimmed-replay.md`). The answer text therefore changes
+for all 27 tasks even though no tactic and no goal changed. `tests/tools_emit.rs`
+still checks emitter-to-reference-answer byte equality, but the reference answers
+in `.bench/dropin-gen/answers{,-arm}` were regenerated with the new library text;
+the Python-era digests are the retired baseline, not a current assertion.
+
+**New invariant (as of IX.63):** the theorems are unchanged — a sample
+(`arm/curve25519/add_p25519`, `arm/p521/add_p521`, `x86/sm2/neg_sm2`) is
+`equals_thm` to the untrimmed theorem, and all 27 are accepted with
+`check_axioms` passing — and only the library text and the certificate handling
+changed. The four fixed-tactic digests in `tests/tools_receipt.rs` were repinned
+to the post-IX.63 text, with the old values retained in a comment as the boundary.
+
+---
+
 ## `--mode dev`
 
 The ARM dev harness was compared against the Python output and is

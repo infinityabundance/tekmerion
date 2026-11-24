@@ -1,0 +1,1417 @@
+{
+  "generated_at": 1795541543,
+  "kernel": "axiom-stamp v2",
+  "kernel_pin": "d30e823",
+  "s2n_bignum_pin": "5e0fc782",
+  "sources": {
+    "before": "research/receipts/ix57b-axiom-stamp.json (same tools/csat_lib.ml since 558f640)",
+    "after": ".bench/c63/sweep.json",
+    "per_close": ".bench/dropin/*/*/*.correct CSAT_TRIM lines"
+  },
+  "tasks": [
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 170225275,
+      "after_inferences": 119194788,
+      "inference_delta": 51030487,
+      "before_seconds": 46.000000,
+      "after_seconds": 42.000000,
+      "seconds_delta": 4,
+      "closes": 4,
+      "trim_bytes_before": 65657625,
+      "trim_bytes_after": 22765098,
+      "bytes_ratio": 2.884135398846076,
+      "steps_before": 566079,
+      "steps_after": 246832,
+      "steps_ratio": 2.293377681986128,
+      "closes_detail": [
+        {
+          "bytes_before": 14453899,
+          "bytes_after": 5086973,
+          "steps_before": 125801,
+          "steps_after": 55661,
+          "bytes_ratio": 2.8413555566345643,
+          "steps_ratio": 2.2601282765311437
+        },
+        {
+          "bytes_before": 9985779,
+          "bytes_after": 3506588,
+          "steps_before": 117719,
+          "steps_after": 52872,
+          "bytes_ratio": 2.847719492566563,
+          "steps_ratio": 2.2264903918898473
+        },
+        {
+          "bytes_before": 26518204,
+          "bytes_after": 9752767,
+          "steps_before": 209645,
+          "steps_after": 103027,
+          "bytes_ratio": 2.719044144087519,
+          "steps_ratio": 2.0348549409378123
+        },
+        {
+          "bytes_before": 14699743,
+          "bytes_after": 4418770,
+          "steps_before": 112914,
+          "steps_after": 35272,
+          "bytes_ratio": 3.32665945500671,
+          "steps_ratio": 3.201236107960989
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p256",
+      "op": "add",
+      "family": "p256",
+      "theorem": "BIGNUM_ADD_P256_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 170931670,
+      "after_inferences": 119690299,
+      "inference_delta": 51241371,
+      "before_seconds": 47.000000,
+      "after_seconds": 43.000000,
+      "seconds_delta": 4,
+      "closes": 4,
+      "trim_bytes_before": 73093325,
+      "trim_bytes_after": 27453030,
+      "bytes_ratio": 2.662486618052725,
+      "steps_before": 654449,
+      "steps_after": 316037,
+      "steps_ratio": 2.0707986723073564,
+      "closes_detail": [
+        {
+          "bytes_before": 18195072,
+          "bytes_after": 7230309,
+          "steps_before": 150386,
+          "steps_after": 76987,
+          "bytes_ratio": 2.5164999172234546,
+          "steps_ratio": 1.9533947289802174
+        },
+        {
+          "bytes_before": 14450884,
+          "bytes_after": 3665845,
+          "steps_before": 145608,
+          "steps_after": 55500,
+          "bytes_ratio": 3.9420335557013457,
+          "steps_ratio": 2.6235675675675676
+        },
+        {
+          "bytes_before": 27946545,
+          "bytes_after": 12504012,
+          "steps_before": 230385,
+          "steps_after": 130776,
+          "bytes_ratio": 2.235006252393232,
+          "steps_ratio": 1.7616764543953018
+        },
+        {
+          "bytes_before": 12500824,
+          "bytes_after": 4052864,
+          "steps_before": 128070,
+          "steps_after": 52774,
+          "bytes_ratio": 3.0844420143385025,
+          "steps_ratio": 2.426763178838064
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "secp256k1",
+      "op": "add",
+      "family": "p256k1",
+      "theorem": "BIGNUM_ADD_P256K1_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 157240305,
+      "after_inferences": 112805964,
+      "inference_delta": 44434341,
+      "before_seconds": 46.000000,
+      "after_seconds": 42.000000,
+      "seconds_delta": 4,
+      "closes": 4,
+      "trim_bytes_before": 63546337,
+      "trim_bytes_after": 22632916,
+      "bytes_ratio": 2.8076955262856984,
+      "steps_before": 612898,
+      "steps_after": 278638,
+      "steps_ratio": 2.1996210136449443,
+      "closes_detail": [
+        {
+          "bytes_before": 26709984,
+          "bytes_after": 9383526,
+          "steps_before": 217113,
+          "steps_after": 104619,
+          "bytes_ratio": 2.846476260629533,
+          "steps_ratio": 2.075273133943165
+        },
+        {
+          "bytes_before": 12806613,
+          "bytes_after": 4860616,
+          "steps_before": 131229,
+          "steps_after": 57749,
+          "bytes_ratio": 2.6347716009658035,
+          "steps_ratio": 2.272402985333079
+        },
+        {
+          "bytes_before": 11012066,
+          "bytes_after": 4101759,
+          "steps_before": 120780,
+          "steps_after": 50933,
+          "bytes_ratio": 2.6847179466175364,
+          "steps_ratio": 2.3713505978442266
+        },
+        {
+          "bytes_before": 13017674,
+          "bytes_after": 4287015,
+          "steps_before": 143776,
+          "steps_after": 65337,
+          "bytes_ratio": 3.036535678088367,
+          "steps_ratio": 2.200529562116412
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p384",
+      "op": "add",
+      "family": "p384",
+      "theorem": "BIGNUM_ADD_P384_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 349139623,
+      "after_inferences": 241041106,
+      "inference_delta": 108098517,
+      "before_seconds": 74.000000,
+      "after_seconds": 65.000000,
+      "seconds_delta": 9,
+      "closes": 4,
+      "trim_bytes_before": 151123422,
+      "trim_bytes_after": 50839817,
+      "bytes_ratio": 2.9725406368004825,
+      "steps_before": 1276590,
+      "steps_after": 550104,
+      "steps_ratio": 2.32063391649579,
+      "closes_detail": [
+        {
+          "bytes_before": 32185445,
+          "bytes_after": 10068290,
+          "steps_before": 277830,
+          "steps_after": 104661,
+          "bytes_ratio": 3.196714139143787,
+          "steps_ratio": 2.6545704703757846
+        },
+        {
+          "bytes_before": 54880219,
+          "bytes_after": 21968818,
+          "steps_before": 421932,
+          "steps_after": 206742,
+          "bytes_ratio": 2.4980961196911005,
+          "steps_ratio": 2.0408625243056564
+        },
+        {
+          "bytes_before": 30590921,
+          "bytes_after": 10106321,
+          "steps_before": 306959,
+          "steps_after": 134697,
+          "bytes_ratio": 3.0269096934482884,
+          "steps_ratio": 2.2788852016006294
+        },
+        {
+          "bytes_before": 33466837,
+          "bytes_after": 8696388,
+          "steps_before": 269869,
+          "steps_after": 104004,
+          "bytes_ratio": 3.8483606067254588,
+          "steps_ratio": 2.594794430983424
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p521",
+      "op": "add",
+      "family": "p521",
+      "theorem": "BIGNUM_ADD_P521_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 681707202,
+      "after_inferences": 470294392,
+      "inference_delta": 211412810,
+      "before_seconds": 122.000000,
+      "after_seconds": 104.000000,
+      "seconds_delta": 18,
+      "closes": 4,
+      "trim_bytes_before": 268957380,
+      "trim_bytes_after": 87794247,
+      "bytes_ratio": 3.063496632074309,
+      "steps_before": 2258645,
+      "steps_after": 953504,
+      "steps_ratio": 2.3687839799308654,
+      "closes_detail": [
+        {
+          "bytes_before": 37706414,
+          "bytes_after": 13705077,
+          "steps_before": 389283,
+          "steps_after": 153940,
+          "bytes_ratio": 2.7512734149541807,
+          "steps_ratio": 2.528796933870339
+        },
+        {
+          "bytes_before": 91976484,
+          "bytes_after": 32239888,
+          "steps_before": 708282,
+          "steps_after": 310514,
+          "bytes_ratio": 2.8528785211660783,
+          "steps_ratio": 2.2809986023174478
+        },
+        {
+          "bytes_before": 106508743,
+          "bytes_after": 34393236,
+          "steps_before": 779393,
+          "steps_after": 362084,
+          "bytes_ratio": 3.096793305520888,
+          "steps_ratio": 2.1525198572706885
+        },
+        {
+          "bytes_before": 32765739,
+          "bytes_after": 7456046,
+          "steps_before": 381687,
+          "steps_after": 126966,
+          "bytes_ratio": 4.394519427589368,
+          "steps_ratio": 3.006214262085913
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "sm2",
+      "op": "add",
+      "family": "sm2",
+      "theorem": "BIGNUM_ADD_SM2_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 159985379,
+      "after_inferences": 112407207,
+      "inference_delta": 47578172,
+      "before_seconds": 46.000000,
+      "after_seconds": 42.000000,
+      "seconds_delta": 4,
+      "closes": 4,
+      "trim_bytes_before": 66113886,
+      "trim_bytes_after": 22864445,
+      "bytes_ratio": 2.891558749840637,
+      "steps_before": 626838,
+      "steps_after": 289178,
+      "steps_ratio": 2.167654524203086,
+      "closes_detail": [
+        {
+          "bytes_before": 15179302,
+          "bytes_after": 4639634,
+          "steps_before": 143280,
+          "steps_after": 63912,
+          "bytes_ratio": 3.271659359337396,
+          "steps_ratio": 2.2418325197146074
+        },
+        {
+          "bytes_before": 11676155,
+          "bytes_after": 3581501,
+          "steps_before": 132255,
+          "steps_after": 54553,
+          "bytes_ratio": 3.260128923599351,
+          "steps_ratio": 2.4243396330174325
+        },
+        {
+          "bytes_before": 26570909,
+          "bytes_after": 11037207,
+          "steps_before": 216050,
+          "steps_after": 117067,
+          "bytes_ratio": 2.4073942800927806,
+          "steps_ratio": 1.8455243578463616
+        },
+        {
+          "bytes_before": 12687520,
+          "bytes_after": 3606103,
+          "steps_before": 135253,
+          "steps_after": 53646,
+          "bytes_ratio": 3.518346536413408,
+          "steps_ratio": 2.5212131379786005
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "sub",
+      "family": "p25519",
+      "theorem": "BIGNUM_SUB_P25519_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 110957174,
+      "after_inferences": 88587146,
+      "inference_delta": 22370028,
+      "before_seconds": 39.000000,
+      "after_seconds": 39.000000,
+      "seconds_delta": 0,
+      "closes": 4,
+      "trim_bytes_before": 32912322,
+      "trim_bytes_after": 9953730,
+      "bytes_ratio": 3.306531521349283,
+      "steps_before": 394727,
+      "steps_after": 164022,
+      "steps_ratio": 2.4065491214593164,
+      "closes_detail": [
+        {
+          "bytes_before": 15191692,
+          "bytes_after": 4997260,
+          "steps_before": 151918,
+          "steps_after": 75159,
+          "bytes_ratio": 3.040004322368658,
+          "steps_ratio": 2.0212882023443632
+        },
+        {
+          "bytes_before": 3938742,
+          "bytes_after": 672191,
+          "steps_before": 68960,
+          "steps_after": 14953,
+          "bytes_ratio": 5.859557774501592,
+          "steps_ratio": 4.611783588577543
+        },
+        {
+          "bytes_before": 4745798,
+          "bytes_after": 1166966,
+          "steps_before": 64878,
+          "steps_after": 18104,
+          "bytes_ratio": 4.06678343670681,
+          "steps_ratio": 3.5836279275298275
+        },
+        {
+          "bytes_before": 9036090,
+          "bytes_after": 3117313,
+          "steps_before": 108971,
+          "steps_after": 55806,
+          "bytes_ratio": 2.8986790867647874,
+          "steps_ratio": 1.952675339569222
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p256",
+      "op": "sub",
+      "family": "p256",
+      "theorem": "BIGNUM_SUB_P256_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 103417925,
+      "after_inferences": 85125865,
+      "inference_delta": 18292060,
+      "before_seconds": 38.000000,
+      "after_seconds": 37.000000,
+      "seconds_delta": 1,
+      "closes": 4,
+      "trim_bytes_before": 27325976,
+      "trim_bytes_after": 9081869,
+      "bytes_ratio": 3.0088493899218323,
+      "steps_before": 334198,
+      "steps_after": 149449,
+      "steps_ratio": 2.2362009782601424,
+      "closes_detail": [
+        {
+          "bytes_before": 3385850,
+          "bytes_after": 551769,
+          "steps_before": 50256,
+          "steps_after": 12632,
+          "bytes_ratio": 6.136354162702145,
+          "steps_ratio": 3.978467384420519
+        },
+        {
+          "bytes_before": 12591706,
+          "bytes_after": 4707211,
+          "steps_before": 135972,
+          "steps_after": 69333,
+          "bytes_ratio": 2.6749822771913134,
+          "steps_ratio": 1.9611440439617498
+        },
+        {
+          "bytes_before": 7170227,
+          "bytes_after": 2716015,
+          "steps_before": 90879,
+          "steps_after": 49366,
+          "bytes_ratio": 2.6399806333912,
+          "steps_ratio": 1.8409229024024631
+        },
+        {
+          "bytes_before": 4178193,
+          "bytes_after": 1106874,
+          "steps_before": 57091,
+          "steps_after": 18118,
+          "bytes_ratio": 3.774768401823514,
+          "steps_ratio": 3.151065238988851
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "secp256k1",
+      "op": "sub",
+      "family": "p256k1",
+      "theorem": "BIGNUM_SUB_P256K1_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 110121226,
+      "after_inferences": 88185214,
+      "inference_delta": 21936012,
+      "before_seconds": 39.000000,
+      "after_seconds": 37.000000,
+      "seconds_delta": 2,
+      "closes": 4,
+      "trim_bytes_before": 31829913,
+      "trim_bytes_after": 9352020,
+      "bytes_ratio": 3.403533461220143,
+      "steps_before": 390547,
+      "steps_after": 159000,
+      "steps_ratio": 2.4562704402515725,
+      "closes_detail": [
+        {
+          "bytes_before": 11671905,
+          "bytes_after": 4852107,
+          "steps_before": 128251,
+          "steps_after": 71478,
+          "bytes_ratio": 2.405533307488891,
+          "steps_ratio": 1.794272363524441
+        },
+        {
+          "bytes_before": 4210981,
+          "bytes_after": 453846,
+          "steps_before": 70494,
+          "steps_after": 9933,
+          "bytes_ratio": 9.2784358570969,
+          "steps_ratio": 7.096949562065841
+        },
+        {
+          "bytes_before": 4793525,
+          "bytes_after": 972848,
+          "steps_before": 72316,
+          "steps_after": 20466,
+          "bytes_ratio": 4.927311357992204,
+          "steps_ratio": 3.5334701456073487
+        },
+        {
+          "bytes_before": 11153502,
+          "bytes_after": 3073219,
+          "steps_before": 119486,
+          "steps_after": 57123,
+          "bytes_ratio": 3.6292571404771348,
+          "steps_ratio": 2.0917318768271973
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p384",
+      "op": "sub",
+      "family": "p384",
+      "theorem": "BIGNUM_SUB_P384_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 214410496,
+      "after_inferences": 165327853,
+      "inference_delta": 49082643,
+      "before_seconds": 55.000000,
+      "after_seconds": 51.000000,
+      "seconds_delta": 4,
+      "closes": 4,
+      "trim_bytes_before": 67493304,
+      "trim_bytes_after": 17351306,
+      "bytes_ratio": 3.8898111761731364,
+      "steps_before": 769095,
+      "steps_after": 270320,
+      "steps_ratio": 2.8451279964486536,
+      "closes_detail": [
+        {
+          "bytes_before": 9159715,
+          "bytes_after": 1147220,
+          "steps_before": 143844,
+          "steps_after": 25428,
+          "bytes_ratio": 7.984270671710744,
+          "steps_ratio": 5.656913638508731
+        },
+        {
+          "bytes_before": 25953817,
+          "bytes_after": 9688641,
+          "steps_before": 261992,
+          "steps_after": 123976,
+          "bytes_ratio": 2.678788180922381,
+          "steps_ratio": 2.1132477253662
+        },
+        {
+          "bytes_before": 17515324,
+          "bytes_after": 4675271,
+          "steps_before": 189986,
+          "steps_after": 83573,
+          "bytes_ratio": 3.746376199368978,
+          "steps_ratio": 2.2732940064374856
+        },
+        {
+          "bytes_before": 14864448,
+          "bytes_after": 1840174,
+          "steps_before": 173273,
+          "steps_after": 37343,
+          "bytes_ratio": 8.07774047454208,
+          "steps_ratio": 4.640039632595132
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p521",
+      "op": "sub",
+      "family": "p521",
+      "theorem": "BIGNUM_SUB_P521_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 221845891,
+      "after_inferences": 177146926,
+      "inference_delta": 44698965,
+      "before_seconds": 59.000000,
+      "after_seconds": 56.000000,
+      "seconds_delta": 3,
+      "closes": 2,
+      "trim_bytes_before": 73703046,
+      "trim_bytes_after": 25664334,
+      "bytes_ratio": 2.871808245637701,
+      "steps_before": 825966,
+      "steps_after": 393417,
+      "steps_ratio": 2.0994669777869284,
+      "closes_detail": [
+        {
+          "bytes_before": 42858317,
+          "bytes_after": 15235966,
+          "steps_before": 461677,
+          "steps_after": 211938,
+          "bytes_ratio": 2.812970112955096,
+          "steps_ratio": 2.1783587652992855
+        },
+        {
+          "bytes_before": 30844729,
+          "bytes_after": 10428368,
+          "steps_before": 364289,
+          "steps_after": 181479,
+          "bytes_ratio": 2.9577714365277483,
+          "steps_ratio": 2.007334181916365
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "sm2",
+      "op": "sub",
+      "family": "sm2",
+      "theorem": "BIGNUM_SUB_SM2_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 107504057,
+      "after_inferences": 85497537,
+      "inference_delta": 22006520,
+      "before_seconds": 39.000000,
+      "after_seconds": 38.000000,
+      "seconds_delta": 1,
+      "closes": 4,
+      "trim_bytes_before": 30570118,
+      "trim_bytes_after": 8828516,
+      "bytes_ratio": 3.462656464574567,
+      "steps_before": 363595,
+      "steps_after": 146171,
+      "steps_ratio": 2.487463313516361,
+      "closes_detail": [
+        {
+          "bytes_before": 3417692,
+          "bytes_after": 521642,
+          "steps_before": 50652,
+          "steps_after": 10851,
+          "bytes_ratio": 6.551796059366385,
+          "steps_ratio": 4.667956870334532
+        },
+        {
+          "bytes_before": 12175206,
+          "bytes_after": 4400196,
+          "steps_before": 126264,
+          "steps_after": 67209,
+          "bytes_ratio": 2.7669690168347048,
+          "steps_ratio": 1.8786769629067535
+        },
+        {
+          "bytes_before": 8912761,
+          "bytes_after": 2816771,
+          "steps_before": 102351,
+          "steps_after": 46770,
+          "bytes_ratio": 3.1641766405575744,
+          "steps_ratio": 2.188389993585632
+        },
+        {
+          "bytes_before": 6064459,
+          "bytes_after": 1089907,
+          "steps_before": 84328,
+          "steps_after": 21341,
+          "bytes_ratio": 5.564198596761008,
+          "steps_ratio": 3.9514549458788246
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "neg",
+      "family": "p25519",
+      "theorem": "BIGNUM_NEG_P25519_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 35457948,
+      "after_inferences": 33981360,
+      "inference_delta": 1476588,
+      "before_seconds": 29.000000,
+      "after_seconds": 29.000000,
+      "seconds_delta": 0,
+      "closes": 3,
+      "trim_bytes_before": 3190943,
+      "trim_bytes_after": 1486414,
+      "bytes_ratio": 2.1467390646212965,
+      "steps_before": 48369,
+      "steps_after": 21236,
+      "steps_ratio": 2.2776888302881897,
+      "closes_detail": [
+        {
+          "bytes_before": 204726,
+          "bytes_after": 17503,
+          "steps_before": 6717,
+          "steps_after": 573,
+          "bytes_ratio": 11.696623435982403,
+          "steps_ratio": 11.722513089005236
+        },
+        {
+          "bytes_before": 2731979,
+          "bytes_after": 1435932,
+          "steps_before": 33214,
+          "steps_after": 19514,
+          "bytes_ratio": 1.9025824342656894,
+          "steps_ratio": 1.7020600594445014
+        },
+        {
+          "bytes_before": 254238,
+          "bytes_after": 32979,
+          "steps_before": 8438,
+          "steps_after": 1149,
+          "bytes_ratio": 7.709087601200764,
+          "steps_ratio": 7.3437771975630985
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p256",
+      "op": "neg",
+      "family": "p256",
+      "theorem": "BIGNUM_NEG_P256_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 45739252,
+      "after_inferences": 42601162,
+      "inference_delta": 3138090,
+      "before_seconds": 31.000000,
+      "after_seconds": 31.000000,
+      "seconds_delta": 0,
+      "closes": 4,
+      "trim_bytes_before": 4308576,
+      "trim_bytes_after": 1309539,
+      "bytes_ratio": 3.2901471433840457,
+      "steps_before": 64865,
+      "steps_after": 24684,
+      "steps_ratio": 2.6278155890455355,
+      "closes_detail": [
+        {
+          "bytes_before": 295633,
+          "bytes_after": 155729,
+          "steps_before": 9586,
+          "steps_after": 5263,
+          "bytes_ratio": 1.8983811621470632,
+          "steps_ratio": 1.8213946418392553
+        },
+        {
+          "bytes_before": 199193,
+          "bytes_after": 17495,
+          "steps_before": 6458,
+          "steps_after": 573,
+          "bytes_ratio": 11.385710202915119,
+          "steps_ratio": 11.270506108202444
+        },
+        {
+          "bytes_before": 226610,
+          "bytes_after": 32931,
+          "steps_before": 7342,
+          "steps_after": 1149,
+          "bytes_ratio": 6.881357990950776,
+          "steps_ratio": 6.389904264577893
+        },
+        {
+          "bytes_before": 3587140,
+          "bytes_after": 1103384,
+          "steps_before": 41479,
+          "steps_after": 17699,
+          "bytes_ratio": 3.2510349977886213,
+          "steps_ratio": 2.3435787332617664
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "secp256k1",
+      "op": "neg",
+      "family": "p256k1",
+      "theorem": "BIGNUM_NEG_P256K1_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 45424790,
+      "after_inferences": 42764145,
+      "inference_delta": 2660645,
+      "before_seconds": 30.000000,
+      "after_seconds": 30.000000,
+      "seconds_delta": 0,
+      "closes": 4,
+      "trim_bytes_before": 4123798,
+      "trim_bytes_after": 1384647,
+      "bytes_ratio": 2.978230552624604,
+      "steps_before": 61866,
+      "steps_after": 24941,
+      "steps_ratio": 2.480493965759192,
+      "closes_detail": [
+        {
+          "bytes_before": 294679,
+          "bytes_after": 155718,
+          "steps_before": 9586,
+          "steps_after": 5263,
+          "bytes_ratio": 1.8923888054046418,
+          "steps_ratio": 1.8213946418392553
+        },
+        {
+          "bytes_before": 204993,
+          "bytes_after": 17488,
+          "steps_before": 6721,
+          "steps_after": 573,
+          "bytes_ratio": 11.721923604757547,
+          "steps_ratio": 11.729493891797556
+        },
+        {
+          "bytes_before": 224706,
+          "bytes_after": 32982,
+          "steps_before": 7342,
+          "steps_after": 1149,
+          "bytes_ratio": 6.812988903038021,
+          "steps_ratio": 6.389904264577893
+        },
+        {
+          "bytes_before": 3399420,
+          "bytes_after": 1178459,
+          "steps_before": 38217,
+          "steps_after": 17956,
+          "bytes_ratio": 2.8846315400026645,
+          "steps_ratio": 2.128369347293384
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p384",
+      "op": "neg",
+      "family": "p384",
+      "theorem": "BIGNUM_NEG_P384_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 86799846,
+      "after_inferences": 81409148,
+      "inference_delta": 5390698,
+      "before_seconds": 37.000000,
+      "after_seconds": 37.000000,
+      "seconds_delta": 0,
+      "closes": 4,
+      "trim_bytes_before": 8639662,
+      "trim_bytes_after": 2934052,
+      "bytes_ratio": 2.9446178867995525,
+      "steps_before": 129993,
+      "steps_after": 55723,
+      "steps_ratio": 2.3328428117653393,
+      "closes_detail": [
+        {
+          "bytes_before": 557040,
+          "bytes_after": 241168,
+          "steps_before": 17646,
+          "steps_after": 7971,
+          "bytes_ratio": 2.3097591720294566,
+          "steps_ratio": 2.213774934136244
+        },
+        {
+          "bytes_before": 414984,
+          "bytes_after": 22255,
+          "steps_before": 13145,
+          "steps_after": 701,
+          "bytes_ratio": 18.646776005392045,
+          "steps_ratio": 18.75178316690442
+        },
+        {
+          "bytes_before": 447695,
+          "bytes_after": 48697,
+          "steps_before": 14180,
+          "steps_after": 1661,
+          "bytes_ratio": 9.193482144690638,
+          "steps_ratio": 8.537025888019265
+        },
+        {
+          "bytes_before": 7219943,
+          "bytes_after": 2621932,
+          "steps_before": 85022,
+          "steps_after": 45390,
+          "bytes_ratio": 2.7536728641322505,
+          "steps_ratio": 1.873143864287288
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p521",
+      "op": "neg",
+      "family": "p521",
+      "theorem": "BIGNUM_NEG_P521_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 123668935,
+      "after_inferences": 119587114,
+      "inference_delta": 4081821,
+      "before_seconds": 44.000000,
+      "after_seconds": 44.000000,
+      "seconds_delta": 0,
+      "closes": 4,
+      "trim_bytes_before": 5349715,
+      "trim_bytes_after": 749252,
+      "bytes_ratio": 7.140074367502523,
+      "steps_before": 116872,
+      "steps_after": 18999,
+      "steps_ratio": 6.151481656929312,
+      "closes_detail": [
+        {
+          "bytes_before": 737182,
+          "bytes_after": 71363,
+          "steps_before": 23156,
+          "steps_after": 2429,
+          "bytes_ratio": 10.330030968429018,
+          "steps_ratio": 9.53314121037464
+        },
+        {
+          "bytes_before": 710777,
+          "bytes_after": 28996,
+          "steps_before": 22322,
+          "steps_after": 893,
+          "bytes_ratio": 24.51293281831977,
+          "steps_ratio": 24.996640537513997
+        },
+        {
+          "bytes_before": 823645,
+          "bytes_after": 71617,
+          "steps_before": 26033,
+          "steps_after": 2429,
+          "bytes_ratio": 11.500691176675929,
+          "steps_ratio": 10.717579250720462
+        },
+        {
+          "bytes_before": 3078111,
+          "bytes_after": 577276,
+          "steps_before": 45361,
+          "steps_after": 13248,
+          "bytes_ratio": 5.332130557999986,
+          "steps_ratio": 3.4239885265700485
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "sm2",
+      "op": "neg",
+      "family": "sm2",
+      "theorem": "BIGNUM_NEG_SM2_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 46665222,
+      "after_inferences": 42391685,
+      "inference_delta": 4273537,
+      "before_seconds": 31.000000,
+      "after_seconds": 30.000000,
+      "seconds_delta": 1,
+      "closes": 4,
+      "trim_bytes_before": 4941461,
+      "trim_bytes_after": 1098473,
+      "bytes_ratio": 4.498481983626362,
+      "steps_before": 68245,
+      "steps_after": 24253,
+      "steps_ratio": 2.8138786954191235,
+      "closes_detail": [
+        {
+          "bytes_before": 294901,
+          "bytes_after": 155722,
+          "steps_before": 9586,
+          "steps_after": 5263,
+          "bytes_ratio": 1.8937658134367654,
+          "steps_ratio": 1.8213946418392553
+        },
+        {
+          "bytes_before": 203337,
+          "bytes_after": 17494,
+          "steps_before": 6652,
+          "steps_after": 573,
+          "bytes_ratio": 11.623242254487252,
+          "steps_ratio": 11.609075043630018
+        },
+        {
+          "bytes_before": 225114,
+          "bytes_after": 32931,
+          "steps_before": 7342,
+          "steps_after": 1149,
+          "bytes_ratio": 6.835929671130546,
+          "steps_ratio": 6.389904264577893
+        },
+        {
+          "bytes_before": 4218109,
+          "bytes_after": 892326,
+          "steps_before": 44665,
+          "steps_after": 17268,
+          "bytes_ratio": 4.72709413375829,
+          "steps_ratio": 2.5865763261524206
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 160584653,
+      "after_inferences": 112639551,
+      "inference_delta": 47945102,
+      "before_seconds": 70.000000,
+      "after_seconds": 67.000000,
+      "seconds_delta": 3,
+      "closes": 4,
+      "trim_bytes_before": 65613823,
+      "trim_bytes_after": 23026296,
+      "bytes_ratio": 2.8495170478135083,
+      "steps_before": 590539,
+      "steps_after": 264036,
+      "steps_ratio": 2.2365851626293383,
+      "closes_detail": [
+        {
+          "bytes_before": 32101985,
+          "bytes_after": 11031843,
+          "steps_before": 222112,
+          "steps_after": 105328,
+          "bytes_ratio": 2.9099385297633407,
+          "steps_ratio": 2.108765000759532
+        },
+        {
+          "bytes_before": 9404920,
+          "bytes_after": 3036373,
+          "steps_before": 116692,
+          "steps_after": 40744,
+          "bytes_ratio": 3.0974191905935142,
+          "steps_ratio": 2.864029059493422
+        },
+        {
+          "bytes_before": 12554076,
+          "bytes_after": 5436233,
+          "steps_before": 123852,
+          "steps_after": 66823,
+          "bytes_ratio": 2.3093336875001493,
+          "steps_ratio": 1.853433697978241
+        },
+        {
+          "bytes_before": 11552842,
+          "bytes_after": 3521847,
+          "steps_before": 127883,
+          "steps_after": 51141,
+          "bytes_ratio": 3.2803361418028665,
+          "steps_ratio": 2.5005963903717174
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "secp256k1",
+      "op": "add",
+      "family": "p256k1",
+      "theorem": "BIGNUM_ADD_P256K1_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 166694408,
+      "after_inferences": 118172103,
+      "inference_delta": 48522305,
+      "before_seconds": 71.000000,
+      "after_seconds": 68.000000,
+      "seconds_delta": 3,
+      "closes": 4,
+      "trim_bytes_before": 68029744,
+      "trim_bytes_after": 23725740,
+      "bytes_ratio": 2.8673391852056036,
+      "steps_before": 628769,
+      "steps_after": 293161,
+      "steps_ratio": 2.144790746381681,
+      "closes_detail": [
+        {
+          "bytes_before": 14506739,
+          "bytes_after": 5391719,
+          "steps_before": 143362,
+          "steps_after": 69808,
+          "bytes_ratio": 2.69055917046122,
+          "steps_ratio": 2.0536614714645887
+        },
+        {
+          "bytes_before": 29491765,
+          "bytes_after": 10085537,
+          "steps_before": 222661,
+          "steps_after": 105884,
+          "bytes_ratio": 2.924164077728335,
+          "steps_ratio": 2.102876733028597
+        },
+        {
+          "bytes_before": 12847656,
+          "bytes_after": 4051960,
+          "steps_before": 139016,
+          "steps_after": 64453,
+          "bytes_ratio": 3.170726265807165,
+          "steps_ratio": 2.156858486028579
+        },
+        {
+          "bytes_before": 11183584,
+          "bytes_after": 4196524,
+          "steps_before": 123730,
+          "steps_after": 53016,
+          "bytes_ratio": 2.6649636699325443,
+          "steps_ratio": 2.333823751320356
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "sm2",
+      "op": "add",
+      "family": "sm2",
+      "theorem": "BIGNUM_ADD_SM2_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 127361354,
+      "after_inferences": 77037787,
+      "inference_delta": 50323567,
+      "before_seconds": 66.000000,
+      "after_seconds": 63.000000,
+      "seconds_delta": 3,
+      "closes": 2,
+      "trim_bytes_before": 64132008,
+      "trim_bytes_after": 21010085,
+      "bytes_ratio": 3.052439245248175,
+      "steps_before": 542926,
+      "steps_after": 268279,
+      "steps_ratio": 2.0237364832879203,
+      "closes_detail": [
+        {
+          "bytes_before": 34171728,
+          "bytes_after": 10617159,
+          "steps_before": 278618,
+          "steps_after": 134764,
+          "bytes_ratio": 3.218537840490097,
+          "steps_ratio": 2.0674512481078033
+        },
+        {
+          "bytes_before": 29960280,
+          "bytes_after": 10392926,
+          "steps_before": 264308,
+          "steps_after": 133515,
+          "bytes_ratio": 2.8827569829709168,
+          "steps_ratio": 1.979612777590533
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "curve25519",
+      "op": "sub",
+      "family": "p25519",
+      "theorem": "BIGNUM_SUB_P25519_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 61298759,
+      "after_inferences": 49312896,
+      "inference_delta": 11985863,
+      "before_seconds": 57.000000,
+      "after_seconds": 56.000000,
+      "seconds_delta": 1,
+      "closes": 2,
+      "trim_bytes_before": 19982915,
+      "trim_bytes_after": 8075246,
+      "bytes_ratio": 2.4745890094246046,
+      "steps_before": 215248,
+      "steps_after": 116087,
+      "steps_ratio": 1.854195560226382,
+      "closes_detail": [
+        {
+          "bytes_before": 11572899,
+          "bytes_after": 5403812,
+          "steps_before": 110997,
+          "steps_after": 68172,
+          "bytes_ratio": 2.141617621042331,
+          "steps_ratio": 1.6281904594261574
+        },
+        {
+          "bytes_before": 8410016,
+          "bytes_after": 2671434,
+          "steps_before": 104251,
+          "steps_after": 47915,
+          "bytes_ratio": 3.148127934285481,
+          "steps_ratio": 2.1757487216946676
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "secp256k1",
+      "op": "sub",
+      "family": "p256k1",
+      "theorem": "BIGNUM_SUB_P256K1_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 111312547,
+      "after_inferences": 85369650,
+      "inference_delta": 25942897,
+      "before_seconds": 64.000000,
+      "after_seconds": 62.000000,
+      "seconds_delta": 2,
+      "closes": 4,
+      "trim_bytes_before": 33611201,
+      "trim_bytes_after": 8507486,
+      "bytes_ratio": 3.95077946646048,
+      "steps_before": 381428,
+      "steps_after": 145022,
+      "steps_ratio": 2.6301388754809616,
+      "closes_detail": [
+        {
+          "bytes_before": 5183090,
+          "bytes_after": 685892,
+          "steps_before": 73539,
+          "steps_after": 16277,
+          "bytes_ratio": 7.556714468167,
+          "steps_ratio": 4.517970141918044
+        },
+        {
+          "bytes_before": 13738470,
+          "bytes_after": 4016140,
+          "steps_before": 128086,
+          "steps_after": 59212,
+          "bytes_ratio": 3.4208145134382764,
+          "steps_ratio": 2.1631763831655744
+        },
+        {
+          "bytes_before": 8647077,
+          "bytes_after": 2914874,
+          "steps_before": 98770,
+          "steps_after": 50356,
+          "bytes_ratio": 2.966535431720205,
+          "steps_ratio": 1.9614345857494637
+        },
+        {
+          "bytes_before": 6042564,
+          "bytes_after": 890580,
+          "steps_before": 81033,
+          "steps_after": 19177,
+          "bytes_ratio": 6.784976083002088,
+          "steps_ratio": 4.225530583511498
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "sm2",
+      "op": "sub",
+      "family": "sm2",
+      "theorem": "BIGNUM_SUB_SM2_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 67342905,
+      "after_inferences": 49900918,
+      "inference_delta": 17441987,
+      "before_seconds": 57.000000,
+      "after_seconds": 57.000000,
+      "seconds_delta": 0,
+      "closes": 2,
+      "trim_bytes_before": 24466135,
+      "trim_bytes_after": 7991897,
+      "bytes_ratio": 3.06136765776636,
+      "steps_before": 269646,
+      "steps_after": 133253,
+      "steps_ratio": 2.023564197428951,
+      "closes_detail": [
+        {
+          "bytes_before": 15625910,
+          "bytes_after": 4731267,
+          "steps_before": 149253,
+          "steps_after": 74735,
+          "bytes_ratio": 3.3026903787082826,
+          "steps_ratio": 1.997096407305814
+        },
+        {
+          "bytes_before": 8840225,
+          "bytes_after": 3260630,
+          "steps_before": 120393,
+          "steps_after": 58518,
+          "bytes_ratio": 2.7112015162713954,
+          "steps_ratio": 2.0573669640110737
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "curve25519",
+      "op": "neg",
+      "family": "p25519",
+      "theorem": "BIGNUM_NEG_P25519_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 19973249,
+      "after_inferences": 18320080,
+      "inference_delta": 1653169,
+      "before_seconds": 51.000000,
+      "after_seconds": 51.000000,
+      "seconds_delta": 0,
+      "closes": 2,
+      "trim_bytes_before": 3423198,
+      "trim_bytes_after": 1600900,
+      "bytes_ratio": 2.1382959585233308,
+      "steps_before": 43870,
+      "steps_after": 27337,
+      "steps_ratio": 1.604784724000439,
+      "closes_detail": [
+        {
+          "bytes_before": 130326,
+          "bytes_after": 83515,
+          "steps_before": 4001,
+          "steps_after": 2853,
+          "bytes_ratio": 1.5605100880081422,
+          "steps_ratio": 1.4023834560112163
+        },
+        {
+          "bytes_before": 3292872,
+          "bytes_after": 1517385,
+          "steps_before": 39869,
+          "steps_after": 24484,
+          "bytes_ratio": 2.1700965806304926,
+          "steps_ratio": 1.6283695474595654
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "secp256k1",
+      "op": "neg",
+      "family": "p256k1",
+      "theorem": "BIGNUM_NEG_P256K1_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 23422025,
+      "after_inferences": 17649673,
+      "inference_delta": 5772352,
+      "before_seconds": 52.000000,
+      "after_seconds": 50.000000,
+      "seconds_delta": 2,
+      "closes": 2,
+      "trim_bytes_before": 5847705,
+      "trim_bytes_after": 1066020,
+      "bytes_ratio": 5.48554905161254,
+      "steps_before": 55664,
+      "steps_after": 22119,
+      "steps_ratio": 2.5165694651656945,
+      "closes_detail": [
+        {
+          "bytes_before": 130563,
+          "bytes_after": 83858,
+          "steps_before": 4006,
+          "steps_after": 2864,
+          "bytes_ratio": 1.5569534212597487,
+          "steps_ratio": 1.3987430167597765
+        },
+        {
+          "bytes_before": 5717142,
+          "bytes_after": 982162,
+          "steps_before": 51658,
+          "steps_after": 19255,
+          "bytes_ratio": 5.82097658023829,
+          "steps_ratio": 2.6828356271098417
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "sm2",
+      "op": "neg",
+      "family": "sm2",
+      "theorem": "BIGNUM_NEG_SM2_CORRECT",
+      "check_axioms": true,
+      "before_inferences": 18230539,
+      "after_inferences": 16422436,
+      "inference_delta": 1808103,
+      "before_seconds": 51.000000,
+      "after_seconds": 50.000000,
+      "seconds_delta": 1,
+      "closes": 2,
+      "trim_bytes_before": 2882808,
+      "trim_bytes_after": 1115313,
+      "bytes_ratio": 2.5847524416912564,
+      "steps_before": 33997,
+      "steps_after": 19181,
+      "steps_ratio": 1.772431051561441,
+      "closes_detail": [
+        {
+          "bytes_before": 102679,
+          "bytes_after": 62137,
+          "steps_before": 3201,
+          "steps_after": 2143,
+          "bytes_ratio": 1.6524614963709223,
+          "steps_ratio": 1.4937004199720019
+        },
+        {
+          "bytes_before": 2780129,
+          "bytes_after": 1053176,
+          "steps_before": 30796,
+          "steps_after": 17038,
+          "bytes_ratio": 2.6397572675412277,
+          "steps_ratio": 1.8074891419180654
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "tasks": 27,
+    "accepted": 27,
+    "closes": 93,
+    "before_inferences": 3697462655,
+    "after_inferences": 2772864005,
+    "inference_delta": 924598650,
+    "before_seconds": 1391,
+    "after_seconds": 1321,
+    "seconds_delta": 70,
+    "trim_bytes_before": 1270870346,
+    "trim_bytes_after": 419662688,
+    "trim_steps_before": 12325924,
+    "trim_steps_after": 5374983,
+    "closes_trimmed": 93
+  },
+  "equals_thm_samples": [
+    {
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "equals_thm": true
+    },
+    {
+      "theorem": "BIGNUM_ADD_P521_CORRECT",
+      "equals_thm": true
+    },
+    {
+      "theorem": "BIGNUM_NEG_SM2_CORRECT",
+      "equals_thm": true
+    }
+  ],
+  "controls": {
+    "T1_empty_rejected": true,
+    "T2_skipped": "negative_hint",
+    "T2_unchanged": true,
+    "T2_replays": true,
+    "T3_skipped": "no_empty_clause",
+    "T3_unchanged": true,
+    "T3_replay_fails": true
+  }
+}

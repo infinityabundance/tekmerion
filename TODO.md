@@ -2093,6 +2093,9 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
   them.
 - [ ] **XII.F9.2.** Any task above **70% of its timeout is a defect to fix before a sealed
   run**, not a pass (`add_p521` at 96.9/120 s = 0.81 already fails this).
+  — **Updated (IX.63):** `add_p521` is now 104/120 s = **0.867**, still above the
+  0.70 threshold, so this stays open even though `XIII.E2` (under budget) is met.
+  Against the 900 s sweep timeout it is 104/900 = 0.116. Do not conflate the two.
 - [ ] **XII.F9.3.** Persist every judge output; no tmpfs-only verdicts. (IX.55 does this for
   the nine; make it the default.)
 
@@ -2325,9 +2328,14 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
 - [ ] **XIII.E1.** **Metric change:** primitive-inference count is the F3 metric
   (deterministic, machine-independent). Baseline 3,697,462,655 across the 27
   (`ix57-axiom-stamp.json`); 18.2M–681.7M per theorem.
-- [ ] **XIII.E2.** `arm/p521/add_p521`: 681,707,202 inferences, 122 s against a 120 s
+- [x] **XIII.E2.** `arm/p521/add_p521`: 681,707,202 inferences, 122 s against a 120 s
   budget. Bring it under budget with the statement unchanged, and report against the
   900 s sweep timeout too so the two budget notions are never conflated again.
+  — **Done (IX.63):** the backward-closure LRAT trim inside `CSAT_REFUTE_GEN`
+  (`tools/csat_lib.ml`) brings it to **470,294,392 inferences and 104 s** against the
+  120 s budget (86.7%, so still above the 70% F9.2 threshold), and **104 s against
+  the 900 s sweep timeout** (11.6%). `equals_thm` to the untrimmed theorem is true
+  (IX.63 T4); `research/receipts/ix63-trimmed-replay.md`.
 - [~] **XIII.E3.** Matched human baseline, but **compare the goals first**: upstream's
   human files prove `BIGNUM_*_SUBROUTINE_CORRECT`, our drop-in files prove
   `BIGNUM_*_CORRECT`. Partial data in `research/receipts/wip/ix58-checktime.partial.json`
