@@ -1,0 +1,9 @@
+$ /home/one/.elan/toolchains/leanprover--lean4---v4.29.1/bin/lean Tnps.lean
+'hasConflict_sound' depends on axioms: [propext]
+'propagate_no_conflict' depends on axioms: [propext]
+'rup_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Lrat.accepted_models' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Lrat.refutation_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Cert.theorem1' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+exit status: 0

@@ -78,7 +78,9 @@ the checker modules.
 - **A4** Parser faithfulness to the canonical grammar (gap G2).
 - **A5** Bit-blaster equivalence to `⟦·⟧` (gap G1).
 - **A6** Executable refinement of the abstract relations (gap G3).
-- **A7** The paper lemmas (RUP, LRAT, Theorem 1) are not machine-checked (G4).
+- **A7** The paper lemmas (RUP, LRAT, Theorem 1) are now machine-checked for the abstract
+  logic in Lean 4 (`verification/tnps/Tnps.lean`, receipt `ix43-g4-lean.md`). G4 is
+  discharged; G1 (blast) remains a hypothesis of Theorem 1, and G3 (executable) is open.
 
 ## 5. The oracle and its limits
 
@@ -152,7 +154,7 @@ generation plus oracle agreement covers **every width `1..=64`**.
 
 | quantity | value | target |
 | --- | ---: | ---: |
-| gaps discharged | **0 / 4** | 4 / 4 |
+| gaps discharged | **1 / 4** | 4 / 4 |
 | widths with independent generation + agreement | **3 / 64** | 64 / 64 |
 | widths with signed-only fixtures | 2 (`8, 64`) | — |
 | oracle semantic budget | 20 free bits | no decline |
@@ -160,8 +162,11 @@ generation plus oracle agreement covers **every width `1..=64`**.
 | differential mutation cases | 19 | — |
 | surviving divergences in tested families | 0 | 0 |
 
-`0/4` and `3/64` are the metric. Any statement that Milestone B is complete
-must first move both to their targets.
+`1/4` and `3/64` are the metric. Any statement that Milestone B is complete
+must first move both to their targets. G4 moved from open to discharged on
+2026-11-24 for the abstract logic (Lean 4, `verification/tnps/Tnps.lean`;
+receipt `ix43-g4-lean.md`); G1–G3 remain open and the checker must still not be
+called verified.
 
 ## 8. Resource notes
 
@@ -170,3 +175,19 @@ must first move both to their targets.
 - No new processes are spawned by the checker; the no-process scan in
   `tests/native.rs` still passes over all six modules.
 - No network, no new crate, no fixture regeneration.
+
+## 9. The gaps, quantified (added 2026-11-24)
+
+For each gap: the exact proposition, the code it governs, what evidence exists, what does
+not, and what discharging it would require. This is the table `TODO.md` X.27 asks for. It is
+part of the receipt so the metric cannot drift without a diff here.
+
+| gap | exact proposition | code governed | evidence that exists | evidence that does not | discharge route / cost |
+|---|---|---|---|---|---|
+| **G1** | `∀ P, HasType P Bool → (Unsat (blast P) ↔ ¬ Valid P)` | `src/native/bitblast.rs` (401 lines) | exhaustive semantics at widths 1–3; signed+oracle agreement on 10 generated certificates; fixtures at 8 and 64; SAT control (`x+1=x` at width 2 is SAT) | every width 4–64; the ripple-carry/majority gate lemmas; the width-indexed-name caveat; determinism as a theorem | formalise the encoder in Lean (as `blast` was formalised) and prove each gate and the ripple induction; medium–hard, roughly the size of `Tnps.lean` again |
+| **G2** | `∀ s, Term::parse s = Ok a ↔ parse_Term s = Some a` (and the three sibling parsers); plus (P1)–(P4) of §1.7 | parser half of `logic.rs`, `lrat.rs`, `cert.rs` | 500 term round-trips, 6 certificate round-trips, malformed corpus, 3,000 fuzz iterations, no panic | a total parse relation; determinism; injectivity of `render`; every rejection in the §1.7 table enumerated as a lemma | typed-by-construction parser (make the untyped path unrepresentable) + grammar/injectivity proofs in Lean; medium |
+| **G3** | the compiled binary implements `Check` of §9 | all six modules, 2,681 lines, plus `sha2` and the Rust runtime | 79 tests, differential suite, 19 mutations, fuzz, refusal-site mutation 16/16 | compiler semantics; allocator; panic model; `Theorem` privacy as a *logical* rather than module-visibility boundary | executable refinement (translation validation of the checker, or a verified extraction of the decision logic); very hard; the README must keep saying "not verified" until it exists |
+| **G4** | Lemmas 6.2, 6.3, Theorem 1 | the paper argument, not code | **machine-checked 2026-11-24**: `rup_sound`, `Lrat.refutation_sound`, `Cert.theorem1` in Lean 4 core; axioms `propext`, `Classical.choice`, `Quot.sound`; no `sorry` | `blast` is opaque (that is G1); parser and §1.5/§1.6/§8 not modelled; `HasType` omits `1 ≤ n ≤ 64` | **discharged for the abstract logic.** Receipt `ix43-g4-lean.md`. |
+
+Metric after this table: **1 / 4** gaps discharged, **3 / 64** widths with independent
+generation and agreement. The checker is still not verified.

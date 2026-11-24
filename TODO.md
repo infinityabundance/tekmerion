@@ -1109,6 +1109,9 @@ compositional proof checking; online LRAT checking.
   and TCB `research/receipts/ix43-tcb.md`. Still open: **0/4 gaps discharged** (bit-blast, parser
   refinement, executable refinement, paper-only lemmas) and independent agreement at **3/64** widths.
   Do not mark done; the metric is in the TCB.
+  **2026-11-24:** G4 discharged for the abstract logic (Lean 4, `verification/tnps/Tnps.lean`);
+  metric now **1/4 gaps, 3/64 widths**. G1–G3 remain open; the Rust checker is still not
+  verified. Parser spec added as §1.7; quantified gap table added as `ix43-tcb.md` §9.
 - [ ] **IX.44. Milestone C — accelerated fabric.** Blocked multicore first if it pays, then SIMD,
   AVX2, AVX-512, CUDA; equivalence, fault injection, deterministic verdicts at every step; no relaxed
   rule and no new unverified dependency.
@@ -1370,23 +1373,17 @@ already done, the falsifiable experiment, and the cost. Only after that may it b
 
 ## X.G · Milestone B — logical core and critical parser, gaps stated precisely
 
-- [ ] **X.26. [NEW] Formal specification of the parser.** A complete grammar with a total
-  parse relation, explicit rejection of: duplicate fields, non-canonical encodings, integer
-  narrowing, `-0`, trailing bytes, oversized counts, and any construct the checker does not consume.
-  *Acceptance:* the spec is written as a relation `parse : bytes → option certificate` with
-  determinism and injectivity (canonical encoding) stated and argued; a **separate** reference
-  parser (already `src/native/reference.rs`) agrees on a generated corpus, and every disagreement is
-  a defect with a named cause.
-- [ ] **X.27. [NEW] The trusted-base gap table, quantified.** `research/receipts/ix43-tcb.md` (or a
-  Milestone-B successor) must list, for **each** of G1–G4: the exact proposition, the lines of code
-  it covers, the test evidence that exists, the evidence that does not, and what discharging it would
-  require (tool, effort, dependency). 0/4 discharged must remain visible; the checker must never be
-  called "verified".
-- [ ] **X.28. [NEW] Narrow the gap that is cheapest to close first.** Likely candidates: (a) a
-  machine-checked proof of the RUP rule over the LRAT semantics in a small external prover
-  (Coq/Lean/Isabelle), (b) parser refinement by construction (parse into a typed value and make the
-  untyped path unrepresentable), (c) bit-blaster equivalence for the restricted fragment by
-  exhaustive-checkable means. Pick by measured effort, record the decision.
+- [x] **X.26. [NEW] Formal specification of the parser.** Done 2026-11-24 as §1.7 of
+  `research/08-TNPS-SEMANTICS.md`: `parse_A` as a partial function, the four round-trip
+  properties (P1)–(P4), the numeric-narrowing refusal rule, A8 (UTF-8 precondition), and the
+  fail-closed rejection table. The refinement to the executable is G2 and remains open.
+- [x] **X.27. [NEW] The trusted-base gap table, quantified.** Done 2026-11-24: §9 of
+  `research/receipts/ix43-tcb.md` gives, for each of G1–G4, the exact proposition, code
+  governed, evidence present, evidence missing and discharge route. The metric
+  (1/4 gaps, 3/64 widths) stays visible and the checker is still not called verified.
+- [x] **X.28. [NEW] Narrow the gap that is cheapest to close first.** Decision 2026-11-24:
+  **(a) G4**, machine-checked in Lean 4 (`verification/tnps/Tnps.lean`). The G1/G2/G3 routes
+  are costed in `ix43-tcb.md` §9; (b) typed-by-construction parsing is next.
 - [ ] **X.29.** Independent acceptance (IX.17): a substantively independent implementation, not two
   runs of the same library. The differential oracle is a start; it is not independent acceptance for
   sealed results until it is used on the sealed artifact.
@@ -1683,12 +1680,12 @@ carefully justified authority.
 
 ## XI.G — Formal gaps of the native checker (the current science)
 
-- [ ] **XI.G.1. G4 (paper lemmas) — machine-check.** Formalise terms/typing/semantics, CNF, unit
-  propagation, RUP soundness, LRAT model-preservation, and DAG acceptance soundness (Theorem 1)
-  with the blast lemma as a **hypothesis**, not an axiom. Lean 4 core is available offline; a
-  621-line draft exists at `.bench/wip-tnps-lean/Tnps.lean.draft` (does **not** compile; not
-  evidence). Acceptance: compiles, no `sorry`/`admit`/`axiom`, `#print axioms` shows only standard
-  axioms, README states the G1/G2/G3 boundary.
+- [x] **XI.G.1. G4 (paper lemmas) — machine-check.** **Done 2026-11-24.**
+  `verification/tnps/Tnps.lean` (949 lines) compiles with Lean 4 core; `rup_sound`,
+  `Lrat.refutation_sound` and `Cert.theorem1` are proved; `blast_sound` is a theorem
+  **parameter**, not an axiom; `#print axioms` reports only `propext`, `Classical.choice`,
+  `Quot.sound`; no `sorry`. Receipt `research/receipts/ix43-g4-lean.md`. G1–G3 remain open
+  and the Rust checker is still **not** verified.
 - [ ] **XI.G.2. G1 (bit-blaster equivalence).** Prove `blast` correct for the restricted fragment
   or replace it with a verified generator; state the width-indexed-name caveat. Acceptance:
   machine-checked or an independently generated encoding with a checked certificate.
@@ -1826,7 +1823,7 @@ only; every "nobody has combined X and Y" names the search terms and the closest
 
 1. XI.0 — blockers — **done** (`af539ed`).
 2. XI.L.7 (`cake_lpr` on LRAT) + XI.L.10 (challenge files/comparator) — cheapest assurance.
-3. XI.G.1 (G4 machine-checked) — in flight; draft parked, does not compile.
+3. XI.G.1 (G4 machine-checked) — **done** (`verification/tnps/Tnps.lean`, receipt `ix43-g4-lean.md`).
 4. XI.L.2 (`XZR`), then XI.L.3 (upstream drop-in) — removes the two named caveats.
 5. XI.L.4 (container), XI.L.9 (signed tags), XI.L.8 (AArch64).
 6. XI.L.5 (full-898 + leaderboard).

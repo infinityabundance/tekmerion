@@ -643,8 +643,10 @@ The following are assumed, not proved here.
 - **A5 — Blast correctness (G1).** The blast lemma of §7.
 - **A6 — Executable refinement (G3).** The compiled checker implements the
   abstract relations of §3–§9.
-- **A7 — Paper proofs.** Lemmas 6.2–6.3 and Theorem 1 are proved on paper only;
-  there is no machine-checked development.
+- **A7 — Paper proofs (now machine-checked for the abstract logic).** Lemmas 6.2–6.3 and
+  Theorem 1 are formalised and checked in Lean 4 in `verification/tnps/Tnps.lean`. The
+  remaining assumption is the blast lemma (A5/G1), which is a hypothesis of Theorem 1, and
+  the connection to the executable (A6/G3).
 
 ---
 
@@ -668,9 +670,14 @@ The checker must not be described as "verified". The following gaps are open.
   `sha2` implementation, and the `Theorem` privacy boundary (enforced by Rust
   module visibility, not by logic) are all outside the kernel. Panics are
   fail-closed but are not modelled.
-- **G4 — Machine-checked proof of the paper lemmas.** Lemmas 6.2, 6.3, and
-  Theorem 1 are not formalised in any proof assistant. They are the argument,
-  not a checked artefact.
+- **G4 — Machine-checked proof of the paper lemmas. DISCHARGED for the abstract logic
+  (2026-11-24).** Lemmas 6.2, 6.3 and Theorem 1 are formalised and checked in Lean 4 core in
+  `verification/tnps/Tnps.lean` (`rup_sound`, `Lrat.refutation_sound`, `Cert.theorem1`), with
+  the blast lemma as a *hypothesis parameter*, not an axiom. Axioms reported: `propext`,
+  `Classical.choice`, `Quot.sound`; no `sorry`. Limits of this discharge: `blast` is opaque
+  (G1), the parser is not modelled (G2), the executable is not connected (G3), §1.5/§1.6/§8 are
+  not modelled, and the Lean `HasType` omits the `1 ≤ n ≤ 64` side conditions. Receipt:
+  `research/receipts/ix43-g4-lean.md`, narrative: `verification/tnps/README.md`.
 
 There is no claim of:
 
@@ -690,7 +697,7 @@ Current measurement (see `research/receipts/ix43-tcb.md`):
 
 | quantity | value |
 | --- | --- |
-| gaps discharged | **0 / 4** (G1, G2, G3, G4 open) |
+| gaps discharged | **1 / 4** (G4 discharged for the abstract logic; G1, G2, G3 open) |
 | widths with independent generation + acceptance agreement | **3 / 64** (`1,2,3`) |
 | widths with signed-checker fixtures only | `8, 64` |
 | oracle semantic budget | **20 free bits** (exhaustive evaluation above budget: declined) |
