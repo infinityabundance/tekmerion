@@ -76,18 +76,31 @@ class Step:
     mnemonic: str
     operands: Tuple[str, ...] = ()
     raw: str = ""
+    address: int = 0
 
 
 @dataclass(frozen=True)
 class InstructionSemantics:
-    """What one mnemonic does to registers and the NZCV carry bit.
+    """What one mnemonic does to registers and the carry flag.
 
     ``form``          ``"ADD"``, ``"SUB"`` or ``None`` (not an add/sub form).
     ``dest``          operand index written, or ``None`` (flag-only compare).
     ``sources``       operand indices that are read as values.
-    ``reads_carry``   consumes the incoming C flag (ADC/SBC/NGC family).
-    ``writes_carry``  produces a C flag (the ``S`` forms, CMP, CMN, ...).
-    ``reads_flags``   consumes NZCV for a conditional operation or branch.
+    ``reads_carry``   consumes the incoming carry flag.
+    ``writes_carry``  produces a carry flag.
+    ``reads_flags``   consumes flags for a conditional operation or branch.
+    ``self_carry_materialisation``
+                      the two-operand form ``d = d +/- d +/- carry`` copies the
+                      carry into ``d`` instead of summing two digits (x86
+                      ``ADC r,r`` / ``SBB r,r``).  It is excluded only when
+                      every source operand is the destination operand; a
+                      genuine ``ADC d, s`` with distinct operands accumulates.
+    ``always_link``   a value-writing add/sub is a digit sum whether or not its
+                      carry-out is later read.  The dead-carry case is the top
+                      limb of a multi-limb add/sub: the relation is taken to
+                      expose the digit, not to connect a flag.  AArch64 leaves
+                      this false (the reference proofs always consume the top
+                      carry), x86 sets it for the value forms.
     """
 
     form: Optional[str]
@@ -96,13 +109,19 @@ class InstructionSemantics:
     reads_carry: bool = False
     writes_carry: bool = False
     reads_flags: bool = False
+    self_carry_materialisation: bool = False
+    always_link: bool = False
 
 
 _NOACC = InstructionSemantics(form=None)
 
-# Only the ARM64 add/sub-with-carry family is modelled; every other mnemonic
-# is a non-candidate for accumulation.  The table is data, not policy: the
-# policy (liveness, zero-register exclusions) lives in derive_accumulate.
+# --------------------------------------------------------------------------
+# AArch64 table
+#
+# Only the ARM64 add/sub-with-carry family is modelled here; every other
+# mnemonic is a non-candidate for accumulation.  The table is data, not policy:
+# the policy (liveness, zero-register exclusions) lives in derive_accumulate.
+# --------------------------------------------------------------------------
 DEFAULT_SEMANTICS: Mapping[str, InstructionSemantics] = {
     # d = a + b            (no carry in, writes C)
     "adds": InstructionSemantics("ADD", dest=0, sources=(1, 2), writes_carry=True),
@@ -143,6 +162,73 @@ DEFAULT_SEMANTICS: Mapping[str, InstructionSemantics] = {
     "tst": InstructionSemantics(form=None, writes_carry=True),
 }
 
+# --------------------------------------------------------------------------
+# x86-64 table
+#
+# Two differences from AArch64 are load-bearing:
+#
+#  1. The flag semantics are inverted for subtraction.  On AArch64 the C flag
+#     after SUBS/SBCS is "no borrow" (set iff minuend >= subtrahend + carry).
+#     On x86 the CF flag after SUB/SBB/NEG/CMP is "borrow" (set iff
+#     minuend < subtrahend + carry).  The accumulator relation built by
+#     ACCUMULATE_ARITH_TAC still has the same real shape on both, but the
+#     *meaning* of its ``carry_sN`` bit is the opposite on each side.  A proof
+#     that reads the flag as on AArch64 would be wrong on x86; the reference
+#     route used here never interprets the flag, and this comment is what a
+#     route that does interpret it must start from.  See X86_CF_MEANING.
+#
+#  2. Every x86 ADD/SUB/ADC/SBB writes the flags unconditionally (there is no
+#     ``S`` suffix).  The two-operand form is ``d = d +/- src``, so operand 0
+#     is both the destination and a source for the value forms.
+
+X86_CF_MEANING: Mapping[str, str] = {
+    "add": "carry (unsigned overflow): set iff val d + val s + c >= 2^64",
+    "adc": "carry (unsigned overflow): set iff val d + val s + c >= 2^64",
+    "sub": "borrow: set iff val d < val s",
+    "sbb": "borrow: set iff val d < val s + c",
+    "neg": "borrow: set iff val d != 0",
+    "cmp": "borrow: set iff val d < val s",
+}
+
+X86_SEMANTICS: Mapping[str, InstructionSemantics] = {
+    # d = d + s
+    "add": InstructionSemantics("ADD", dest=0, sources=(0, 1),
+                                writes_carry=True, always_link=True),
+    # d = d + s + CF; ADC r,r copies CF into r
+    "adc": InstructionSemantics("ADD", dest=0, sources=(0, 1),
+                                reads_carry=True, writes_carry=True,
+                                self_carry_materialisation=True,
+                                always_link=True),
+    # d = d - s
+    "sub": InstructionSemantics("SUB", dest=0, sources=(0, 1),
+                                writes_carry=True, always_link=True),
+    # d = d - s - CF; SBB r,r copies -CF into r
+    "sbb": InstructionSemantics("SUB", dest=0, sources=(0, 1),
+                                reads_carry=True, writes_carry=True,
+                                self_carry_materialisation=True,
+                                always_link=True),
+    # d = 0 - d  (CF is the borrow, i.e. d != 0)
+    "neg": InstructionSemantics("SUB", dest=0, sources=(0,),
+                                writes_carry=True, always_link=True),
+    # flag-only forms: no value destination
+    "cmp": InstructionSemantics("SUB", dest=None, sources=(0, 1),
+                                writes_carry=True),
+    # CF-only writers that are not value adds/subs
+    "stc": InstructionSemantics(form=None, writes_carry=True),
+    "clc": InstructionSemantics(form=None, writes_carry=True),
+    "cmc": InstructionSemantics(form=None, writes_carry=True),
+    # Logical forms clear CF (and OF), so they kill an earlier carry-out.
+    "and": InstructionSemantics(form=None, writes_carry=True),
+    "or": InstructionSemantics(form=None, writes_carry=True),
+    "xor": InstructionSemantics(form=None, writes_carry=True),
+    "test": InstructionSemantics(form=None, writes_carry=True),
+    # ADCX reads and writes CF only; ADOX drives OF, not CF, and is absent.
+    "adcx": InstructionSemantics("ADD", dest=0, sources=(0, 1),
+                                 reads_carry=True, writes_carry=True,
+                                 self_carry_materialisation=True,
+                                 always_link=True),
+}
+
 
 # Mnemonics that consume flags without being add/sub forms.  Kept separate so
 # that the semantics table above stays a faithful description of the arithmetic
@@ -173,17 +259,41 @@ def _is_flag_reader(mnemonic: str, sem: InstructionSemantics) -> bool:
 
 
 def _is_general_register(operand: str) -> bool:
-    """True for x0..x30 / w0..w30; false for xzr, wzr, sp, immediates, memory."""
+    """True for a general-purpose register of either architecture.
+
+    AArch64: ``x0..x30`` / ``w0..w30``; ``xzr``/``wzr``/``sp``/``wsp`` are not
+    value registers.  x86-64: the 64/32/16/8-bit names of RAX..R15, with RSP
+    excluded for the same reason as SP (the stack pointer is not a digit).
+    Memory operands (they contain ``[``) and immediates are excluded.
+    """
     if not operand:
         return False
-    if operand.startswith("["):
+    if "[" in operand:
         return False
     if operand in ("xzr", "wzr", "sp", "wsp"):
         return False
-    if not (operand[0] in ("x", "w")):
-        return False
-    digits = operand[1:]
-    return digits.isdigit() and 0 <= int(digits) <= 30
+    # AArch64
+    if operand[0] in ("x", "w"):
+        digits = operand[1:]
+        if digits.isdigit() and 0 <= int(digits) <= 30:
+            return True
+    # x86-64
+    if operand not in {"rsp", "esp", "sp", "spl"} and operand in _X86_GPRS:
+        return True
+    return False
+
+
+_X86_GPRS = frozenset({
+    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
+    "eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp",
+    "ax", "bx", "cx", "dx", "si", "di", "bp", "sp",
+    "al", "ah", "bl", "bh", "cl", "ch", "dl", "dh",
+    "sil", "dil", "bpl", "spl",
+    "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+    "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d",
+    "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w",
+    "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b",
+})
 
 
 _ZERO_REGISTERS = frozenset({"xzr", "wzr"})
@@ -220,6 +330,18 @@ def _source_operands(step: Step, sem: InstructionSemantics) -> Tuple[str, ...]:
         if k < len(step.operands):
             out.append(step.operands[k])
     return tuple(out)
+
+
+def _is_self_carry_materialisation(step: Step,
+                                  sem: InstructionSemantics) -> bool:
+    """``ADC r,r`` / ``SBB r,r``: copy the carry into r, sum no two digits."""
+    if not sem.self_carry_materialisation:
+        return False
+    dest = _dest_operand(step, sem)
+    if dest is None:
+        return False
+    sources = _source_operands(step, sem)
+    return bool(sources) and all(o == dest for o in sources)
 
 
 # --------------------------------------------------------------------------
@@ -314,7 +436,11 @@ def derive_accumulate(
 
         # 2. It must have at least one real register source: `ADC Xd, XZR, XZR`
         #    only materialises the incoming flag and is not a digit sum, and a
-        #    flag-only form with zero sources constrains no word at all.
+        #    flag-only form with zero sources constrains no word at all.  The
+        #    x86 `ADC r,r` / `SBB r,r` forms are the same idea with d as its own
+        #    source, so they are excluded by their semantics flag.
+        if _is_self_carry_materialisation(step, s):
+            continue
         if not any(_is_general_register(o)
                    for o in _source_operands(step, s)):
             continue
@@ -325,7 +451,8 @@ def derive_accumulate(
         if flag_only:
             if not _carry_out_feeds_chain(steps, sem, i):
                 continue
-        elif s.writes_carry and not _carry_out_is_live(steps, sem, i):
+        elif s.writes_carry and not s.always_link \
+                and not _carry_out_is_live(steps, sem, i):
             continue
 
         derived.append(step.index)
@@ -337,5 +464,7 @@ __all__ = [
     "Step",
     "InstructionSemantics",
     "DEFAULT_SEMANTICS",
+    "X86_SEMANTICS",
+    "X86_CF_MEANING",
     "derive_accumulate",
 ]

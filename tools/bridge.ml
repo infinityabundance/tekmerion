@@ -1508,3 +1508,102 @@ let BRIDGE_MASK_SELECT_TAC : tactic = fun (asl,w) ->
                   (ISPEC (mk_neg(mk_disj(a,b))) CSETM_EQ) in
       let th = REWRITE_RULE[cond_eq] th0 in
       ASSUME_TAC (TRANS th cth) (asl,w);;
+
+(* ========================================================================= *)
+(* 10. The zero test: `word_join' and `word_or' agree on being zero.          *)
+(*                                                                           *)
+(* A complement routine tests its input for zero with an OR of its limbs,    *)
+(* while the reference function's guard is an equality on the whole word     *)
+(* built by `word_join'.  BITBLAST does not connect those two encodings       *)
+(* (measured: `word_join a b = word 0 ==> word_or a b = word 0' comes back    *)
+(* SATISFIABLE), so the link is made here, as a word identity valid for every *)
+(* width and every pair of limbs, and both folded zero tests are left in the *)
+(* limb-wise form BITBLAST does decide.  No curve constant occurs below.     *)
+(* ========================================================================= *)
+
+let WORD_JOIN_EQ_0 = prove
+ (`!x:M word y:N word.
+     dimindex(:M) + dimindex(:N) = dimindex(:P)
+     ==> (((word_join:M word->N word->P word) x y = word 0) <=>
+          (x = word 0 /\ y = word 0))`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  SUBGOAL_THEN
+   `val((word_join:M word->N word->P word) x y) =
+    2 EXP dimindex(:N) * val(x:M word) + val(y:N word)`
+  ASSUME_TAC THENL
+   [MATCH_MP_TAC VAL_WORD_JOIN_SIMPLE THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
+  REWRITE_TAC[GSYM VAL_EQ_0] THEN
+  ASM_REWRITE_TAC[] THEN
+  REWRITE_TAC[ADD_EQ_0; MULT_EQ_0; EXP_EQ_0; ARITH_EQ] THEN
+  SUBGOAL_THEN `~(2 EXP dimindex(:N) = 0)` (fun th -> REWRITE_TAC[th]) THENL
+   [REWRITE_TAC[EXP_EQ_0; ARITH_EQ]; ALL_TAC] THEN
+  CONV_TAC TAUT);;
+
+(* the same statement instantiated at the actual limb/result widths, so the
+   width side condition is discharged here and the rewrite needs no subgoal *)
+let BRIDGE_JOIN_ZERO_CONV : conv =
+  let conv tm =
+    let (l,r) = dest_eq tm in
+    let (j,args) = strip_comb l in
+    if name_of j <> "word_join" || List.length args <> 2 then
+      failwith "BRIDGE_JOIN_ZERO_CONV: not a join equation" else
+    let x = List.nth args 0 and y = List.nth args 1 in
+    (match r with
+       Comb(Const("word",_),n) when n = `0` -> ()
+     | _ -> failwith "BRIDGE_JOIN_ZERO_CONV: right side is not `word 0'");
+    let mx = bridge_word_width (type_of x)
+    and my = bridge_word_width (type_of y)
+    and mp = bridge_word_width (type_of l) in
+    let inst = INST_TYPE
+      [bridge_finty mx, `:M`; bridge_finty my, `:N`; bridge_finty mp, `:P`]
+      WORD_JOIN_EQ_0 in
+    let th = SPECL [x;y] inst in
+    let side = lhand(concl th) in
+    let side_th = prove(side,
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+    MP th side_th in
+  conv;;
+
+(* fold both the OR zero test and the joined-word zero test to a conjunction
+   of limb-wise `= word 0', in the goal and in the hypotheses *)
+let BRIDGE_ZERO_TEST_TAC : tactic = fun (asl,w) ->
+  (RULE_ASSUM_TAC(REWRITE_RULE[WORD_OR_EQ_0]) THEN
+   REWRITE_TAC[WORD_OR_EQ_0] THEN
+   RULE_ASSUM_TAC(CONV_RULE (TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV)) THEN
+   CONV_TAC(TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV) THEN
+   RULE_ASSUM_TAC(REWRITE_RULE[CONJ_ACI]) THEN
+   REWRITE_TAC[CONJ_ACI]) (asl,w);;
+
+(* `BRIDGE_FINISH_KEEP_TAC` with the zero-test fold applied first, so that the
+   branch condition the reference's `if x = word 0` leaves behind is the same
+   limb-wise conjunction the machine's OR zero test has been folded to. *)
+let BRIDGE_FINISH_KEEP_ZERO_TAC expand : tactic =
+  fun g ->
+    (BRIDGE_ZERO_TEST_TAC THEN
+     BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV THEN
+     BRIDGE_CSAT_TAC) g;;
+
+(* neg through the reference function, with the zero test folded.  Same body as
+   BRIDGE_NEG_REF_TAC; only the finish differs. *)
+let BRIDGE_NEG_REF_ZERO_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,rhs) = dest_eq w in
+    let (dif,pt) = dest_binop `(MOD):num->num->num` rhs in
+    let n = rand dif and p0 = rand pt in
+    let (hn,p,eqn) = BRIDGE_LE_HYP "BRIDGE_NEG_REF_ZERO_TAC" p0 n asl in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS n in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS lhs in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw] (INST_TYPE [wt,`:W`] NEG_REF_VAL_WORD) in
+    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_NEG_REF_ZERO_TAC" p lem in
+    let hx = REWRITE_RULE[GSYM thx] hn in
+    let rth = MP lem (end_itlist CONJ [a0; a1; hx]) in
+    let rth = SYM (REWRITE_RULE[thx] rth) in
+    (REWRITE_TAC eqn THEN
+     REWRITE_TAC[rth; SYM thw; ref_neg; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_ZERO_TAC expand) (asl,w));;

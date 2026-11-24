@@ -1,0 +1,5 @@
+# targeted curve-constant scan of the new generic lemma
+lemma: !x:M word y:N word. dimindex(:M) + dimindex(:N) = dimindex(:P) ==> (((word_join:M word->N word->P word) x y = word 0) <=> (x = word 0 /\ y = word 0))
+scan: CLEAN
+# whole-file scan (artefact at (MOD):num->num->num is pre-existing: HEAD reports statements=68 hits=1)
+statements=71 hits=1

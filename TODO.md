@@ -1163,9 +1163,39 @@ standalone lemma. `BRIDGE_CMP_FLAG_TAC` fails closed on other compare shapes.
 
 ## R6 · x86 development before the sealed run
 
-- [ ] **IX.50. x86 simulation + flag mapping.** Re-run the step derivation on x86 objects and map
-  flags (x86 `sbb` carry vs ARM's inverted no-borrow). Develop only on x86 tasks that are **not** the
-  nine held-out counterparts (e.g. x86 P-384/P-521 and other families).
+- [x] **IX.50. x86 simulation + flag mapping.** Implemented: ELF arch detection and an Intel-syntax
+  x86 disassembly path (`ENDBR64` handling, entry renumbering from RIP), `X86_SEMANTICS` with an
+  explicit borrow-vs-carry mapping (x86 `SUB/SBB/CMP` CF is a borrow; AArch64 `SUBS` C is the
+  no-borrow inverse), `X86_ACCSTEPS_TAC`/`X86_STEPS_TAC` generation, and four generic join/zero-test
+  lemmas. **Declared development set: x86 `add`/`sub`/`neg` on P-384 and P-521 — 6/6 judge `OK`**
+  (36.0 / 62.8 / 19.6 / 36.2 / 6.0 / 7.0 s), replay `hyps=0`, axioms unchanged (2462→2462).
+  Two measured blockers found and fixed: a free `NEG` carry, and a zero-test encoding BITBLAST could
+  not see (`word_join a b = 0 ==> word_or a b = 0`), now a generic lemma. Sealed nine untouched
+  (19 guard refusals, no answer generated). Recorded model: x86 total-memory `x86state`, no MMU, no
+  alignment requirement; loaded-entry RIP offset; epilogue not simulated. **Not verified — recorded.**
+  **Done 2026-11-24, `staging`, uncommitted.** Declared development set: `add`/`sub`/`neg` on x86
+  P-384 and P-521 (six tasks). Judge `eval-20261124_000503`: **OK, 6/6**, 5.997–62.790 s; replay
+  `closed=1 hyps=0 axioms 2462→2462`. Two measured encoding defects fixed: the `NEG` carry
+  (`WORD_NEG_EQ_0`/`WORD_BITVAL_EQ_0`) and the OR-vs-joined-word zero test (new generic
+  `WORD_JOIN_EQ_0` + `BRIDGE_NEG_REF_ZERO_TAC`). Receipt `research/receipts/r6-x86.md`; the nine
+  held-out tasks were not answered, opened or disassembled (`r6-x86-sealed-guard.log`).
 - [ ] **IX.51. Freeze, tag, then run.** After IX.50: write the freeze manifest, commit, **tag and push**
   the tag, then evaluate the nine untouched x86 counterparts **once** in an isolated filesystem.
   Tag-after-run does not count as a freeze.
+
+### R6 · x86 capability (2026-11-23)
+
+| task | verdict | s |
+|---|---|---:|
+| `x86.bignum_add_p384` | **OK** | 36.019 |
+| `x86.bignum_add_p521` | **OK** | 62.790 |
+| `x86.bignum_sub_p384` | **OK** | 19.599 |
+| `x86.bignum_sub_p521` | **OK** | 36.223 |
+| `x86.bignum_neg_p384` | **OK** | 5.997 |
+| `x86.bignum_neg_p521` | **OK** | 6.998 |
+
+Fresh replay: `closed=1 hyps=0 axioms 2462→2462` for all six. This is capability, not coverage: the
+six are a declared development set.
+
+**Sealed set (must remain untouched until the tagged freeze):**
+`x86.bignum_{add,sub,neg}_{p25519,p256k1,sm2}.*_CORRECT` — nine tasks.
