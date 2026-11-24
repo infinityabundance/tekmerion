@@ -1211,3 +1211,200 @@ six are a declared development set.
 
 **Sealed set (must remain untouched until the tagged freeze):**
 `x86.bignum_{add,sub,neg}_{p25519,p256k1,sm2}.*_CORRECT` — nine tasks.
+
+---
+
+# PART X — Priority intake, 2026-11-24
+
+Source: the current external review and the programme directive reproduced below. Nothing in it is
+dropped; where an existing item already covers a requirement, the mapping is named instead of
+duplicated. Items marked **[NEW]** have no earlier counterpart.
+
+Directive, verbatim in substance: *Tekmerion must be an independent, Rust-native verification system
+that interoperates with HOL Light; it must own its IR, calculus, certificate format, checker and
+acceleration, must exceed every known assurance standard, must research methods never combined or
+inverted-combined before, and must beat the frontier empirically and honestly. A negative result
+that moves no published number is not a result.*
+
+## X.0 · Freeze reconciliation — RESOLVED (2026-11-24)
+
+- [x] **X.0.** The "tag/manifest disagreement" was a false alarm: `freeze-x86-sealed-v2` is an
+  **annotated** tag whose object id is `120360b`, while `git rev-parse --verify
+  freeze-x86-sealed-v2^{commit}` — the exact expression `heldout_guard.verify_freeze` uses — yields
+  `22fc118bb275…`, equal to `manifest.freeze_commit`. `verify_freeze` and `sealed_policy` both PASS
+  against `research/receipts/ix53-sealed-manifest.json`. The manifest commit `a2a4b47` follows the
+  tagged code commit, per the adopted convention (manifest records the **code** commit; the manifest
+  commit is evidence). The nine sealed objects exist under `.bench/s2n-bignum/x86/{curve25519,
+  secp256k1,sm2}/`. No re-tag needed. Receipt: `research/receipts/ix53-freeze-reconciled.md`.
+- [x] **X.0b.** Repository hygiene verified: 211 tracked files, 2,584 KB total, no `cadical`, no
+  symlinks, no multi-MB logs. The 52k-line debug/binary blob flagged in the earlier review is absent.
+  `research/receipts/bridge/REPORT.md` must not claim "no commit made" while committed — fix on next
+  touch of that file.
+
+## X.A · Native independence architecture
+
+- [ ] **X.1. [NEW] Typed, architecture-independent verification IR.** A machine-state / control-flow /
+  carry / memory IR that lowers ARM, x86-64, RISC-V and (later) LLVM ops into a common semantic form
+  only where the behaviours are genuinely equivalent. Bit-exact; no unjustified mathematical
+  abstraction. Reads the same object bytes the bench reads.
+  *Acceptance:* one IR program lowers to byte-identical machine semantics for a routine already
+  proved on two ISAs (start with `bignum_neg_p384`, the cheapest), and the lowering is checked, not
+  asserted.
+- [ ] **X.2. [NEW] Extract the HOL pipeline's decisions into explicit typed data** so HOL Light becomes
+  one backend: machine-state equations, intermediate arithmetic facts, step sets, flag meanings and
+  close choices leave OCaml tactic fragments and enter the IR.
+  *Acceptance:* a P-384 add proof is generated from the typed record with no tactic string produced
+  outside the backend.
+- [ ] **X.3. [NEW] Portfolio proof engine + planner.** Independently engineered mechanisms over the IR
+  — symbolic execution, equality saturation, SAT-backed refinement, quotient-witness synthesis,
+  inductive-invariant synthesis, algebraic decomposition — with a planner that chooses by obligation
+  shape, not by routine name.
+  *Acceptance:* at least two mechanisms compose on one obligation with the planner's choice logged,
+  and removing either mechanism loses the proof.
+- [ ] **X.4. [NEW] The trusted checker validates semantics-to-formula, not only arithmetic.** A perfect
+  arithmetic certificate must not certify a mistranslated instruction.
+  *Acceptance:* a mutated decoder/encoder is rejected by the checker at the semantics boundary.
+- [ ] **X.5. [NEW] Constraints on the kernel: machine-verification-specific, deliberately small.** Do
+  not spend the programme reimplementing general higher-order logic. Expand rules only when a real
+  workload requires it, with a decision record.
+- [ ] **X.6. [NEW] Study Aeneas (Rust→prover separation) and Alive2 (semantic comparison) as
+  precedents; record what is borrowed and what is not.** No claim of novelty where they already do it.
+
+## X.B · TNPS rigor, standards and the “no stronger standard” requirement
+
+- [ ] **X.7.** `research/06-TNPS-CHARTER.md` (IX.5) must state, per authority, the requirement it
+  supplies **and** the residual gap Tekmerion still has. Authorities: DO-178C/DO-333/DO-330;
+  NASA-STD-8739.8B + 2026-11-05 draft 8739.8C (evolving); ECSS-E-ST-40C Rev.1 + ECSS-Q-ST-80C
+  Rev.2 (2025-04-30); Common Criteria EAL7; ARP4754B (systems context only); Candle/CakeML; CakeLPR;
+  CakePB; seL4; CompCert; OpenTheory; Dedukti; SLSA; in-toto; Sigstore; NIST SP 800-193; NIST SSDF;
+  GSN community standard; CUDA memory-error management; GPUVerify; Kontroli; verified compositional
+  checking; online LRAT checking.
+- [ ] **X.8. [NEW] “Match and outmatch” is an audited register, never a superlative.** For every
+  dimension in IX.40 there is a row with: strongest known system, its published evidence, the metric
+  that would demonstrate an exceedance, and the current Tekmerion value or `unmeasured`. No row may
+  say "world-class" without a number and a receipt.
+- [ ] **X.9. [NEW] The thirteen laws (IX.11–IX.23) become executable conformance tests,** not prose.
+  Each law gets at least one negative test that fails closed.
+- [ ] **X.10. [NEW] Machine-readable assurance case (IX.34), linked to certificates, hazards and
+  sources; a dependency change revokes affected claims. State plainly (IX.35) that a proof cannot
+  establish that the specification reflects mission requirements.
+- [ ] **X.11. [NEW] Supply chain binds the exact checking program** (source rev, compiler/linker,
+  binary digest, feature set, policy, semantics, cert root, independent results); reproducible
+  rebuild comparison before critical releases; offline verification; decade-scale preservability
+  (IX.36–IX.39).
+- [ ] **X.12. [NEW] Fault model published, never "immune".** Logical soundness and execution
+  integrity are separate claims; the fault-injection campaign (IX.28) measures refuse/recover/
+  improper-accept and publishes residual risk.
+
+## X.C · Acceleration (evidence, never authority)
+
+- [ ] **X.13.** Portable scalar reference checker (IX.24) — mandatory; every other path agrees with it.
+- [ ] **X.14.** Portable SIMD → AVX2 → AVX-512 with OS-enabled register-state detection (IX.25).
+- [ ] **X.15.** Blocked multicore DAG replay, deterministic IDs, checked joins, fail-closed on
+  disagreement (IX.26).
+- [ ] **X.16.** CUDA two-mode: GPU elaborates, CPU confirms every inference; verified GPU checking only
+  after implementation + translation evidence; report end-to-end accepted-proof throughput, never
+  kernel-only timings (IX.27).
+- [ ] **X.17.** Deterministic verdicts across every backend (IX.18); a scheduler, thread count or
+  device must never change theorem truth.
+
+## X.D · Interoperability is observation, not truth
+
+- [ ] **X.18. [NEW] The three-level HOL compatibility contract, made explicit:** (i) specification
+  compatibility, (ii) proof compatibility — HOL Light *reconstructs and checks* the proof, (iii)
+  theory interoperability via OpenTheory where practical. Each level has its own conformance test.
+- [ ] **X.19.** OpenTheory articles and HOL Light proofs are export targets; a foreign acceptance is
+  an immutable observation record, never a native theorem (IX.29–IX.32). Unsupported semantics means
+  refusal, never silent weakening.
+- [ ] **X.20. [NEW] Native Tekmerion standard first, adapters second.** The native certificate format
+  owns identity, hashing and replay; OpenTheory/Dedukti/Lean/Rocq are adapters with specified
+  mappings and target-side reconstruction.
+
+## X.E · Frontier and honesty
+
+- [ ] **X.21. [NEW] No nulls as outputs.** A failed arm is reported beside the positive arm **and**
+  reallocates the budget to the next mechanism. "Negative result is pointless" = do not stop at a
+  null; identify which mechanism would move a published number and try it.
+- [ ] **X.22.** Every claim is scoped to its revision, model, mode and attempt budget (IX.41). Never
+  mix corpus revisions (2,301 / 2,284 / 2,622) or Pass@1 with Pass@5.
+
+## X.F · Deep research — un-combined and inverted-combined mechanisms [NEW]
+
+Deliverable `research/09-NOVEL-COMBINATIONS.md`: for each candidate, state the components, the
+combination (or inversion), the closest published work with a citation, why the combination is not
+already done, the falsifiable experiment, and the cost. Only after that may it be called a candidate.
+
+- [ ] **X.23. Candidate space to investigate (minimum):**
+  - **Carry-conservation as a first-class SAT certificate** rather than a tactic fold, so the
+    arithmetic close is one checked object across ISAs and limb counts.
+  - **Inverted reference route:** instead of proving `machine = ref`, synthesise the *weakest*
+    reference function that the machine state implies, then prove `ref = spec` in a small prover —
+    inverting which side owns the hard arithmetic.
+  - **Equality-saturation over the carry chain** with SAT closing only the residual disequalities
+    (e-graph rewrites are untrusted; the SAT refutation is checked).
+  - **Portfolio with a cost model learned from measured judge times**, used only to order attempts
+    (never to accept).
+  - **Specification-relative mutation testing**: mutate the *specification* and require the checker
+    to reject the old proof, closing the "valid proof of the wrong spec" gap (IX.33).
+  - **Certificate compression with checked replay** (content-addressed dedup of identical inference
+    subgraphs) with determinism and equivalence tests.
+  - **Invariant synthesis from the postcondition + live machine state** for loops (Wall 2 / L-FIT),
+    with the synthesised invariant kernel-checked.
+- [ ] **X.24. [NEW] Literature sweep with receipts.** Primary sources only; every "nobody has
+  combined X and Y" claim must name the search terms used and the closest hit. Negative novelty
+  claims are the easiest to get wrong.
+- [ ] **X.25. [NEW] Update `research/04-NOVELTY-REGISTER.md`.** Current status: only N3
+  (conformal abstention) is `PLAUSIBLY_NOVEL`; nothing is `DEMONSTRATED_ADVANCE`. A claim moves up
+  only with an experiment, never with an argument.
+
+## X.G · Milestone B — logical core and critical parser, gaps stated precisely
+
+- [ ] **X.26. [NEW] Formal specification of the parser.** A complete grammar with a total
+  parse relation, explicit rejection of: duplicate fields, non-canonical encodings, integer
+  narrowing, `-0`, trailing bytes, oversized counts, and any construct the checker does not consume.
+  *Acceptance:* the spec is written as a relation `parse : bytes → option certificate` with
+  determinism and injectivity (canonical encoding) stated and argued; a **separate** reference
+  parser (already `src/native/reference.rs`) agrees on a generated corpus, and every disagreement is
+  a defect with a named cause.
+- [ ] **X.27. [NEW] The trusted-base gap table, quantified.** `research/receipts/ix43-tcb.md` (or a
+  Milestone-B successor) must list, for **each** of G1–G4: the exact proposition, the lines of code
+  it covers, the test evidence that exists, the evidence that does not, and what discharging it would
+  require (tool, effort, dependency). 0/4 discharged must remain visible; the checker must never be
+  called "verified".
+- [ ] **X.28. [NEW] Narrow the gap that is cheapest to close first.** Likely candidates: (a) a
+  machine-checked proof of the RUP rule over the LRAT semantics in a small external prover
+  (Coq/Lean/Isabelle), (b) parser refinement by construction (parse into a typed value and make the
+  untyped path unrepresentable), (c) bit-blaster equivalence for the restricted fragment by
+  exhaustive-checkable means. Pick by measured effort, record the decision.
+- [ ] **X.29.** Independent acceptance (IX.17): a substantively independent implementation, not two
+  runs of the same library. The differential oracle is a start; it is not independent acceptance for
+  sealed results until it is used on the sealed artifact.
+
+## X.H · P-384 glue — finish deriving it
+
+- [ ] **X.30.** Remaining `DEVELOPMENT_ONLY` in the P-384 answer (IX.48): the simulation grouping
+  (`1--13 / 14--22 / [23;24] / 25--38`), the bignum expansion pass, the post-`REAL_BITVAL_NOT`
+  rewrites, and the mask tactic's recognition of the CSETM two-bit shape without decoding the
+  instruction. Derive each from the state equations, or record precisely why it cannot be derived yet.
+  *Acceptance:* the judged P-384 answer contains none of these as hand-written input; judge still
+  `OK`; replay `hyps=0`, axioms unchanged; the removed lines are a receipt.
+
+## X.I · Sealed evaluation
+
+- [ ] **X.31.** Run IX.53 once: nine `x86.bignum_{add,sub,neg}_{p25519,p256k1,sm2}.BIGNUM_*_CORRECT`
+  tasks with `--sealed-eval`, the manifest and tag above, one pass, no tuning, no source changes.
+  *Acceptance:* `OK/n` printed by the judge, per-task seconds, fresh replay `hyps=0` axioms
+  unchanged, and a plain statement that isolation is partial (the emitter hardcodes
+  `.bench/problems.json` and `.bench/s2n-bignum`). A failure is reported, not fixed; any fix needs a
+  new freeze and a decision record.
+
+## X.J · Immediate order (supersedes earlier orders until done)
+
+1. X.0 freeze reconciliation — **done**.
+2. X.31 sealed x86 evaluation — this is the gate number; run while `tools/` is at the frozen commit.
+3. X.26/X.27 Milestone B parser specification and quantified TCB gaps (no `tools/` change).
+4. X.30 P-384 glue completion (changes `tools/`; after the sealed run).
+5. X.23–X.25 research sweep and novelty register.
+6. X.13–X.17 acceleration, scalar reference first.
+Done in this order because (2) needs an untouched `tools/` tree, (3) does not touch `tools/`, and
+(4) dirties it.
