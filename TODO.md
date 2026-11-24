@@ -2359,6 +2359,27 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
   `BRIDGE_TO_WORD_CONV`, which are not separated here. Next measurement: split the
   bridge into prepare / encoding / replay before building the lemma.
   `research/receipts/ix65-same-obligation-and-phases.md`.
+  — **Verdict from data (IX.66):** the block is now split, and the lever is named.
+  Across the six mandatory proofs (**993,573,633** primitive inferences): **bitblast
+  (`BITBLAST_THEN`) 487,167,871 = 49.03%**, **definitionalise+clausify (`CSAT_PROVE`)
+  178,375,918 = 17.95%**, **certified LRAT replay 301,587,637 = 30.35%**, **bridge
+  rewrite (`BRIDGE_TO_WORD_CONV` / `ELIM_DIGIT_EQS_TAC` / expand / condition splits)
+  412,923 = 0.04%**, **residual 8,155,718 = 0.82%** (the DIMACS write, CaDiCaL and
+  the LRAT trim are **0** primitive inferences on all 30 closes; the rest is
+  `PROVE_HYP`/`main_rule`/`ACCEPT_TAC`). `add_p521` (470,294,392): bitblast
+  228,940,358 (48.68%), defn+clausify 79,017,426 (16.80%), replay 154,535,460
+  (32.86%), normalisation 162,873 (0.035%), residual 3,553,893 (0.76%). So the
+  target is **not** wordification (0.04% — that hypothesis is dead) and **not** the
+  replay alone (30.35%): it is the **bit-blasting of the goal and of the simulator's
+  accumulator hypotheses**, a stable 28.2 inferences per bit-blasted subterm
+  (26.8–29.8 on every task), with four ~2.0M-subterm instances per `add_p521`.
+  **Upper bounds, not predictions:** deleting bitblast would take `add_p521` to
+  241,354,034 and the total to 506,405,762; deleting the whole SAT close (a
+  parametric rewrite that never builds a CNF) caps at 4,084,382 and 17,873,566.
+  Still **not proved** that a width/modulus lemma reaches that cap, and the cost is
+  charged to the *hypothesis* set, so a lemma must remove the hypotheses from the
+  instance, not only the conclusion. Open.
+  `research/receipts/ix66-bridge-split.md`.
 - [~] **XIII.E5.** Emit proofs that do not search: separate successful derivations from
   discarded search in the inference count, and drive the discarded part down.
   — **Partial (IX.65):** a phase switch now separates certified replay from the
@@ -2514,6 +2535,27 @@ already exists in deterministic form.
   acceptable; paying the discovery cost again at verification is not.** — **Done
   (IX.60 §3):** the table reports the two measured costs and marks the other three
   *not measured*; the counter is explicitly labelled work, not proof-tree size.
+  — **Five-cost split (IX.66), primitive inferences over the six mandatory proofs
+  (total 993,573,633):**
+  (1) **solver search time** — CaDiCaL's search costs **0** primitive inferences
+  (the `dimacs_of_hol` → solver → LRAT-trim interval is 0 on all 30 closes); it is
+  wall time only, still not quoted as a proof cost.
+  (2) **successful derivation size** — **691,985,996 = 69.65%** of the total:
+  bitblast 487,167,871 (49.03%) + definitionalise+clausify 178,375,918 (17.95%) +
+  bridge rewrite 412,923 (0.04%) + residual 8,155,718 (0.82%) + the outer classes
+  (initial/play/rewrite/finalisation) 17,873,566 (1.80%).
+  (3) **discarded inference work** — still **not measured**: the counter is
+  monotone, so retried/abandoned tactics inside `BITBLAST_THEN`'s `REPEAT`/`TRY`
+  chain are inside (2). Open.
+  (4) **solver-free replay time / size** — **301,587,637 = 30.35%** of the total
+  (`LRAT_REFUTE_GEN` alone, 152.9 inferences per CNF clause, 17.5 per bit-blasted
+  subterm). This is the cost that is paid again at verification, and it is the
+  smallest of the three large classes, not the largest.
+  (5) **total construction + verification cost** — unchanged at 993,573,633 for the
+  six (aggregate ratio 70.87× the same-obligation human bodies).
+  Consequence for the design principle: the replay is 30.35% while *building* the
+  instance is 67.0%, so "paying the discovery cost again" is not the dominant term;
+  building it is. `research/receipts/ix66-bridge-split.md`.
 
 ## XIV.C — Ordering resolution (supersedes `XIII.I`)
 

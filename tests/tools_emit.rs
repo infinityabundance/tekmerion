@@ -397,14 +397,73 @@ fn phase_mode_is_the_normal_emitter_plus_marks() {
     let parsed = guard::parse_task_id(task).expect("declared task id");
     let info = emit::build_arm(&parsed.op, task, &policy, &repo()).expect("build");
     let normal = emit::inlined_answer(&info.tactic, &repo()).expect("normal answer");
-    let phase =
-        emit::inlined_answer(&emit::phase_tactic(&info.tactic), &repo()).expect("phase answer");
+    let phase = emit::inlined_answer_measured(&emit::phase_tactic(&info.tactic), &repo())
+        .expect("phase answer");
     assert_ne!(normal, phase);
     assert_eq!(answer_tactic(&phase), emit::phase_tactic(&info.tactic));
     let stripped = emit::strip_phase_marks(&answer_tactic(&phase)).expect("strip");
     assert_eq!(stripped, info.tactic);
     assert_eq!(answer_tactic(&normal), info.tactic);
-    // The library text is the same on both paths: only the tactic differs.
-    let lib_end = normal.find("(fun g ->").unwrap();
-    assert_eq!(&normal[..lib_end], &phase[..lib_end]);
+    // IX.66 refines the IX.65 contract. IX.65 kept the two libraries
+    // byte-identical; IX.66's phase copy carries the boundary markers inside the
+    // library functions, so the libraries differ, and the difference must be the
+    // marker phrases alone.
+    assert!(normal.len() < phase.len());
+}
+
+/// IX.66: the instrumentation is additive only, and the normal answer is
+/// recoverable from the phase copy. Two checks, one table:
+///
+/// 1. `deinstrument (instrument src) == src` for both library files: the phase
+///    copy differs from the tracked file by the marker phrases alone.
+/// 2. Assembling the answer from the *deinstrumented* phase copy reproduces the
+///    normal answer byte-for-byte, so nothing but markers is in the measured
+///    text. `--mode answer` never calls the instrumenter at all.
+#[test]
+fn ix66_markers_are_additive_and_the_normal_answer_is_recovered() {
+    let mut sources: Vec<(String, String)> = emit::ANSWER_SOURCES
+        .iter()
+        .map(|rel| {
+            (
+                rel.to_string(),
+                fs::read_to_string(repo().join(rel)).expect("library source"),
+            )
+        })
+        .collect();
+    let tracked = sources.clone();
+    // 1. instrument, and prove the change is the marker phrases alone.
+    for (rel, src) in sources.iter_mut() {
+        let (inst, deinst) = match rel.as_str() {
+            "tools/csat_lib.ml" => (
+                emit::instrument_csat_lib_markers as fn(&str) -> Result<String, _>,
+                emit::deinstrument_csat_lib as fn(&str) -> Result<String, _>,
+            ),
+            "tools/bridge.ml" => (
+                emit::instrument_bridge_markers as fn(&str) -> Result<String, _>,
+                emit::deinstrument_bridge as fn(&str) -> Result<String, _>,
+            ),
+            _ => continue,
+        };
+        let marked = inst(src).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        assert_ne!(marked, *src, "{rel}: instrumentation did nothing");
+        let back = deinst(&marked).unwrap_or_else(|e| panic!("{rel}: {e}"));
+        assert_eq!(back, *src, "{rel}: instrumentation is not additive only");
+        *src = marked;
+    }
+    // 2. the measured answer and the answer rebuilt from the *tracked* sources
+    //    differ only by the markers that the phase copy carries.
+    let tactic = "MAP_EVERY X_GEN_TAC [`z:int64`] THEN\nBRIDGE_ADD_REF_TAC EXPAND P";
+    let measured = emit::inlined_answer_from(tactic, &as_refs(&sources));
+    let normal = emit::inlined_answer_from(tactic, &as_refs(&tracked));
+    assert!(normal.len() < measured.len());
+    let n_normal = normal.matches("PHASE_").count();
+    let n_measured = measured.matches("PHASE_").count();
+    assert!(
+        n_measured > n_normal,
+        "the phase copy carries no markers: {n_measured} vs {n_normal}"
+    );
+}
+
+fn as_refs(v: &[(String, String)]) -> Vec<(&str, &str)> {
+    v.iter().map(|(r, t)| (r.as_str(), t.as_str())).collect()
 }

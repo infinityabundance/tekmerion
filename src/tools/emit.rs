@@ -918,6 +918,150 @@ fn strip_one_mark(line: &str) -> Option<&str> {
 }
 
 // ---------------------------------------------------------------------------
+// IX.66: bridge-block measurement instrumentation (phase mode only)
+// ---------------------------------------------------------------------------
+//
+// IX.65 bracketed the block only at the emitter's own lines, which left
+// `BRIDGE_*_REF_TAC` as one indivisible 67.85% of the measured work.  The
+// boundaries inside it are inside library functions and cannot be bracketed
+// from the call site, so the functions themselves are instrumented -- but only
+// in the *copy* that `--mode phase` inlines.  `--mode answer` still inlines the
+// tracked files verbatim, so a normal answer is byte-identical to IX.65's.
+//
+// Each edit is a `(plain, marked)` pair.  `instrument` requires the plain text
+// to occur exactly once (so an anchor that drifts fails loudly rather than
+// silently measuring nothing), and `deinstrument` reverses the edits in reverse
+// order.  `ix66_markers_are_additive_only` proves the round trip on both files:
+// the phase copy differs from the tracked file by the marker phrases alone.
+
+struct MarkerEdit {
+    plain: &'static str,
+    marked: &'static str,
+}
+
+/// The four per-phase boundaries in `CSAT_PROVE` / `CSAT_REFUTE_GEN`:
+/// `bridge:prove-entry` is where `BITBLAST_THEN` hands over (so
+/// `pre-bitblast -> prove-entry` is the bit-blasting), `bridge:cnf-built` is
+/// where the clausification ends, and `PHASE_CNF` reports the DIMACS size the
+/// solver is given.  The replay brackets are IX.65's, unchanged.
+const CSAT_LIB_EDITS: &[MarkerEdit] = &[
+    MarkerEdit {
+        plain: "    ALL_TAC g;;\n",
+        marked: r#"    ALL_TAC g;;
+
+(* IX.66 measurement-only boundaries.  Inserted into the --mode phase copy of
+   this library; absent from the tracked file, so a normal answer is unchanged. *)
+let rec csat_term_size tm =
+  (match tm with
+   | Comb(s,t) -> 1 + csat_term_size s + csat_term_size t
+   | Abs(_,b) -> 1 + csat_term_size b
+   | _ -> 1);;
+let csat_mark_at label =
+  (if !csat_mark_enabled then
+     Printf.printf "PHASE_MARK %s %d\n%!" label (!csat_mark_reader ()));;
+let csat_mark_size label tm =
+  (if !csat_mark_enabled then
+     Printf.printf "PHASE_GOAL %s %d\n%!" label (csat_term_size tm));;
+let csat_mark_goal (label : string) : tactic =
+  fun (asl,w) ->
+    (csat_mark_size label w; ALL_TAC (asl,w));;
+"#,
+    },
+    MarkerEdit {
+        plain: "  fun tm ->\n    if is_neg tm && is_strictcnf (rand tm) then",
+        marked: "  fun tm ->\n    csat_mark_at \"bridge:prove-entry\";\n    csat_mark_size \"bridge:blast\" tm;\n    if is_neg tm && is_strictcnf (rand tm) then",
+    },
+    MarkerEdit {
+        plain: "      let cth = CSAT_REFUTE_GEN (Array.get rar) ntdcnf in",
+        marked: "      csat_mark_at \"bridge:cnf-built\";\n      let cth = CSAT_REFUTE_GEN (Array.get rar) ntdcnf in",
+    },
+    MarkerEdit {
+        plain: "  let _ = dimacs_of_hol cnfname tm in",
+        marked: "  let _ = dimacs_of_hol cnfname tm in\n  let _ = if !csat_mark_enabled then\n            Printf.printf \"PHASE_CNF %d %d %d\\n%!\"\n              (List.length (atoms tm)) (count_conjuncts 1 tm) (csat_term_size tm) in",
+    },
+];
+
+/// The boundaries inside `bridge.ml`: the entry to each reference close, the
+/// goal handed to a SAT close, and the point where that close's proved theorem
+/// comes back.  `bridge:pre-bitblast -> bridge:prove-entry` is `BITBLAST_THEN`'s
+/// own rewriting; `bridge:post-replay -> bridge:sat-done` is the assembly after
+/// the kernel replay.
+const BRIDGE_EDITS: &[MarkerEdit] = &[
+    MarkerEdit {
+        plain: "let BRIDGE_ADD_REF_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        marked: "let BRIDGE_ADD_REF_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+    },
+    MarkerEdit {
+        plain: "let BRIDGE_SUB_REF_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        marked: "let BRIDGE_SUB_REF_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+    },
+    MarkerEdit {
+        plain: "let BRIDGE_NEG_REF_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        marked: "let BRIDGE_NEG_REF_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+    },
+    MarkerEdit {
+        plain: "let BRIDGE_NEG_REF_ZERO_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        marked: "let BRIDGE_NEG_REF_ZERO_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+    },
+    MarkerEdit {
+        plain: "let BRIDGE_CSAT_TAC : tactic =\n  fun (asl,w) ->\n    let hths = map snd asl in",
+        marked: "let BRIDGE_CSAT_TAC : tactic =\n  fun (asl,w) ->\n    csat_mark_at \"bridge:pre-bitblast\";\n    csat_mark_size \"bridge:word-goal\" w;\n    let hths = map snd asl in",
+    },
+    MarkerEdit {
+        plain: "    let th = prove(imp, CSAT_TAC) in",
+        marked: "    let th = prove(imp, CSAT_TAC) in\n    csat_mark_at \"bridge:sat-done\";",
+    },
+];
+
+fn apply_marker_edits(
+    src: &str,
+    edits: &[MarkerEdit],
+    which: &str,
+    forward: bool,
+) -> Result<String> {
+    let mut out = src.to_string();
+    let ordered: Vec<&MarkerEdit> = if forward {
+        edits.iter().collect()
+    } else {
+        edits.iter().rev().collect()
+    };
+    for e in ordered {
+        let (from, to) = if forward {
+            (e.plain, e.marked)
+        } else {
+            (e.marked, e.plain)
+        };
+        let n = out.matches(from).count();
+        if n != 1 {
+            return other(format!(
+                "{which}: IX.66 marker anchor occurs {n} times, expected 1: {from:?}"
+            ));
+        }
+        out = out.replacen(from, to, 1);
+    }
+    Ok(out)
+}
+
+/// The phase-mode copy of `tools/csat_lib.ml`.
+pub fn instrument_csat_lib_markers(src: &str) -> Result<String> {
+    apply_marker_edits(src, CSAT_LIB_EDITS, "tools/csat_lib.ml", true)
+}
+
+/// The phase-mode copy of `tools/bridge.ml`.
+pub fn instrument_bridge_markers(src: &str) -> Result<String> {
+    apply_marker_edits(src, BRIDGE_EDITS, "tools/bridge.ml", true)
+}
+
+/// Remove the IX.66 marker phrases again (the proof that nothing else changed).
+pub fn deinstrument_csat_lib(src: &str) -> Result<String> {
+    apply_marker_edits(src, CSAT_LIB_EDITS, "tools/csat_lib.ml", false)
+}
+
+pub fn deinstrument_bridge(src: &str) -> Result<String> {
+    apply_marker_edits(src, BRIDGE_EDITS, "tools/bridge.ml", false)
+}
+
+// ---------------------------------------------------------------------------
 // Answer assembly (the judged artefact)
 // ---------------------------------------------------------------------------
 
@@ -971,20 +1115,19 @@ fn split_chunks(src: &str) -> Vec<&str> {
     out
 }
 
-fn phrases(path: &Path) -> std::result::Result<Vec<String>, String> {
-    let src = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+fn phrases_from(src: &str) -> Vec<String> {
     let mut out = Vec::new();
-    for chunk in split_chunks(&src) {
+    for chunk in split_chunks(src) {
         let c = chunk.trim();
         if c.is_empty() || is_skipped(c) {
             continue;
         }
         out.push(c.to_string());
     }
-    Ok(out)
+    out
 }
 
-const ANSWER_SOURCES: &[&str] = &[
+pub const ANSWER_SOURCES: &[&str] = &[
     ".bench/hol-light/Cadical/dimacs.ml",
     ".bench/hol-light/Cadical/cnf.ml",
     ".bench/hol-light/Cadical/ldrup.ml",
@@ -994,9 +1137,47 @@ const ANSWER_SOURCES: &[&str] = &[
 
 /// The judged artefact: the tactic inlined after the CSAT and bridge libraries.
 pub fn inlined_answer(tactic: &str, repo: &Path) -> Result<String> {
-    let mut parts: Vec<String> = Vec::new();
+    inlined_answer_with(tactic, repo, false)
+}
+
+/// The phase-mode artefact (IX.66): the same answer, but `csat_lib.ml` and
+/// `bridge.ml` come from instrumented *copies*.  `--mode answer` is untouched,
+/// so the shipped answer is byte-identical to IX.65's.
+pub fn inlined_answer_measured(tactic: &str, repo: &Path) -> Result<String> {
+    inlined_answer_with(tactic, repo, true)
+}
+
+fn inlined_answer_with(tactic: &str, repo: &Path, measured: bool) -> Result<String> {
+    let mut sources: Vec<(String, String)> = Vec::new();
     for rel in ANSWER_SOURCES {
-        parts.extend(phrases(&repo.join(rel))?);
+        let path = repo.join(rel);
+        let src = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let src = if !measured {
+            src
+        } else if *rel == "tools/csat_lib.ml" {
+            instrument_csat_lib_markers(&src)?
+        } else if *rel == "tools/bridge.ml" {
+            instrument_bridge_markers(&src)?
+        } else {
+            src
+        };
+        sources.push((rel.to_string(), src));
+    }
+    let refs: Vec<(&str, &str)> = sources
+        .iter()
+        .map(|(rel, src)| (rel.as_str(), src.as_str()))
+        .collect();
+    Ok(inlined_answer_from(tactic, &refs))
+}
+
+/// Assemble an answer from explicit library texts, in inline order.  `inlined_answer`
+/// and `inlined_answer_measured` are this function over the tracked and the
+/// instrumented texts respectively; exposing it lets the phase-mode contract
+/// test rebuild the normal answer from the *deinstrumented* phase copy.
+pub fn inlined_answer_from(tactic: &str, sources: &[(&str, &str)]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for (_, src) in sources {
+        parts.extend(phrases_from(src));
     }
     let joined = parts
         .iter()
@@ -1007,7 +1188,7 @@ pub fn inlined_answer(tactic: &str, repo: &Path) -> Result<String> {
         "(fun g ->\n  try\n    ({}) g\n  with e ->\n    Printf.printf \"ANSWER_EXCEPTION: %s\\n%!\" (Printexc.to_string e);\n    raise e)\n",
         tactic.trim()
     );
-    Ok(format!("(\n{joined}\n{wrapped})\n"))
+    format!("(\n{joined}\n{wrapped})\n")
 }
 
 // ---------------------------------------------------------------------------
@@ -1842,7 +2023,7 @@ fn emit_arm(args: &EmitArgs, repo: &Path) -> Result<()> {
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
     } else if args.mode == "phase" {
-        inlined_answer(&phase_tactic(&info.tactic), repo)?
+        inlined_answer_measured(&phase_tactic(&info.tactic), repo)?
     } else {
         dev_script_arm(&info, &policy, repo)?
     };
@@ -1890,7 +2071,7 @@ fn emit_x86(args: &EmitArgs, repo: &Path) -> Result<()> {
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
     } else if args.mode == "phase" {
-        inlined_answer(&phase_tactic(&info.tactic), repo)?
+        inlined_answer_measured(&phase_tactic(&info.tactic), repo)?
     } else {
         dev_script_x86(&info, &policy, repo)?
     };

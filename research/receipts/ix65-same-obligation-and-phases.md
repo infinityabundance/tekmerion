@@ -623,3 +623,62 @@ matching declaration is instrumented.
 allow-list (`.bench/ix65/spent-manifest.json`) because all 27 tasks are spent and
 published; no held-out target was opened and no proof text was read by the
 emitter.
+
+---
+
+## Addendum (IX.66, 2026-11-24) — the 67.85% is now split
+
+The body above is unchanged. IX.66 separated the block this receipt could not:
+it bracketed the reference closes from inside the library functions, in copies
+inlined **only** by `--mode phase`, so every number below is measured with the
+same `inference_count` and the same kernel, and every `STAMP_INFERENCES` is
+identical to §2.1. Receipt: `research/receipts/ix66-bridge-split.md` (data:
+`ix66-bridge-split.json`).
+
+**Refinement of §2.5's `bridge (non-replay)` column** (67.85% of the six-task
+total, 674,112,430 inferences). It decomposes, per theorem and in aggregate, as:
+
+| class | inferences | share of six-task total | share of the non-replay bridge column |
+|---|---:|---:|---:|
+| bitblast (`BITBLAST_THEN`) | 487,167,871 | **49.03%** | 72.27% |
+| definitionalise + clausify (`CSAT_PROVE`) | 178,375,918 | **17.95%** | 26.46% |
+| bridge rewrite (`BRIDGE_TO_WORD_CONV`, `ELIM_DIGIT_EQS_TAC`, expand, splits) | 412,923 | 0.04% | 0.06% |
+| residual — DIMACS + solver + trim | 0 | 0.00% | 0.00% |
+| residual — assembly after replay (`PROVE_HYP`, `main_rule`, `ACCEPT_TAC`) | 8,155,718 | 0.82% | 1.21% |
+
+49.03 + 17.95 + 0.04 + 0.82 = 67.84%, i.e. this table is §2.5's 67.85% to rounding
+(the 0.01% is the rounding of six per-theorem percentages). The certified replay
+column is **unchanged at 30.35%** (301,587,637), theorem for theorem.
+
+What this §, and §2.7, said that now needs qualifying:
+
+1. **§2.5 / §2.6 call the non-replay bridge work "extension/encoding".** The
+   encoding half is 17.95% (clausification) plus a **measured zero** for the DIMACS
+   write, the solver and the LRAT trim. The larger half, 49.03%, is the
+   bit-blasting of the goal *and of the simulator's accumulator hypotheses*. That
+   distinction is the one §2.7 said was missing.
+2. **§2.7: "the block also contains `CSAT_PROVE` encoding and `BRIDGE_TO_WORD_CONV`,
+   which are not separated here. Next measurement: split the bridge into prepare /
+   encoding / replay."** Done: prepare (`bridge rewrite`) is 0.04%, encoding
+   (`defn_clausify` + `encode`) is 17.95%, replay is 30.35%, and bitblast is 49.03%.
+   The last of those was not in §2.7's list of candidates at all.
+3. **§3: "Two further markers (one at the start of `CSAT_PROVE`, one before its
+   `CSAT_REFUTE_GEN` call) would split encoding from replay; they were not added."**
+   They are added now, and they show the interval between them (`dimacs_of_hol`,
+   the CaDiCaL subprocess, `csat_trim_lrat`) contributes **0 primitive inferences on
+   all 30 SAT closes** — CaDiCaL's search is outside the kernel, as §3 already
+   argued; the measurement confirms it rather than assuming it.
+4. **§3's limit "search inside a successful block is not separated" stands** and is
+   inherited unchanged. It matters more now: `bitblast` is the cost of *reaching*
+   the blasted term, so it includes any discarded rewriting inside `BITBLAST_THEN`'s
+   `REPEAT`/`TRY` chain.
+5. **§0's claim that measurement mode is the normal answer plus markers** still
+   holds at the tactic level (`strip_phase_marks` recovers the tactic), but IX.66's
+   phase library is no longer byte-identical to the normal library: it is an
+   instrumented copy. The refinement, and the byte-identity proof for `--mode
+   answer` itself (`cmp` against this receipt's `.bench/ix65/normal.now`), are in
+   IX.66 §5.
+
+One number in §2.5 is *not* refined: `replay` (30.35%) and every outer class
+(`initial` 0.90%, `play` 0.77%, `rewrite` 0.00%, `finalisation` 0.13%) reproduce
+exactly.
