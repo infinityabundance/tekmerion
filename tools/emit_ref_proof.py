@@ -19,9 +19,17 @@ The machine code, the query, the state names and the modulus name are read
 from the benchmark inputs; nothing is copied from a human proof except the
 simulation/expansion idiom, which is labelled DEVELOPMENT_ONLY.
 
+Guard modes come from tools/heldout_guard.py.  ``--develop`` (default) refuses
+held-out task ids, objects and proof reads; ``--sealed-eval`` with an explicit
+manifest and freeze tag allows exactly the listed ids and objects and still
+refuses their proof text, including in ``--mode dev``.
+
 Usage:
   python3 tools/emit_ref_proof.py --task <id> --mode answer --out answer.txt
   python3 tools/emit_ref_proof.py --task <id> --mode dev --out dev.ml
+  python3 tools/emit_ref_proof.py --sealed-eval \
+      --sealed-manifest research/receipts/sealed.json \
+      --freeze-tag freeze-x86-sealed-v1 --task <id> --mode answer --out answer.txt
 """
 
 from __future__ import annotations
@@ -41,10 +49,20 @@ if str(HERE) not in sys.path:
 
 import disasm_steps  # noqa: E402
 import derive_steps  # noqa: E402
+import heldout_guard  # noqa: E402
 import w2_witnesses  # noqa: E402
 
 OP_RE = re.compile(r"bignum_(add|sub|neg)_")
 FAMILY_RE = re.compile(r"^arm\.bignum_(?:add|sub|neg)_([a-z0-9]+)\.")
+
+
+def _guard(fn, *args, **kwargs):
+    """Run one guard check, turning a refusal into a clean SystemExit."""
+    try:
+        return fn(*args, **kwargs)
+    except heldout_guard.HeldOutRefused as exc:
+        raise SystemExit(f"refused: {exc}") from exc
+
 
 # Transcribed fragments, named so they cannot hide in the emitted answer.
 DEVELOPMENT_ONLY = {
@@ -66,7 +84,7 @@ def load_problems():
         return json.load(fh)
 
 
-def object_for(op: str, task: str) -> Path:
+def object_for(op: str, task: str, policy=None) -> Path:
     m = FAMILY_RE.match(task)
     if not m:
         raise SystemExit(f"not an ARM bignum task id: {task!r}")
@@ -74,16 +92,20 @@ def object_for(op: str, task: str) -> Path:
     matches = sorted(S2N.glob(f"arm/*/bignum_{op}_{family}.o"))
     if len(matches) != 1:
         raise SystemExit(f"expected one object for {op}/{family}, found {matches}")
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_object, str(matches[0]), root=S2N)
     return matches[0]
 
 
-def modulus_definition(op: str, family: str) -> str:
+def modulus_definition(op: str, family: str, policy=None) -> str:
     """The `let p_<family> = new_definition ...` phrase, for --mode dev only.
 
     The judged answer does not use this: the benchmark setup already defines the
     modulus.  It is needed only to run the same tactic from a scratch process.
     """
     proof = S2N / "arm" / "proofs" / f"bignum_{op}_{family}.ml"
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_proof, str(proof), root=S2N)
     src = proof.read_text(encoding="utf-8")
     m = re.search(r"^(let (p_\w+) = new_definition\s*`[^`]*`;;)",
                   src, re.M)
@@ -92,7 +114,8 @@ def modulus_definition(op: str, family: str) -> str:
     return m.group(1)
 
 
-def machine_code_phrase(op: str, family: str, mcname: str, objrel: str) -> str:
+def machine_code_phrase(op: str, family: str, mcname: str, objrel: str,
+                        policy=None) -> str:
     """The `define_assert_from_elf ... [words]` phrase, for --mode dev only.
 
     The judged answer uses the setup's own machine-code definition.  A scratch
@@ -101,6 +124,8 @@ def machine_code_phrase(op: str, family: str, mcname: str, objrel: str) -> str:
     object; the words are also what the ELF contains).
     """
     proof = S2N / "arm" / "proofs" / f"bignum_{op}_{family}.ml"
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_proof, str(proof), root=S2N)
     src = proof.read_text(encoding="utf-8")
     m = re.search(r"define_assert_from_elf\s*\"[^\"]*\"\s*\"[^\"]*\"\s*\[(.*?)\];;",
                   src, re.S)
@@ -164,14 +189,16 @@ _POST = {
 }
 
 
-def build(op: str, task: str):
+def build(op: str, task: str, policy=None):
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_task, task)
     problems = load_problems()
     if task not in problems:
         raise SystemExit(f"unknown task id {task!r}")
     query = problems[task]["query"]
     theorem = problems[task]["json"]["theorem_name"]
     exec_name = theorem.removesuffix("_CORRECT") + "_EXEC"
-    obj = object_for(op, task)
+    obj = object_for(op, task, policy)
     steps = disasm_steps.disassemble(str(obj))
     spec = w2_witnesses.parse_spec(query)
     accumulate = derive_steps.derive_accumulate(steps)
@@ -225,9 +252,10 @@ def inlined_answer(tactic: str) -> str:
     return "(\n" + "\n".join(f"{p}\nin" for p in parts) + "\n" + wrapped + ")\n"
 
 
-def dev_script(info) -> str:
+def dev_script(info, policy=None) -> str:
+    policy = policy or heldout_guard.develop_policy()
     mcname = info["exec_name"].lower().removesuffix("_exec") + "_mc"
-    moddef = modulus_definition(info["op"], info["family"])
+    moddef = modulus_definition(info["op"], info["family"], policy)
     return "\n".join([
         f"(* DEVELOPMENT_ONLY dev harness for {info['task']}.",
         "   Not a receipt: the judged artefact is the inlined answer. *)",
@@ -237,7 +265,8 @@ def dev_script(info) -> str:
         f'loadt "{REPO}/tools/csat_lib.ml";;',
         f'loadt "{REPO}/tools/bridge.ml";;',
         moddef,
-        machine_code_phrase(info["op"], info["family"], mcname, info["objrel"]),
+        machine_code_phrase(info["op"], info["family"], mcname,
+                            info["objrel"], policy),
         f"let {info['exec_name']} = ARM_MK_EXEC_RULE {mcname};;",
         f"let ref_goal = {info['query']};;",
         "let ref_t0 = Unix.gettimeofday ();;",
@@ -254,12 +283,18 @@ def main(argv=None) -> int:
     ap.add_argument("--mode", choices=["answer", "dev"], default="answer")
     ap.add_argument("--out", required=True)
     ap.add_argument("--accumulate-out", help="write the derived step list here")
+    heldout_guard.add_mode_arguments(ap)
     args = ap.parse_args(argv)
 
+    try:
+        policy = heldout_guard.policy_from_args(args)
+    except heldout_guard.HeldOutRefused as exc:
+        raise SystemExit(f"refused: {exc}") from exc
+
     op = OP_RE.search(args.task).group(1)
-    info = build(op, args.task)
+    info = build(op, args.task, policy)
     text = inlined_answer(info["tactic"]) if args.mode == "answer" \
-        else dev_script(info)
+        else dev_script(info, policy)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(text, encoding="utf-8")
     if args.accumulate_out:

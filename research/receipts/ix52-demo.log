@@ -1,0 +1,45 @@
+# IX.52 guard-mode demonstration (verbatim CLI output)
+# generated 2026-11-24T00:36:15Z UTC
+# project HEAD 7812160c7b416cd81c24fa578c10ea931aab591c; demo temp commit 52f83f4aa47e1a9bc69c594f8184a34fa694dd41
+# demo repo: /tmp/ix52-demo/repo (clean tools/, tag ix52-demo-v1,
+# guard copied byte-for-byte from tools/heldout_guard.py)
+
+## develop refuses a held-out object
+$ /usr/bin/python3 /mnt/1tb_kingston/Tekmerion/tools/heldout_guard.py /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/curve25519/bignum_add_p25519.o
+REFUSED: held-out marker '25519' in /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/curve25519/bignum_add_p25519.o
+[exit 2]
+
+## develop refuses a held-out task id (emitter, no output written)
+$ /usr/bin/python3 /mnt/1tb_kingston/Tekmerion/tools/emit_ref_proof_x86.py --task x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT --mode answer --out /tmp/ix52-demo/must-not-exist.txt
+refused: held-out marker '25519' in task 'x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT'
+[exit 1]
+
+## sealed-eval allows a manifest-listed object
+$ /usr/bin/python3 /tmp/ix52-demo/repo/tools/heldout_guard.py --sealed-eval --freeze-tag ix52-demo-v1 --root /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum --sealed-manifest /tmp/ix52-demo/sealed-nine.json /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/curve25519/bignum_add_p25519.o
+allowed: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/curve25519/bignum_add_p25519.o sha256=a23838856b2e761c1ac93189d50d2f5a06865d09ed78e1e1841dbe683ad753f7 lines=2
+[exit 0]
+
+## sealed-eval still refuses the listed task proof .ml
+$ /usr/bin/python3 /tmp/ix52-demo/repo/tools/heldout_guard.py --sealed-eval --freeze-tag ix52-demo-v1 --root /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum --sealed-manifest /tmp/ix52-demo/sealed-nine.json /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/proofs/bignum_add_p25519.ml
+REFUSED: sealed proof file is never readable: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/proofs/bignum_add_p25519.ml ('x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT')
+[exit 2]
+
+## sealed-eval refuses an unlisted held-out object (neg_sm2 omitted)
+$ /usr/bin/python3 /tmp/ix52-demo/repo/tools/heldout_guard.py --sealed-eval --freeze-tag ix52-demo-v1 --root /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum --sealed-manifest /tmp/ix52-demo/sealed-eight.json /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/sm2/bignum_neg_sm2.o
+REFUSED: object /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/sm2/bignum_neg_sm2.o belongs to 'x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT', which is not in the sealed manifest
+[exit 2]
+
+## sealed-eval refuses on the real tree while tools/ is dirty
+$ /usr/bin/python3 /mnt/1tb_kingston/Tekmerion/tools/heldout_guard.py --sealed-eval --sealed-manifest /tmp/ix52-demo/sealed-real-freeze.json --freeze-tag freeze-x86-sealed-v1 --root /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/curve25519/bignum_add_p25519.o
+REFUSED: working tree has changes to tracked files under tools/: M tools/emit_proof.py
+[exit 2]
+
+## emitter output file
+must-not-exist.txt exists: False
+
+## pipeline hashes (sha256)
+a399fce873dc5ec88a0eb0bc9cd7d107bc9eb5198e7770109f0a42d41aeff4a1  tools/heldout_guard.py
+f221dbe348f97be8e987e4cc92b9a1612a82c193e565d68bd763afcbd6645ff1  tools/emit_ref_proof_x86.py
+6521fe927a4d8feb456b46ec5b78109adcdbaea72cbed5cb55c84850a58cf79d  tools/emit_proof.py
+aa20c70ff5cefe79ab6f7f7b1e0e39f592fa7319bba6b9e3422494346579812b  tools/emit_ref_proof.py
+03cc859f889eaa26d306236a8188ddff91aeeab0a697b05482ed4012ba87482f  tools/test_heldout_modes.py

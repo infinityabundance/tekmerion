@@ -12,10 +12,23 @@ of the query's variables and memory references.  The accumulate list comes from
 tools/derive_steps.py.  The close comes from tools/w4_close.py and is driven by
 the witness.
 
+Guard modes come from tools/heldout_guard.py:
+
+  * ``--develop`` (default) refuses every held-out task id and its object,
+    exactly as before;
+  * ``--sealed-eval --sealed-manifest PATH --freeze-tag TAG`` allows exactly
+    the manifest-listed task ids and their ELF objects.  The generator never
+    opens a proof file, and the guard still refuses a proof-tree input.
+
 Usage:
   python3 tools/emit_proof.py \
       --task arm.bignum_sub_p384.BIGNUM_SUB_P384_CORRECT \
       --dir /tmp/ans --receipt /tmp/receipts/sub.json
+  python3 tools/emit_proof.py --sealed-eval \
+      --sealed-manifest research/receipts/sealed.json \
+      --freeze-tag freeze-x86-sealed-v1 \
+      --task arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT \
+      --dir /tmp/ans
 
 The task id is the only curve-bearing input; the operation, family and object
 path are parsed from it, and every arithmetic term comes from the query.
@@ -39,6 +52,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import disasm_steps  # noqa: E402
+import heldout_guard  # noqa: E402
 import w2_witnesses  # noqa: E402
 import w4_close  # noqa: E402
 from witness import Witness  # noqa: E402
@@ -47,7 +61,13 @@ from witness import Witness  # noqa: E402
 OP_RE = re.compile(r"bignum_(add|sub|neg)_")
 FAMILY_RE = re.compile(r"^arm\.bignum_(?:add|sub|neg)_([a-z0-9]+)\.")
 
-HELD_OUT_MARKERS = ("25519", "secp256k1", "p256k1", "sm2")
+
+def _guard(fn, *args, **kwargs):
+    """Run one guard check, turning a refusal into a clean SystemExit."""
+    try:
+        return fn(*args, **kwargs)
+    except heldout_guard.HeldOutRefused as exc:
+        raise SystemExit(f"refused: {exc}") from exc
 
 
 def op_from_task(task: str) -> str:
@@ -57,21 +77,7 @@ def op_from_task(task: str) -> str:
     return m.group(1)
 
 
-def is_heldout(text: str) -> bool:
-    low = text.lower()
-    return any(marker in low for marker in HELD_OUT_MARKERS)
-
-
-def assert_not_heldout(text: str, allow_heldout: bool = False) -> None:
-    """Fail closed if a held-out curve name appears in *text*."""
-    if allow_heldout:
-        return
-    if is_heldout(text):
-        raise SystemExit(f"refusing held-out marker in {text!r} "
-                         "(pass --allow-heldout for the frozen run)")
-
-
-def object_for(op: str, task: str) -> Path:
+def object_for(op: str, task: str, policy=None) -> Path:
     """Resolve the ELF object from the task id, not from a curve constant."""
     m = FAMILY_RE.match(task)
     if not m:
@@ -81,15 +87,18 @@ def object_for(op: str, task: str) -> Path:
     if len(matches) != 1:
         raise SystemExit(
             f"expected one object for {op}/{family}, found {matches}")
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_object, str(matches[0]), root=S2N)
     return matches[0]
 
 
 def guard_object(obj: Path) -> None:
     """Refuse anything that is not a machine-code object.
 
-    The pipeline reads only the ELF object and the benchmark query.  It never
-    opens a proof file, so the held-out guard is not applied to the object
-    path (the guard's markers deliberately match the object names too).
+    The pipeline reads only the ELF object and the benchmark query; it never
+    opens a proof file.  The marker guard is applied to the object path by
+    :func:`object_for`, so a held-out object is refused unless the sealed
+    manifest names its task.
     """
     if obj.suffix != ".o":
         raise SystemExit(f"refusing non-object input {obj}")
@@ -132,14 +141,16 @@ def emit(w: Witness) -> str:
     ]) + "\n"
 
 
-def build(op: str, task: str) -> Witness:
+def build(op: str, task: str, policy=None) -> Witness:
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_task, task)
     problems = load_problems()
     if task not in problems:
         raise SystemExit(f"unknown task id {task!r}")
     query = problems[task]["query"]
     theorem = problems[task]["json"]["theorem_name"]
     exec_name = theorem.removesuffix("_CORRECT") + "_EXEC"
-    obj = object_for(op, task)
+    obj = object_for(op, task, policy)
     if not obj.is_file():
         raise SystemExit(f"missing object file {obj}")
     guard_object(obj)
@@ -154,15 +165,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--out", help="write the answer here")
     ap.add_argument("--dir", help="write <dir>/<task>/answer.txt")
     ap.add_argument("--receipt", help="write the witness + metadata JSON here")
-    ap.add_argument("--allow-heldout", action="store_true",
-                    help="permit a held-out task id (frozen evaluation only)")
+    heldout_guard.add_mode_arguments(ap)
     args = ap.parse_args(argv)
+
+    try:
+        policy = heldout_guard.policy_from_args(args)
+    except heldout_guard.HeldOutRefused as exc:
+        raise SystemExit(f"refused: {exc}") from exc
 
     op = op_from_task(args.task)
     task = args.task
 
-    assert_not_heldout(task, allow_heldout=args.allow_heldout)
-    w = build(op, task)
+    w = build(op, task, policy)
     text = emit(w)
 
     out_path: Optional[Path] = None

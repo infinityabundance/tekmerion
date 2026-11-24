@@ -30,12 +30,20 @@ receipt.  ``--mode dev`` reads the modulus definition and the
 ``define_assert_from_elf`` word list out of the (non-held-out) human proof to
 build a scratch process; the judged answer does not.
 
-Held-out families are refused: this tool cannot be pointed at the sealed
-counterparts even by mistake.
+Guard modes are heldout_guard's, and both are fail-closed:
+
+  * ``--develop`` (default) refuses every held-out task id, object path and
+    proof-file read, exactly as before;
+  * ``--sealed-eval --sealed-manifest PATH --freeze-tag TAG`` allows exactly
+    the manifest-listed task ids and their ELF objects, and still refuses to
+    open any proof ``.ml`` of a sealed task (including in ``--mode dev``).
 
 Usage:
   python3 tools/emit_ref_proof_x86.py --task ID --mode answer --out answer.txt
   python3 tools/emit_ref_proof_x86.py --task ID --mode dev --out dev.ml
+  python3 tools/emit_ref_proof_x86.py --sealed-eval \
+      --sealed-manifest research/receipts/sealed.json \
+      --freeze-tag freeze-x86-sealed-v1 --task ID --mode answer --out answer.txt
 """
 
 from __future__ import annotations
@@ -97,13 +105,17 @@ DEVELOPMENT_ONLY = {
 }
 
 
-def _refuse_heldout(task: str) -> None:
-    low = task.lower()
-    for marker in heldout_guard.DEFAULT_HELD_OUT:
-        if marker.lower() in low:
-            raise SystemExit(
-                f"refused: task {task!r} carries held-out marker {marker!r}"
-            )
+def _guard(fn, *args, **kwargs):
+    """Run one guard check, turning a refusal into a clean SystemExit."""
+    try:
+        return fn(*args, **kwargs)
+    except heldout_guard.HeldOutRefused as exc:
+        raise SystemExit(f"refused: {exc}") from exc
+
+
+def _refuse_heldout(task: str, policy=None) -> None:
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_task, task)
 
 
 def load_problems():
@@ -112,7 +124,7 @@ def load_problems():
         return json.load(fh)
 
 
-def object_for(op: str, task: str) -> Path:
+def object_for(op: str, task: str, policy=None) -> Path:
     m = TASK_RE.match(task)
     if not m or m.group(1) != op:
         raise SystemExit(f"not an x86 bignum {op} task id: {task!r}")
@@ -120,7 +132,8 @@ def object_for(op: str, task: str) -> Path:
     matches = sorted(S2N.glob(f"x86/*/bignum_{op}_{family}.o"))
     if len(matches) != 1:
         raise SystemExit(f"expected one x86 object for {op}/{family}, found {matches}")
-    heldout_guard.check_path(str(matches[0]), root=S2N)
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_object, str(matches[0]), root=S2N)
     return matches[0]
 
 
@@ -201,15 +214,16 @@ def post_simulation(op: str, state: str, modulus: str,
     return "\n".join(lines)
 
 
-def build(op: str, task: str):
-    _refuse_heldout(task)
+def build(op: str, task: str, policy=None):
+    policy = policy or heldout_guard.develop_policy()
+    _refuse_heldout(task, policy)
     problems = load_problems()
     if task not in problems:
         raise SystemExit(f"unknown task id {task!r}")
     query = problems[task]["query"]
     theorem = problems[task]["json"]["theorem_name"]
     exec_name = theorem.removesuffix("_CORRECT") + "_EXEC"
-    obj = object_for(op, task)
+    obj = object_for(op, task, policy)
     entry, end = entry_and_end(query)
     full_steps = disasm_steps.disassemble(str(obj), arch="x86")
     steps = disasm_steps.enter_at(full_steps, entry)
@@ -238,9 +252,11 @@ def build(op: str, task: str):
 # Development harness (scratch process only; not the judged artefact)
 # --------------------------------------------------------------------------
 
-def modulus_definition(op: str, family: str) -> str:
+def modulus_definition(op: str, family: str, policy=None) -> str:
     proof = S2N / "x86" / "proofs" / f"bignum_{op}_{family}.ml"
-    heldout_guard.check_path(str(proof), root=S2N)
+    policy = policy or heldout_guard.develop_policy()
+    # check_proof refuses even a manifest-listed sealed task's proof text.
+    _guard(policy.check_proof, str(proof), root=S2N)
     src = proof.read_text(encoding="utf-8")
     m = re.search(r"^(let (p_\w+) = new_definition\s*`[^`]*`;;)", src, re.M)
     if not m:
@@ -248,9 +264,11 @@ def modulus_definition(op: str, family: str) -> str:
     return m.group(1)
 
 
-def machine_code_phrase(op: str, family: str, mcname: str, objrel: str) -> str:
+def machine_code_phrase(op: str, family: str, mcname: str, objrel: str,
+                        policy=None) -> str:
     proof = S2N / "x86" / "proofs" / f"bignum_{op}_{family}.ml"
-    heldout_guard.check_path(str(proof), root=S2N)
+    policy = policy or heldout_guard.develop_policy()
+    _guard(policy.check_proof, str(proof), root=S2N)
     src = proof.read_text(encoding="utf-8")
     m = re.search(r"define_assert_from_elf\s*\"[^\"]*\"\s*\"[^\"]*\"\s*\[(.*?)\];;",
                   src, re.S)
@@ -261,10 +279,11 @@ def machine_code_phrase(op: str, family: str, mcname: str, objrel: str) -> str:
             f'"{objrel}"[{words}];;')
 
 
-def dev_script(info) -> str:
+def dev_script(info, policy=None) -> str:
+    policy = policy or heldout_guard.develop_policy()
     mcname = info["exec_name"].lower().removesuffix("_exec") + "_mc"
     tmcname = mcname.removesuffix("_mc") + "_tmc"
-    moddef = modulus_definition(info["op"], info["family"])
+    moddef = modulus_definition(info["op"], info["family"], policy)
     return "\n".join([
         f"(* DEVELOPMENT_ONLY dev harness for {info['task']}.",
         "   Not a receipt: the judged artefact is the inlined answer.",
@@ -276,7 +295,8 @@ def dev_script(info) -> str:
         f'loadt "{REPO}/tools/csat_lib.ml";;',
         f'loadt "{REPO}/tools/bridge.ml";;',
         moddef,
-        machine_code_phrase(info["op"], info["family"], mcname, info["objrel"]),
+        machine_code_phrase(info["op"], info["family"], mcname,
+                            info["objrel"], policy),
         f'let {tmcname} = define_trimmed "{tmcname}" {mcname};;',
         f'let {info["exec_name"]} = X86_MK_CORE_EXEC_RULE {tmcname};;',
         f"let ref_goal = {info['query']};;",
@@ -294,15 +314,21 @@ def main(argv=None) -> int:
     ap.add_argument("--mode", choices=["answer", "dev"], default="answer")
     ap.add_argument("--out", required=True)
     ap.add_argument("--accumulate-out", help="write the derived step list here")
+    heldout_guard.add_mode_arguments(ap)
     args = ap.parse_args(argv)
+
+    try:
+        policy = heldout_guard.policy_from_args(args)
+    except heldout_guard.HeldOutRefused as exc:
+        raise SystemExit(f"refused: {exc}") from exc
 
     m = OP_RE.search(args.task)
     if not m:
         raise SystemExit(f"not a bignum add/sub/neg task: {args.task!r}")
     op = m.group(1)
-    info = build(op, args.task)
+    info = build(op, args.task, policy)
     text = (emit_ref_proof.inlined_answer(info["tactic"])
-            if args.mode == "answer" else dev_script(info))
+            if args.mode == "answer" else dev_script(info, policy))
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(text, encoding="utf-8")
     if args.accumulate_out:
