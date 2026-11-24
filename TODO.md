@@ -1179,7 +1179,7 @@ standalone lemma. `BRIDGE_CMP_FLAG_TAC` fails closed on other compare shapes.
   (`WORD_NEG_EQ_0`/`WORD_BITVAL_EQ_0`) and the OR-vs-joined-word zero test (new generic
   `WORD_JOIN_EQ_0` + `BRIDGE_NEG_REF_ZERO_TAC`). Receipt `research/receipts/r6-x86.md`; the nine
   held-out tasks were not answered, opened or disassembled (`r6-x86-sealed-guard.log`).
-- [~] **IX.51. Freeze, tag, then run — protocol defect found before any number.** Freeze commit
+- [x] **IX.51. Freeze, tag, then run — protocol defect found before any number.** *(Superseded by IX.52/IX.53: two-mode guard adopted; `freeze-x86-sealed-v1` remains as the record of the defect.)* Freeze commit
   `651519c`, tag `freeze-x86-sealed-v1` (pushed, `git describe --exact-match` confirms). Manifest
   hashes re-verified 10/10 before and after. The run produced **no answers at all**: the frozen
   emitter refuses any task whose *name or object path* contains a held-out marker, so all nine
@@ -1188,12 +1188,23 @@ standalone lemma. `BRIDGE_CMP_FLAG_TAC` fails closed on other compare shapes.
   zero evaluated.** The guard conflates two different things: forbidding *development* from reading
   held-out proof text, and forbidding *evaluation* of held-out objects. Isolation was partial for the
   honest reason that the emitter hardcodes `.bench/problems.json` and `.bench/s2n-bignum`.
-- [ ] **IX.52. Two guard modes.** `--develop` (default) refuses held-out task IDs, objects and proof
+- [x] **IX.52. Two guard modes.** `--develop` (default) refuses held-out task IDs, objects and proof
   files. `--sealed-eval` allows the declared sealed task IDs and their objects, while still refusing
   to open any proof `.ml` for those tasks, and refuses unless the freeze tag and manifest match. One
-  explicit manifest, no wildcard override.
-- [ ] **IX.53. Re-freeze and run once.** After IX.52: new manifest, new tag, then the same one-pass
-  protocol. Until then, no sealed number exists and none may be quoted.
+  explicit manifest, no wildcard override. *Implemented at `22fc118`; tested by `tools/test_heldout_modes.py`.*
+- [x] **IX.53. Re-freeze and run once.** Done 2026-11-24. Tag `freeze-x86-sealed-v2` (annotated;
+  `^{commit}` = `22fc118bb275…` = `manifest.freeze_commit`), manifest
+  `research/receipts/ix53-sealed-manifest.json`, judge `eval-20261124_003911` (1 core).
+  **OK, 9 of 9** — all nine sealed x86 tasks judged, none refused, none not-evaluated. Seconds:
+  add 22.138 / 23.178 / 17.939; sub 9.059 / 15.707 / 9.815; neg 3.320 / 3.651 / 3.102 (sum 107.909,
+  slowest 23.178 = 0.193 of the 120 s budget, no timeout). Replay: 9/9 `closed=1 hyps=0 axioms
+  2462→2462 unchanged=true`. Receipts: `research/receipts/ix53-sealed-run.md`,
+  `ix53-sealed-verdicts.csv`, `ix53-freeze-reconciled.md`. **Caveats that travel with the number:**
+  (i) `OK` is under the inherited inlined context (2,462 pre-loaded axioms, `before = after`), not an
+  axiom-free dependency-closed result; (ii) isolation is partial — the emitter hardcodes
+  `.bench/problems.json` and `.bench/s2n-bignum`, so the sealed set is protected by guard refusal of
+  non-manifest IDs/objects/proof files, not filesystem separation; (iii) no sealed proof `.ml` was
+  opened and only the nine sealed objects were disassembled.
 
 ### R6 · x86 capability (2026-11-23)
 
@@ -1391,7 +1402,7 @@ already done, the falsifiable experiment, and the cost. Only after that may it b
 
 ## X.I · Sealed evaluation
 
-- [ ] **X.31.** Run IX.53 once: nine `x86.bignum_{add,sub,neg}_{p25519,p256k1,sm2}.BIGNUM_*_CORRECT`
+- [x] **X.31.** *(Done — see IX.53.)* Run IX.53 once: nine `x86.bignum_{add,sub,neg}_{p25519,p256k1,sm2}.BIGNUM_*_CORRECT`
   tasks with `--sealed-eval`, the manifest and tag above, one pass, no tuning, no source changes.
   *Acceptance:* `OK/n` printed by the judge, per-task seconds, fresh replay `hyps=0` axioms
   unchanged, and a plain statement that isolation is partial (the emitter hardcodes
