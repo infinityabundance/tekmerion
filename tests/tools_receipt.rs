@@ -251,9 +251,22 @@ fn args(items: &[&str]) -> Vec<String> {
 #[test]
 fn dropin_sweep_argument_parsing() {
     assert!(dropin::parse_sweep_args(&[]).is_err());
-    assert!(dropin::parse_sweep_args(&args(&["--arch", "arm"])).is_err());
+    assert!(dropin::parse_sweep_args(&args(&["--arch", "riscv"])).is_err());
     assert!(dropin::parse_sweep_args(&args(&["--arch", "x86", "--bogus"])).is_err());
     assert!(dropin::parse_sweep_args(&args(&["--arch"])).is_err());
+    // Both architectures, and the pair, are now in scope.
+    assert_eq!(
+        dropin::parse_sweep_args(&args(&["--arch", "arm"]))
+            .unwrap()
+            .arch,
+        "arm"
+    );
+    assert_eq!(
+        dropin::parse_sweep_args(&args(&["--arch", "all"]))
+            .unwrap()
+            .arch,
+        "all"
+    );
 
     let parsed = dropin::parse_sweep_args(&args(&[
         "--arch",
@@ -264,6 +277,11 @@ fn dropin_sweep_argument_parsing() {
         "/g",
         "--hol",
         "/h",
+        "--answers",
+        "/a",
+        "--force",
+        "--timeout",
+        "120",
         "--dry-run",
     ]))
     .unwrap();
@@ -271,5 +289,8 @@ fn dropin_sweep_argument_parsing() {
     assert_eq!(parsed.dropin, PathBuf::from("/d"));
     assert_eq!(parsed.gen, PathBuf::from("/g"));
     assert_eq!(parsed.hol, PathBuf::from("/h"));
+    assert_eq!(parsed.answers, Some(PathBuf::from("/a")));
+    assert!(parsed.force);
+    assert_eq!(parsed.timeout, 120);
     assert!(parsed.dry_run);
 }

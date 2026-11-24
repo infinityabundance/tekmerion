@@ -2018,10 +2018,15 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
   family and ISA, with check time. Rerunnable mechanically; needs no benchmark context.
 - [x] **XII.F7.2 (partial).** All nine x86 sealed tasks built upstream with `check_axioms`
   passing (IX.54, `ix54-upstream-dropin.md`).
-- [~] **XII.F7.3 (in progress).** ARM 18: **16/18 built** when the run was interrupted
-  (`neg_p521`, `neg_sm2` remain). Same tree as the x86 nine.
-- [ ] **XII.F7.4.** Run the whole set (27) in one upstream tree in one pass and publish the
-  coverage table.
+- [x] **XII.F7.3.** ARM 18: **18/18 built** in one forced pass (`make -B`, one core) on
+  2026-11-24, `check_axioms` passing; the two stragglers are green too (`neg_p521` 44 s,
+  `neg_sm2` 31 s). Receipt: `research/receipts/ix56-upstream-coverage.md`.
+- [x] **XII.F7.4.** Whole set (27) in one upstream tree in one pass: **OK 27/27** (18 ARM +
+  9 x86), exit 0 each, theorem present, `check_axioms` true; JSON
+  `research/receipts/ix56-upstream-coverage.json`. Not a 675-coverage number (27/675 = 4.0%,
+  the other ~648 unattempted); ARM answers are spent development data; `axioms()` is
+  session-level (XII.F2 open). Timing defect: `p521/add_p521` 122 s against the 120 s budget
+  (XII.F9.2).
 
 ## XII.F8 — Next coverage blocks, in order of yield
 

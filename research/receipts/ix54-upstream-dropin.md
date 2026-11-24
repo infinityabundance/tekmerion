@@ -114,3 +114,16 @@ which assembles then builds the same nine tasks and prints the same per-task lin
 `f93e3ab0b1d530472802db814bc97acc470c487712bf765ac3b596ac8b0deca9`.
 The nine-task build is **unexercised** in the Rust path in this slice; see
 `research/receipts/ix54-dropin-retire.md`. Historical text above is untouched.
+
+---
+
+## Addendum (IX.56): the full 27-task upstream pass
+
+`research/receipts/ix56-upstream-coverage.md` extends the nine x86 tasks above to the whole
+set of generated proofs in **one forced pass** (`make -B`, one core, one tree at `5e0fc782`,
+HOL Light `d30e823`): **27/27** — 18 ARM + 9 x86 — built with the `_CORRECT` theorem present
+and `check_axioms ()` passing. The new count is 27, not 9. The nine x86 numbers in §3 were
+re-measured in that run and are superseded by the fresh values there (e.g. `add_p25519`
+70 s). Two caveats carried by the new receipt: `arm/p521/add_p521` takes 122 s against a
+120 s budget, and the ARM answers are spent development data, not a sealed result.
+Nothing in the sections above is rewritten.
