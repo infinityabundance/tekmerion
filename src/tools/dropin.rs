@@ -146,11 +146,136 @@ struct Assembled {
     body: String,
 }
 
+/// Canonicalise a numeral written in HOL's output: `0x4c` and `76` denote the
+/// same numeral, so both become `76`. Decimal tokens are left alone.
+fn canonical_number(tok: &str) -> String {
+    let hex = tok.strip_prefix("0x").or_else(|| tok.strip_prefix("0X"));
+    if let Some(hex) = hex {
+        if !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            if let Ok(v) = u128::from_str_radix(hex, 16) {
+                return v.to_string();
+            }
+        }
+    }
+    tok.to_string()
+}
+
+/// Tokenise a term so that whitespace and spacing around punctuation do not
+/// count, while every identifier, symbol and numeral still has to match. HOL's
+/// printer spells the quantifiers `forall`/`exists`; the source quotations use
+/// `!`/`?`, and the two denote the same constants.
+fn canonical_term(s: &str) -> String {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for c in s.chars() {
+        if c.is_alphanumeric() || c == '_' || c == '\'' {
+            cur.push(c);
+        } else {
+            if !cur.is_empty() {
+                tokens.push(canonical_number(&cur));
+                cur.clear();
+            }
+            if c.is_whitespace() {
+                continue;
+            }
+            tokens.push(match c {
+                '!' => "forall".to_string(),
+                '?' => "exists".to_string(),
+                _ => c.to_string(),
+            });
+        }
+    }
+    if !cur.is_empty() {
+        tokens.push(canonical_number(&cur));
+    }
+    tokens.join(" ")
+}
+
+/// Extract the HOL quotation that is the statement of `let <name> = time prove`
+/// from a pinned upstream proof file. The statement is everything between the
+/// first pair of backticks after the declaration.
+fn extract_quotation(source: &str, name: &str) -> Result<String, String> {
+    let needle = format!("let {name} = time prove");
+    let start = source
+        .match_indices(&needle)
+        .find(|(i, _)| *i == 0 || source.as_bytes()[i - 1] == b'\n')
+        .map(|(i, _)| i)
+        .ok_or_else(|| format!("upstream has no line starting `{needle}`"))?;
+    let rest = &source[start..];
+    let open = rest
+        .find('`')
+        .ok_or_else(|| format!("`{needle}` has no HOL quotation"))?;
+    let after = &rest[open + 1..];
+    let close = after
+        .find('`')
+        .ok_or_else(|| format!("`{needle}` has an unterminated quotation"))?;
+    Ok(after[..close].to_string())
+}
+
+/// Extract the whole `let <name> = time prove ... ;;` block verbatim. This is
+/// what makes the emitted derivation upstream's own line rather than a
+/// paraphrase: the bytes are copied from the pinned file.
+fn extract_theorem_block(source: &str, name: &str) -> Result<String, String> {
+    let needle = format!("let {name} = time prove");
+    let start = source
+        .match_indices(&needle)
+        .find(|(i, _)| *i == 0 || source.as_bytes()[i - 1] == b'\n')
+        .map(|(i, _)| i)
+        .ok_or_else(|| format!("upstream has no line starting `{needle}`"))?;
+    let rest = &source[start..];
+    let end = rest
+        .find(");;\n")
+        .map(|i| i + 4)
+        .or_else(|| rest.find(");;").map(|i| i + 3))
+        .ok_or_else(|| format!("`{needle}` has no terminating `);;`"))?;
+    Ok(rest[..end].trim_end().to_string())
+}
+
+/// The verbatim upstream subroutine derivation(s) for one task. On ARM this is
+/// the single `_SUBROUTINE_CORRECT` block. On x86 the IBT theorem is derived
+/// by `ADD_IBT_RULE` from the `_NOIBT_SUBROUTINE_CORRECT` block, so that block
+/// is emitted too — both copied from the pinned `.ml`, in upstream order.
+fn upstream_subroutine_blocks(
+    upstream: &Path,
+    arch: &str,
+    op: &str,
+    fam: &str,
+) -> Result<String, String> {
+    let base = format!("bignum_{op}_{fam}");
+    let root = format!("BIGNUM_{}_{}", op.to_uppercase(), fam.to_uppercase());
+    let path = upstream
+        .join(arch)
+        .join("proofs")
+        .join(format!("{base}.ml"));
+    let source = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut blocks = Vec::new();
+    if arch == "x86" {
+        blocks.push(extract_theorem_block(
+            &source,
+            &format!("{root}_NOIBT_SUBROUTINE_CORRECT"),
+        )?);
+    }
+    let subroutine = format!("{root}_SUBROUTINE_CORRECT");
+    let block = extract_theorem_block(&source, &subroutine)?;
+    let derives = block.contains("ARM_ADD_RETURN_NOSTACK_TAC")
+        || block.contains("X86_PROMOTE_RETURN_NOSTACK_TAC")
+        || block.contains("MATCH_ACCEPT_TAC(ADD_IBT_RULE");
+    if !derives {
+        return Err(format!(
+            "{}: {subroutine} does not use a recognised upstream return tactic",
+            path.display()
+        ));
+    }
+    blocks.push(block);
+    Ok(blocks.join("\n\n"))
+}
+
 fn assemble_core(
     task: &str,
     answer_path: &Path,
     dropin: &Path,
     problems: &Path,
+    upstream: &Path,
     stamp: bool,
 ) -> Result<Assembled, String> {
     let (arch, op, fam, f) = parse_task(task)?;
@@ -206,6 +331,13 @@ fn assemble_core(
         (String::new(), String::new())
     };
 
+    // The subroutine contract is a derived consequence of `_CORRECT`. The
+    // blocks are copied verbatim from the pinned upstream file; only the
+    // surrounding comment is ours.
+    let subroutine_blocks = upstream_subroutine_blocks(upstream, &arch, &op, &fam)?;
+    let subroutine = theorem.replace("_CORRECT", "_SUBROUTINE_CORRECT");
+    let upstream_rel = format!("{arch}/proofs/{base}.ml");
+
     let body = if arch == "arm" {
         format!(
             "(* DROP-IN experiment: generated Tekmerion ARM proof in upstream shape. *)\n\
@@ -214,7 +346,10 @@ fn assemble_core(
              let {exec_name} = ARM_MK_EXEC_RULE {base}_mc;;\n\n\
              let {mod_name} = new_definition `{mod_name} = {modulus}`;;\n\n\
              {stamp_pre}let {theorem} = time prove\n ({query},\n{answer});;\n\n\
-             {stamp_post}Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n",
+             {stamp_post}Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n\n\
+             (* Derived subroutine contract. Verbatim from {upstream_rel}; the\n                trust story is unchanged because nothing new is asserted. *)\n\
+             {subroutine_blocks}\n\n\
+             Printf.printf \"val {subroutine} : thm = %s\\n%!\" (string_of_thm {subroutine});;\n",
             dir = f.dir, mod_name = f.modulus_name, modulus = f.modulus,
         )
     } else {
@@ -226,7 +361,10 @@ fn assemble_core(
              let {exec_name} = X86_MK_CORE_EXEC_RULE {base}_tmc;;\n\n\
              let {mod_name} = new_definition `{mod_name} = {modulus}`;;\n\n\
              {stamp_pre}let {theorem} = time prove\n ({query},\n{answer});;\n\n\
-             {stamp_post}Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n",
+             {stamp_post}Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n\n\
+             (* Derived subroutine contract. Verbatim from {upstream_rel}; the\n                trust story is unchanged because nothing new is asserted. *)\n\
+             {subroutine_blocks}\n\n\
+             Printf.printf \"val {subroutine} : thm = %s\\n%!\" (string_of_thm {subroutine});;\n",
             dir = f.dir, mod_name = f.modulus_name, modulus = f.modulus,
         )
     };
@@ -244,9 +382,19 @@ pub fn assemble(args: &[String]) -> Result<(), String> {
     let problems = arg_value(args, "--problems")
         .map(PathBuf::from)
         .unwrap_or_else(|| repo_root().join(".bench/problems.json"));
+    let upstream = arg_value(args, "--upstream")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root().join(".bench/s2n-bignum"));
     let stamp = args.iter().any(|a| a == "--stamp");
 
-    let assembled = assemble_core(task, Path::new(answer_path), &dropin, &problems, stamp)?;
+    let assembled = assemble_core(
+        task,
+        Path::new(answer_path),
+        &dropin,
+        &problems,
+        &upstream,
+        stamp,
+    )?;
     if let Some(parent) = assembled.out.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -314,6 +462,9 @@ pub struct SweepArgs {
     pub dropin: PathBuf,
     pub gen: PathBuf,
     pub hol: PathBuf,
+    /// Read-only pin of the human proof tree, the source of the subroutine
+    /// contracts and their derivations.
+    pub upstream: PathBuf,
     pub dry_run: bool,
     /// Pass `make -B`, so every task rebuilds instead of being skipped.
     pub force: bool,
@@ -425,6 +576,7 @@ pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
     let mut dropin = repo.join(".bench/dropin");
     let mut gen = repo.join(".bench/dropin-gen");
     let mut hol = repo.join(".bench/hol-light");
+    let mut upstream = repo.join(".bench/s2n-bignum");
     let mut dry_run = false;
     let mut force = false;
     let mut timeout: u64 = 900;
@@ -452,6 +604,10 @@ pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
             }
             "--hol" => {
                 hol = PathBuf::from(sweep_value(args, i, "--hol")?);
+                i += 2;
+            }
+            "--upstream" => {
+                upstream = PathBuf::from(sweep_value(args, i, "--upstream")?);
                 i += 2;
             }
             "--timeout" => {
@@ -497,6 +653,7 @@ pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
         dropin: anchored(&repo, dropin),
         gen: anchored(&repo, gen),
         hol: anchored(&repo, hol),
+        upstream: anchored(&repo, upstream),
         dry_run,
         force,
         timeout,
@@ -1414,31 +1571,37 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
 
     for p in &planned {
         let answer = parsed.answer_path(&p.arch, &p.base);
-        let assembled =
-            match assemble_core(&p.task, &answer, &parsed.dropin, &problems, parsed.stamp) {
-                Ok(a) => a,
-                Err(e) => {
-                    // Assembly failed: no make, no exit code. Record it honestly.
-                    println!("wrote {}.ml (FAILED to assemble)", p.base);
-                    println!("  {}: assemble error: {e}", p.label());
-                    results.push(TaskResult {
-                        arch: p.arch.clone(),
-                        dir: p.dir.clone(),
-                        op: p.op.clone(),
-                        fam: p.fam.clone(),
-                        exit: None,
-                        theorem: None,
-                        check_axioms: false,
-                        seconds: None,
-                        timeout: false,
-                        log: answer.display().to_string(),
-                        exception: true,
-                        stamp_required: parsed.stamp,
-                        stamp_report: None,
-                    });
-                    continue;
-                }
-            };
+        let assembled = match assemble_core(
+            &p.task,
+            &answer,
+            &parsed.dropin,
+            &problems,
+            &parsed.upstream,
+            parsed.stamp,
+        ) {
+            Ok(a) => a,
+            Err(e) => {
+                // Assembly failed: no make, no exit code. Record it honestly.
+                println!("wrote {}.ml (FAILED to assemble)", p.base);
+                println!("  {}: assemble error: {e}", p.label());
+                results.push(TaskResult {
+                    arch: p.arch.clone(),
+                    dir: p.dir.clone(),
+                    op: p.op.clone(),
+                    fam: p.fam.clone(),
+                    exit: None,
+                    theorem: None,
+                    check_axioms: false,
+                    seconds: None,
+                    timeout: false,
+                    log: answer.display().to_string(),
+                    exception: true,
+                    stamp_required: parsed.stamp,
+                    stamp_report: None,
+                });
+                continue;
+            }
+        };
 
         if parsed.dry_run {
             println!("wrote {}.ml (dry run)", p.base);
@@ -1548,12 +1711,16 @@ pub fn run(args: &[String]) -> i32 {
         "checktime-table" => checktime_table(rest),
         "matched-table" => matched_table(rest),
         "obligation" => obligation(rest),
+        "premise" => premise(rest),
         _ => Err(
-            "usage: dropin <assemble|build|sweep|measure|stamp-table|checktime-table|matched-table|obligation> [options]\n\
+            "usage: dropin <assemble|build|sweep|measure|stamp-table|checktime-table|matched-table|obligation|premise> [options]\n\
              \n\
              sweep: dropin sweep --arch <x86|arm|all> [--answers <dir>] [--dir <dropin-dir>]
-             \x20      [--gen <gen-dir>] [--hol <hol-dir>] [--force] [--timeout <secs>]
-             \x20      [--json <path>] [--dry-run] [--stamp]
+             \x20      [--gen <gen-dir>] [--hol <hol-dir>] [--upstream <pin-dir>] [--force]
+             \x20      [--timeout <secs>] [--json <path>] [--dry-run] [--stamp]
+             \n\
+             assemble: dropin assemble --task <id> --answer <file> [--dir <dropin-dir>]
+             \x20        [--problems <json>] [--upstream <pin-dir>] [--stamp]
              \n\
              measure: dropin measure --tree <dir> --arch <x86|arm|all> [--hol <hol-dir>]
              \x20        [--force] [--timeout <secs>] [--json <path>] [--label <name>]
@@ -1568,6 +1735,9 @@ pub fn run(args: &[String]) -> i32 {
              \x20        [--json <path>] [--human-kernel K] [--generated-kernel K]
              \n\
              obligation: dropin obligation --human-tree <dir> --generated-tree <dir>
+             \x20        [--generated-theorem <correct|subroutine>] [--json <path>]
+             \n\
+             premise: dropin premise --upstream-tree <dir> --generated-tree <dir>
              \x20        [--json <path>]"
                 .to_string(),
         ),
@@ -1775,6 +1945,7 @@ impl MeasureArgs {
             dropin: self.tree.clone(),
             gen: self.gen.clone(),
             hol: self.hol.clone(),
+            upstream: repo_root().join(".bench/s2n-bignum"),
             dry_run: false,
             force: self.force,
             timeout: self.timeout,
@@ -3381,19 +3552,25 @@ fn normalise_conclusion(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Extract `val <name> : thm = |- <conclusion>` from a `.correct` file. The
-/// conclusion may span many lines; it ends at the next top-level `val` line or
-/// at a known non-conclusion output marker.
+/// Extract `<prefix><name> ... |- <conclusion>` from a `.correct` file. Two
+/// printers are accepted: `val <name> : thm = |- ...` (upstream's printer) and
+/// `VAL_UNCHANGED <name> |- ...` (the axiom-stamp instrument).
 fn extract_conclusion(text: &str, name: &str) -> Option<String> {
-    let prefix = format!("val {name} : thm = |- ");
+    let prefixes = [
+        format!("val {name} : thm = |- "),
+        format!("VAL_UNCHANGED {name} |- "),
+    ];
     let bare = format!("val {name} : thm =");
     let mut collecting = false;
     let mut buf = String::new();
     for line in text.lines() {
         if !collecting {
-            if let Some(rest) = line.strip_prefix(&prefix) {
+            let hit = prefixes
+                .iter()
+                .find_map(|p| line.strip_prefix(p).map(str::to_string));
+            if let Some(rest) = hit {
                 collecting = true;
-                buf.push_str(rest);
+                buf.push_str(&rest);
             } else if line.starts_with(&bare) {
                 // The marker exists but carries no `|- ` conclusion.
                 return Some(String::new());
@@ -3401,11 +3578,18 @@ fn extract_conclusion(text: &str, name: &str) -> Option<String> {
             continue;
         }
         if line.starts_with("val ")
+            || line.starts_with("VAL_")
+            || line.starts_with("T4_DONE")
+            || line.starts_with("EQUALS_THM")
             || line.starts_with("Running time:")
             || line.starts_with("STAMP_")
             || line.starts_with("CPU time")
             || line.starts_with("File ")
             || line.starts_with("Exception")
+            || line.trim().is_empty()
+            // HOL's printer indents every continuation line of a term, so a
+            // line at column 0 is the next programme output, not the term.
+            || !line.starts_with(char::is_whitespace)
         {
             break;
         }
@@ -3507,17 +3691,22 @@ fn build_obligation(
     fam: &str,
     human_path: &Path,
     generated_path: &Path,
+    generated_subroutine: bool,
 ) -> Obligation {
     let human_theorem = format!(
         "BIGNUM_{}_{}_SUBROUTINE_CORRECT",
         op.to_uppercase(),
         fam.to_uppercase()
     );
-    let generated_theorem = format!(
-        "BIGNUM_{}_{}_CORRECT",
-        op.to_uppercase(),
-        fam.to_uppercase()
-    );
+    let generated_theorem = if generated_subroutine {
+        human_theorem.clone()
+    } else {
+        format!(
+            "BIGNUM_{}_{}_CORRECT",
+            op.to_uppercase(),
+            fam.to_uppercase()
+        )
+    };
     let mut o = Obligation {
         arch: arch.to_string(),
         dir: dir.to_string(),
@@ -3636,12 +3825,16 @@ pub fn obligation(args: &[String]) -> Result<i32, String> {
         PathBuf::from(arg_value(args, "--human-tree").ok_or("--human-tree is required")?);
     let generated_tree =
         PathBuf::from(arg_value(args, "--generated-tree").ok_or("--generated-tree is required")?);
+    let generated_subroutine = arg_value(args, "--generated-theorem")
+        .map(|v| v == "subroutine")
+        .unwrap_or(false);
     let planned = plan(&SweepArgs {
         arch: "all".to_string(),
         answers: None,
         dropin: repo_root().join(".bench/dropin"),
         gen: repo_root().join(".bench/dropin-gen"),
         hol: repo_root().join(".bench/hol-light-stamp2"),
+        upstream: repo_root().join(".bench/s2n-bignum"),
         dry_run: false,
         force: true,
         timeout: 900,
@@ -3665,6 +3858,7 @@ pub fn obligation(args: &[String]) -> Result<i32, String> {
             &p.fam,
             &human_path,
             &generated_path,
+            generated_subroutine,
         ));
     }
 
@@ -3723,6 +3917,191 @@ pub fn obligation(args: &[String]) -> Result<i32, String> {
         fs::write(path, body.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(if missing == 0 { 0 } else { 1 })
+}
+
+/// One precondition check: is the generated `_CORRECT` conclusion the same
+/// statement as the quotation of upstream's `_CORRECT`?
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PremiseCheck {
+    arch: String,
+    dir: String,
+    op: String,
+    fam: String,
+    upstream: Option<String>,
+    built: Option<String>,
+    same: bool,
+    error: Option<String>,
+}
+
+fn build_premise(
+    arch: &str,
+    dir: &str,
+    op: &str,
+    fam: &str,
+    upstream_file: &Path,
+    generated_correct: &Path,
+) -> PremiseCheck {
+    let name = format!(
+        "BIGNUM_{}_{}_CORRECT",
+        op.to_uppercase(),
+        fam.to_uppercase()
+    );
+    let mut c = PremiseCheck {
+        arch: arch.to_string(),
+        dir: dir.to_string(),
+        op: op.to_string(),
+        fam: fam.to_string(),
+        upstream: None,
+        built: None,
+        same: false,
+        error: None,
+    };
+    let source = match fs::read_to_string(upstream_file) {
+        Ok(t) => t,
+        Err(e) => {
+            c.error = Some(format!("{}: {e}", upstream_file.display()));
+            return c;
+        }
+    };
+    let text = match fs::read_to_string(generated_correct) {
+        Ok(t) => t,
+        Err(e) => {
+            c.error = Some(format!("{}: {e}", generated_correct.display()));
+            return c;
+        }
+    };
+    let up = match extract_quotation(&source, &name) {
+        Ok(q) => q,
+        Err(e) => {
+            c.error = Some(e);
+            return c;
+        }
+    };
+    let built = match extract_conclusion(&text, &name) {
+        Some(b) => b,
+        None => {
+            c.error = Some(format!(
+                "{} has no `{name}` conclusion",
+                generated_correct.display()
+            ));
+            return c;
+        }
+    };
+    let up_c = canonical_term(&up);
+    let built_c = canonical_term(&built);
+    c.same = up_c == built_c;
+    c.upstream = Some(up_c);
+    c.built = Some(built_c);
+    c
+}
+
+/// `dropin premise --upstream-tree <dir> --generated-tree <dir> [--json P]`.
+///
+/// G1a of IX.64: our built `_CORRECT` conclusion equals upstream's `_CORRECT`
+/// quotation, after canonicalising numeral notation and whitespace.
+pub fn premise(args: &[String]) -> Result<i32, String> {
+    let upstream_tree =
+        PathBuf::from(arg_value(args, "--upstream-tree").ok_or("--upstream-tree is required")?);
+    let generated_tree =
+        PathBuf::from(arg_value(args, "--generated-tree").ok_or("--generated-tree is required")?);
+    let planned = plan(&SweepArgs {
+        arch: "all".to_string(),
+        answers: None,
+        dropin: repo_root().join(".bench/dropin"),
+        gen: repo_root().join(".bench/dropin-gen"),
+        hol: repo_root().join(".bench/hol-light"),
+        upstream: repo_root().join(".bench/s2n-bignum"),
+        dry_run: false,
+        force: false,
+        timeout: 900,
+        json: None,
+        stamp: false,
+    });
+    let checks: Vec<PremiseCheck> = planned
+        .iter()
+        .map(|p| {
+            build_premise(
+                &p.arch,
+                &p.dir,
+                &p.op,
+                &p.fam,
+                &upstream_tree
+                    .join(&p.arch)
+                    .join("proofs")
+                    .join(format!("{}.ml", p.base)),
+                &generated_tree
+                    .join(&p.arch)
+                    .join(&p.dir)
+                    .join(format!("{}.correct", p.base)),
+            )
+        })
+        .collect();
+    let same = checks.iter().filter(|c| c.same).count();
+    let missing = checks.iter().filter(|c| c.error.is_some()).count();
+    println!("## G1a premise: generated _CORRECT vs upstream _CORRECT quotation\n");
+    println!("| arch | task | same? | note |");
+    println!("|---|---|---|---|");
+    for c in &checks {
+        println!(
+            "| {} | {}/{}_{} | {} | {} |",
+            c.arch,
+            c.dir,
+            c.op,
+            c.fam,
+            py_bool(c.same),
+            c.error.as_deref().unwrap_or("")
+        );
+    }
+    println!(
+        "\nPREMISE total={} same={} different={} missing={}",
+        checks.len(),
+        same,
+        checks.len() - same - missing,
+        missing
+    );
+    for c in &checks {
+        if !c.same && c.error.is_none() {
+            println!("DIFF {} {}/{}_{}", c.arch, c.dir, c.op, c.fam);
+            if let (Some(u), Some(b)) = (&c.upstream, &c.built) {
+                let d = first_difference(u, b);
+                if let Some(d) = d {
+                    println!("  offset {}", d.offset);
+                    println!("  upstream: {}", d.human);
+                    println!("  built:    {}", d.generated);
+                }
+            }
+        }
+    }
+    if let Some(path) = arg_value(args, "--json") {
+        let path = Path::new(path);
+        ensure_parent(path)?;
+        let mut out = String::new();
+        out.push_str("{\n");
+        out.push_str(&format!(
+            "  \"counts\": {{\"tasks\": {}, \"same\": {}, \"different\": {}, \"missing\": {}}},\n",
+            checks.len(),
+            same,
+            checks.len() - same - missing,
+            missing
+        ));
+        out.push_str("  \"tasks\": [\n");
+        for (i, c) in checks.iter().enumerate() {
+            let comma = if i + 1 == checks.len() { "" } else { "," };
+            out.push_str(&format!(
+                "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"same\": {}, \"error\": {}}}{}\n",
+                json_str(&c.arch),
+                json_str(&c.dir),
+                json_str(&c.op),
+                json_str(&c.fam),
+                c.same,
+                json_opt_str(c.error.as_deref()),
+                comma
+            ));
+        }
+        out.push_str("  ]\n}\n");
+        fs::write(path, out.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    Ok(if same == checks.len() { 0 } else { 1 })
 }
 
 #[cfg(test)]
@@ -4768,9 +5147,8 @@ mod tests {
 
     #[test]
     fn extract_conclusion_normalises_and_stops_at_the_next_marker() {
-        let text = "noise\nval BIGNUM_ADD_P256_CORRECT : thm = |- forall z x.\n\
-                    a /\\ b\n       ==> c\n\
-                    val OTHER : thm = |- T\nRunning time: 1.0 sec\n";
+        // HOL's printer indents every continuation line of a term.
+        let text = "noise\nval BIGNUM_ADD_P256_CORRECT : thm = |- forall z x.\n      a /\\ b\n      ==> c\nval OTHER : thm = |- T\nRunning time: 1.0 sec\n";
         let c = extract_conclusion(text, "BIGNUM_ADD_P256_CORRECT").unwrap();
         assert_eq!(c, "forall z x. a /\\ b ==> c");
         assert_eq!(extract_conclusion(text, "MISSING"), None);
@@ -4855,6 +5233,136 @@ mod tests {
         assert_eq!(
             tasks[0].get("verdict").unwrap().as_str(),
             Some("different: neither strictly stronger nor strictly weaker (incomparable)")
+        );
+    }
+
+    #[test]
+    fn canonical_term_erases_notation_and_spacing() {
+        // The built conclusion spells `!` as `forall`, writes numerals in
+        // decimal, and differs only in whitespace from the quotation.
+        let built = "forall z x y m n pc.\n  nonoverlapping (word pc,80) (z,8 * 4)\n  ==> read PC s = word (pc + 76)";
+        let quoted =
+            "!z x y m n pc. nonoverlapping (word pc,0x50) (z,8*4)\n ==> read PC s = word (pc+0x4c)";
+        assert_eq!(canonical_term(built), canonical_term(quoted));
+    }
+
+    #[test]
+    fn canonical_term_keeps_genuine_differences() {
+        assert_ne!(
+            canonical_term("read PC s = word (pc + 0x4c)"),
+            canonical_term("read PC s = word (pc + 0x4d)")
+        );
+        assert_ne!(
+            canonical_term("MAYCHANGE [events] ,, MAYCHANGE [memory :> bignum(z,4)]"),
+            canonical_term(
+                "MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI ,, MAYCHANGE [memory :> bignum(z,4)]"
+            )
+        );
+    }
+
+    const UPSTREAM_SAMPLE: &str = "\
+let BIGNUM_ADD_P25519_CORRECT = time prove\n \
+ (`!z x y m n pc. nonoverlapping (word pc,0x50) (z,8 * 4) ==> P`,\n \
+  BODY_TAC);;\n\
+\
+let BIGNUM_ADD_P25519_SUBROUTINE_CORRECT = time prove\n \
+ (`!z x y m n pc returnaddress. nonoverlapping (word pc,0x50) (z,8 * 4) ==> Q`,\n \
+  ARM_ADD_RETURN_NOSTACK_TAC BIGNUM_ADD_P25519_EXEC BIGNUM_ADD_P25519_CORRECT);;\n";
+
+    #[test]
+    fn extract_quotation_reads_the_statement() {
+        let q = extract_quotation(UPSTREAM_SAMPLE, "BIGNUM_ADD_P25519_SUBROUTINE_CORRECT").unwrap();
+        assert!(q.starts_with("!z x y m n pc returnaddress."));
+        assert!(q.ends_with("==> Q"));
+    }
+
+    #[test]
+    fn extract_quotation_does_not_confuse_noibt_name() {
+        let src =
+            "let BIGNUM_ADD_P25519_NOIBT_SUBROUTINE_CORRECT = time prove\n (`NOIBT`,\n  T);;\n\
+let BIGNUM_ADD_P25519_SUBROUTINE_CORRECT = time prove\n (`IBT`,\n  T);;\n";
+        assert_eq!(
+            extract_quotation(src, "BIGNUM_ADD_P25519_SUBROUTINE_CORRECT").unwrap(),
+            "IBT"
+        );
+    }
+
+    #[test]
+    fn extract_theorem_block_is_verbatim() {
+        let block =
+            extract_theorem_block(UPSTREAM_SAMPLE, "BIGNUM_ADD_P25519_SUBROUTINE_CORRECT").unwrap();
+        assert!(block.starts_with("let BIGNUM_ADD_P25519_SUBROUTINE_CORRECT = time prove"));
+        assert!(block.contains(
+            "ARM_ADD_RETURN_NOSTACK_TAC BIGNUM_ADD_P25519_EXEC BIGNUM_ADD_P25519_CORRECT);;"
+        ));
+        assert!(!block.contains("BIGNUM_ADD_P25519_CORRECT = time prove"));
+    }
+
+    #[test]
+    fn upstream_blocks_emit_noibt_then_ibt_for_x86() {
+        let dir = std::env::temp_dir().join(format!("tek-ix64-{}", std::process::id()));
+        let proofs = dir.join("x86/proofs");
+        fs::create_dir_all(&proofs).unwrap();
+        let src = "let BIGNUM_ADD_SM2_NOIBT_SUBROUTINE_CORRECT = time prove\n (`NOIBT`,\n  X86_PROMOTE_RETURN_NOSTACK_TAC bignum_add_sm2_tmc BIGNUM_ADD_SM2_CORRECT);;\n\n\
+let BIGNUM_ADD_SM2_SUBROUTINE_CORRECT = time prove\n (`IBT`,\n  MATCH_ACCEPT_TAC(ADD_IBT_RULE BIGNUM_ADD_SM2_NOIBT_SUBROUTINE_CORRECT));;\n";
+        fs::write(proofs.join("bignum_add_sm2.ml"), src).unwrap();
+        let out = upstream_subroutine_blocks(&dir, "x86", "add", "sm2").unwrap();
+        let noibt = out.find("NOIBT_SUBROUTINE_CORRECT = time prove").unwrap();
+        let ibt = out
+            .find("let BIGNUM_ADD_SM2_SUBROUTINE_CORRECT = time prove")
+            .unwrap();
+        assert!(noibt < ibt);
+        assert!(out.contains("ADD_IBT_RULE"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn upstream_blocks_reject_an_unknown_derivation() {
+        let dir = std::env::temp_dir().join(format!("tek-ix64-bad-{}", std::process::id()));
+        let proofs = dir.join("arm/proofs");
+        fs::create_dir_all(&proofs).unwrap();
+        let src = "let BIGNUM_NEG_P256_SUBROUTINE_CORRECT = time prove\n (`Q`,\n  ALL_TAC);;\n";
+        fs::write(proofs.join("bignum_neg_p256.ml"), src).unwrap();
+        let err = upstream_subroutine_blocks(&dir, "arm", "neg", "p256").unwrap_err();
+        assert!(err.contains("recognised upstream return tactic"), "{err}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sweep_parses_upstream_override() {
+        let parsed = parse_sweep_args(&args(&["--arch", "arm", "--upstream", "/pin"])).unwrap();
+        assert_eq!(parsed.upstream, PathBuf::from("/pin"));
+    }
+
+    #[test]
+    fn obligation_compares_the_subroutine_name_when_asked() {
+        let dir = std::env::temp_dir().join(format!("tek-ix64-ob-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let human = dir.join("human.correct");
+        let generated = dir.join("generated.correct");
+        let concl = "forall z x n pc. read PC s = returnaddress";
+        fs::write(
+            &human,
+            format!("val BIGNUM_NEG_P256_SUBROUTINE_CORRECT : thm = |- {concl}\n"),
+        )
+        .unwrap();
+        fs::write(
+            &generated,
+            format!("val BIGNUM_NEG_P256_SUBROUTINE_CORRECT : thm = |- {concl}\n"),
+        )
+        .unwrap();
+        let o = build_obligation("arm", "p256", "neg", "p256", &human, &generated, true);
+        assert_eq!(o.generated_theorem, "BIGNUM_NEG_P256_SUBROUTINE_CORRECT");
+        assert_eq!(o.verdict, ObligationVerdict::SameStatement);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn conclusion_extraction_stops_at_column_zero_output() {
+        let text = "val BIGNUM_NEG_P256_CORRECT : thm = |- forall z.\n       P z\nWarning: inventing type variables\nStepping to state s1\n";
+        assert_eq!(
+            extract_conclusion(text, "BIGNUM_NEG_P256_CORRECT").unwrap(),
+            "forall z. P z"
         );
     }
 }

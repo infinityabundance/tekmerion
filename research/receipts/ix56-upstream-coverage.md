@@ -196,3 +196,34 @@ machinery refuses a `MatchedComparison` for every row and no ratio is published.
 The `seconds` above remain the only wall-clock data, but they are not a
 same-obligation ratio. IX.60 publishes the deterministic primitive-inference
 counts side by side instead.
+
+---
+
+## Addendum (IX.64, 2026-11-24): the drop-in now supplies upstream's theorem names
+
+This receipt's "27/27" was a per-file `_CORRECT` acceptance result. IX.64 changes what the
+files themselves contain.
+
+`research/receipts/ix64-subroutine-obligation.md` shows (a) our built `_CORRECT` is the same
+statement as upstream's `_CORRECT` quotation for all 27 tasks (`PREMISE total=27 same=27`),
+and (b) appending upstream's own derivation — copied verbatim from the pinned `.ml` — gives
+`_SUBROUTINE_CORRECT` with a conclusion identical to the human-built one
+(`OBLIGATIONS total=27 same=27`).
+
+Consequences for this receipt's numbers:
+
+- The **task set is unchanged**: 18 ARM + 9 x86, the same 27 sources.
+- The `seconds` column is now the whole-file wall time including the derived step. The
+  derived step itself is separately timed in IX.64: 0.33–0.36 s CPU (ARM) and about 0.39–
+  0.42 s (x86 NOIBT) plus 0.0002–0.0004 s (IBT).
+- Coverage in the sense upstream cares about is now **27 of 27 for
+  `_SUBROUTINE_CORRECT`**, up from 0 of 27 — but still not all of upstream's spec list for
+these functions: `_SUBROUTINE_SAFE` and the x86 `_WINDOWS` variants are not emitted, and the
+  full 452/1758-obligation proof tree was not built.
+- The wall-clock numbers here still must not be paired with the human numbers as a
+  same-obligation ratio: the *proof bodies* differ and the human timings in IX.60 were taken
+  under a different instrument. IX.64 makes the contract comparable; it does not make the
+  two derivations a matched pair.
+
+No freeze was created. A `v6` freeze is required before any sealed run cites the new file
+shape.

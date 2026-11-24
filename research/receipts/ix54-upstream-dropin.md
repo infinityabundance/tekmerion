@@ -180,3 +180,39 @@ Consequences that must travel with any citation of this receipt:
    obligation itself is TODO `XIV.G`.
 4. No check-time and no inference-count *ratio* may be formed between the two, which is why
    IX.60 reports `n = 0 matched pairs`.
+
+---
+
+## Addendum (IX.64, 2026-11-24): the corrected position — the drop-in now proves upstream's name
+
+`research/receipts/ix64-subroutine-obligation.md` settles consequence 2 and 3 above.
+
+**Premise (G1a).** Our built `_CORRECT` conclusion is the *same statement* as upstream's
+`_CORRECT` quotation for **27 of 27** tasks. `dropin premise` canonicalises hex numerals and
+whitespace and reports `PREMISE total=27 same=27 different=0 missing=0`. The only
+notational differences were `!` vs `forall` and `0x50`/`0x4c` vs `80`/`76`.
+
+**Derivation.** Because the premise holds, the upstream one-line derivation can be applied
+to our theorem. `assemble` now emits, **verbatim from the pinned
+`<arch>/proofs/bignum_<op>_<fam>.ml`**, the `_SUBROUTINE_CORRECT` statement and its upstream
+tactic (`ARM_ADD_RETURN_NOSTACK_TAC` on ARM; `X86_PROMOTE_RETURN_NOSTACK_TAC` plus
+`ADD_IBT_RULE` on x86), after our unchanged `_CORRECT` proof.
+
+**Result.** All **27 of 27** drop-in files now prove
+`BIGNUM_<OP>_<FAM>_SUBROUTINE_CORRECT`, and `dropin obligation --generated-theorem
+subroutine` reports `OBLIGATIONS total=27 same=27` against the human-built conclusions in
+`.bench/human-baseline`. `check_axioms` passes throughout. The derived obligation costs
+0.33–0.36 s CPU per ARM task and 0.39–0.42 s per x86 task on top of the already-measured
+proof.
+
+**What this repairs.** Consequence 3 is superseded: the obligations upstream states are now
+proved for **27 of 27**, not 0 of 27. Consequence 2 is partly repaired: upstream's
+`collect-specs.sh` finds all 27 names (18 ARM + 9 x86), and the directory default whole-tree
+`make -j1` is green in both `arm/` and `x86/`. It is **not** fully repaired: we do not emit
+the `_SUBROUTINE_SAFE` or `_WINDOWS` variants, and a full `make proofs` over the whole tree
+was not run (452 ARM + 1758 x86 obligations). Consequence 1 is untouched: the contracts are
+still different statements — we now prove the human one *in addition*.
+
+This upgrades "per-file acceptance" to "upstream-compatible" for the correctness
+obligation, and only for it. A new freeze (`v6`) is required before any sealed run citing
+these files; none was created here.

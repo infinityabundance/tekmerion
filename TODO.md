@@ -2378,9 +2378,14 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
   landing in the upstream tree with gate + provenance + check time. Every later theorem
   then arrives already gated, provenance-checked and upstream-built.
 - [ ] **XIII.G2.** Then `triple`, `optneg`, `cmul` by small constants.
-- [ ] **XIII.G3.** Whole-family drop-in needs the name mismatch reconciled: upstream
-  proves `_SUBROUTINE_CORRECT`, our replacement files prove `_CORRECT`; a whole-tree
-  `make` fails on dependants until this is settled.
+- [ ] **XIII.G3.** Whole-family drop-in name mismatch: **repaired for the correctness
+  obligation** (IX.64). Our built `_CORRECT` was shown to be the same statement as upstream's
+  `_CORRECT` for 27/27, and assembly now appends upstream's own `_SUBROUTINE_CORRECT`
+  statement and derivation verbatim from the pinned `.ml`. All 27 files now prove
+  `BIGNUM_<OP>_<FAM>_SUBROUTINE_CORRECT`; `collect-specs.sh` finds 18 ARM + 9 x86 names and
+  whole-tree `make -j1` (default target) is green in both arch directories. Still open:
+  `_SUBROUTINE_SAFE` and x86 `_WINDOWS` variants are not emitted, and a full `make proofs`
+  over the tree (452 ARM + 1758 x86 obligations) has not been run.
 
 ## XIII.H — Native checker (unchanged gaps; coverage must not hide them)
 
@@ -2550,17 +2555,31 @@ IX.60 measured that our drop-in proves `BIGNUM_*_CORRECT` while upstream's human
 postcondition, weaker precondition, broader ABI frame on the human side). So "27/27 upstream
 acceptance" is a per-file build result, not "the theorems upstream states are now proved".
 
-- [ ] **XIV.G1.** Extend the emitter to the **`_SUBROUTINE_CORRECT`** obligation: the
-  return-address precondition, the `PC = returnaddress` postcondition and the
-  `MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI` frame. Do it for one task first
-  (`arm/curve25519/add_p25519`), with the upstream goal quotation as the statement source, and
-  land it in the upstream tree under a pre-search freeze.
-- [ ] **XIV.G2.** Only then may a same-obligation check-time or inference-count comparison be
-  formed. `XIV.B2`'s ratio is blocked on this.
-- [ ] **XIV.G3.** Whole-tree `make` in the upstream copy must pass, not just per-file targets.
-  This is the difference between "drop-in file" and "upstream-compatible proof".
-- [ ] **XIV.G4.** Record the honest current position wherever 27/27 is cited: the same
-  obligations upstream states are **0 of 27** today.
+- [x] **XIV.G1.** `_SUBROUTINE_CORRECT` is now **derived**, not re-proved (IX.64).
+  `dropin premise` showed our built `_CORRECT` conclusion is the same statement as upstream's
+  `_CORRECT` quotation for **27/27** (`PREMISE total=27 same=27`). Assembly now appends the
+  upstream statement and derivation **verbatim from the pinned `.ml`**: on ARM
+  `ARM_ADD_RETURN_NOSTACK_TAC`, on x86 `X86_PROMOTE_RETURN_NOSTACK_TAC` (NOIBT) then
+  `ADD_IBT_RULE` (IBT). `dropin obligation --generated-theorem subroutine` reports
+  `OBLIGATIONS total=27 same=27` against `.bench/human-baseline`; `check_axioms` passes. The
+  derived step costs 0.33–0.36 s CPU (ARM), 0.39–0.42 s (x86 NOIBT) + 0.0002–0.0004 s (IBT).
+  Firing control: replacing the tactic with `ALL_TAC` fails with
+  `TAC_PROOF: Unsolved goals`.
+- [ ] **XIV.G2.** A same-obligation check-time or inference-count comparison is now
+  **possible** (the contract is identical for 27/27) but has not been performed under a
+  matched instrument: the proof bodies still differ, and IX.60's human timings were taken
+  under a different instrument. `XIV.B2`'s ratio remains blocked on running both sides under
+  one measurement pass.
+- [x] **XIV.G3.** Whole-tree build: the directory default target (`libs2nbignum.a`, assembly)
+  is green under `make -j1` in both `arm/` and `x86/`, and upstream's `collect-specs.sh` now
+  finds all 27 names. **Not** done: a full `make proofs` over the whole tree (452 ARM + 1758
+  x86 obligations); only the 27 drop-in `.correct` files exist. `count-proofs.sh` reports
+  `18/452` and `18/1758` and still lists the missing `_SUBROUTINE_SAFE` / `_WINDOWS` variants.
+- [x] **XIV.G4.** Corrected position, now recorded in IX.64 and the addenda to IX.54/IX.56:
+  the correctness obligations upstream states are **27 of 27**, not 0 of 27. The claim is
+  scoped to `_SUBROUTINE_CORRECT`; safety and x86 Windows variants remain unproved here, and
+  “upstream-compatible” is a contract/name/derivation claim, not proof identity. A new freeze
+  (`v6`) is required before any sealed run cites the new file shape; none was created.
 
 ## XIV.H — Where the inference work actually goes (measured, IX.62)
 
