@@ -1815,15 +1815,21 @@ carefully justified authority.
     and a downstream consumer. *Original:* Replace the human s2n-bignum proofs with the generated
     ones and run s2n-bignum's own build. Passing removes the inherited-context caveat; it is the
     cheapest strong upgrade available.
-- [x] **XI.L.4. Containerise the sealed run.** Done 2026-11-24, IX.54. Freeze
-  `freeze-x86-sealed-v3` / `2705f5b`; nine tasks emitted and judged inside a `docker`
-  container (`--network none`, `--read-only`, tmpfs `/work`, read-only input mounts).
-  **OK 9/9** (`eval-20261124_043844`, max 23.864 s). O10.2 control: the benchmark proof
-  path is absent inside the container (`No such file or directory`), so isolation is
-  structural for the proof data. Residual limits: host userland is borrowed read-only
-  (glibc), and the judge dir was tmpfs so the `*.judge.txt` files were not preserved —
-  the host-side log is (`research/receipts/ix54/container-run.log`). Next run must
-  bind-mount the eval dir. Receipts `ix54-sealed-container.md`, `ix54/`.
+- [x] **XI.L.4. Containerise the sealed run.** Done 2026-11-24, IX.54 and IX.55. IX.54
+  (`freeze-x86-sealed-v3`) emitted and judged all nine inside a container
+  (`--network none`, `--read-only`, tmpfs `/work`, read-only mounts): **OK 9/9**, proof path
+  absent inside. **IX.55** (`freeze-x86-sealed-v4`, `ix55-sealed-container.md`) repeats it with
+  a writable `/out` bind mount: **OK 9/9** (`eval-20261124_061439`), the whole judge directory
+  preserved, the collector independently re-run (`OK,9`) and the nine challenges re-verified
+  (9/9). Evidence: `research/receipts/ix55/` + `eval.sha256` binding the 282 MB directory.
+  Residual limit: host userland is borrowed read-only (glibc).
+- [ ] **XI.L.11. [NEW] Statement provenance from upstream.** The comparator reads the same
+  `problems.json` the producer used, so it cannot catch an error in the corpus. Extract each
+  statement from the pinned upstream `s2n-bignum` `.ml` using `problems.json["json"]`'s
+  `goal_linenum_start/end` and `goal_colnum_start/end`, and compare it to the bench query.
+  Decision needed: this reads the *goal lines* of a sealed proof. The statement is not secret
+  (it is already known and the upstream repo is public); only the goal range is read, and the
+  sealed evaluation is complete and frozen. Record the exception in a decision record.
 - [ ] **XI.L.5. Full-898 sealed pass.** Freeze arm Z, one pass over all 898 FC tasks at the pin;
   unsupported shapes refused fast and counted as FAIL; report `OK/898`, zero `CHEATING`, split
   development-seen vs sealed. Then **submit the CSV to the leaderboard** so adjudication moves
