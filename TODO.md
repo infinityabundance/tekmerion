@@ -1179,9 +1179,21 @@ standalone lemma. `BRIDGE_CMP_FLAG_TAC` fails closed on other compare shapes.
   (`WORD_NEG_EQ_0`/`WORD_BITVAL_EQ_0`) and the OR-vs-joined-word zero test (new generic
   `WORD_JOIN_EQ_0` + `BRIDGE_NEG_REF_ZERO_TAC`). Receipt `research/receipts/r6-x86.md`; the nine
   held-out tasks were not answered, opened or disassembled (`r6-x86-sealed-guard.log`).
-- [ ] **IX.51. Freeze, tag, then run.** After IX.50: write the freeze manifest, commit, **tag and push**
-  the tag, then evaluate the nine untouched x86 counterparts **once** in an isolated filesystem.
-  Tag-after-run does not count as a freeze.
+- [~] **IX.51. Freeze, tag, then run — protocol defect found before any number.** Freeze commit
+  `651519c`, tag `freeze-x86-sealed-v1` (pushed, `git describe --exact-match` confirms). Manifest
+  hashes re-verified 10/10 before and after. The run produced **no answers at all**: the frozen
+  emitter refuses any task whose *name or object path* contains a held-out marker, so all nine
+  sealed IDs were rejected in ~0.035 s (`refused: task '…p25519…' carries held-out marker '25519'`).
+  The judge therefore saw zero answers; the CSV has no rows. **This is not a 0/9 solve rate — it is
+  zero evaluated.** The guard conflates two different things: forbidding *development* from reading
+  held-out proof text, and forbidding *evaluation* of held-out objects. Isolation was partial for the
+  honest reason that the emitter hardcodes `.bench/problems.json` and `.bench/s2n-bignum`.
+- [ ] **IX.52. Two guard modes.** `--develop` (default) refuses held-out task IDs, objects and proof
+  files. `--sealed-eval` allows the declared sealed task IDs and their objects, while still refusing
+  to open any proof `.ml` for those tasks, and refuses unless the freeze tag and manifest match. One
+  explicit manifest, no wildcard override.
+- [ ] **IX.53. Re-freeze and run once.** After IX.52: new manifest, new tag, then the same one-pass
+  protocol. Until then, no sealed number exists and none may be quoted.
 
 ### R6 · x86 capability (2026-11-23)
 
