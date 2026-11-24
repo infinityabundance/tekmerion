@@ -18,6 +18,12 @@ re-ran **inside** the container as part of every emitter invocation (the guard i
 fail-closed), so the nine answers below were emitted under `--sealed-eval` with a
 live git tag check.
 
+**Re-verification note (added after the run).** The guard was strengthened on
+2026-11-24 to refuse unless `git diff <freeze_commit> -- tools` is empty, so the tree
+must *be* the frozen code and not merely clean. `tools/` has since moved, so
+`verify_freeze(v3)` now refuses at the current HEAD. That is intended: to re-verify this
+receipt, check out `2705f5b` first. The recorded run itself is unaffected.
+
 ## 1. Step 1 — what the harness actually reads
 
 Read-only inspection of `.bench/combine-answer-and-setup.py`,
