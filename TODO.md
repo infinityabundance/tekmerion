@@ -1478,9 +1478,11 @@ counterexample).
 not count. Control: planted unsound rules and the CVE-2026-72844 definitional class.
 
 **O4 — context closure.** [ ] O4.1 re-check from an empty kernel (base axioms only, every
-definition replayed); [ ] O4.2 print the axiom set and require equality with the declared
-whitelist; [ ] O4.3 upstream drop-in: replace the human s2n-bignum proof and pass the upstream
-build unmodified. Today's sealed `OK` is under 2,462 inherited axioms, so O4 is **not met**.
+definition replayed); [~] O4.2 print the axiom set and require equality with the declared
+whitelist — **upstream `check_axioms()` now passes for one task** (`bignum_add_p25519`,
+IX.54 drop-in: only `INFINITY_AX`, `SELECT_AX`, `ETA_AX`); [~] O4.3 upstream drop-in:
+**one of nine done** (`ix54-upstream-dropin.md`, 70 s, mutation control fires). The other
+eight and the whole-tree build remain open. *Original:* Today's sealed `OK` is under 2,462 inherited axioms, so O4 is **not met**.
 
 **O5 — artifact binding.** [ ] O5.1 digests of object bytes, loader view, ISA model, spec, kernel
 binary, checker binaries, certificate engines; [ ] O5.2 theorem is about the *shipped* bytes;
@@ -1798,9 +1800,15 @@ carefully justified authority.
   superseding the reviewer's unreceipted 95.864 s. *Original text:* Flag-only `ADCS/SBCS XZR` chains are not encoded;
   the tooling excludes `XZR` destinations, so the correction flag is unconstrained. Fix, then
   re-run the affected `add_p384`/`add_p256k1` tasks.
-- [ ] **XI.L.3. Upstream drop-in build.** Replace the human s2n-bignum proofs with the generated
-  ones and run s2n-bignum's own build. Passing removes the inherited-context caveat; it is the
-  cheapest strong upgrade available.
+- [x] **XI.L.3. Upstream drop-in build.** **Done for one task 2026-11-24**
+    (`research/receipts/ix54-upstream-dropin.md`): the generated proof for
+    `x86.bignum_add_p25519` loads in upstream s2n-bignum, proves the stated theorem, and
+    **`check_axioms ()` passes** (only the three basic axioms) in 70 s. Mutation control: changing
+    the modulus by 1 makes the build fail (`CSAT … exit 10`, exit 2). Measured correction: the
+    2,462-axiom figure is a property of the bench's inlined template, not of upstream `base.ml`.
+    Remaining: the other eight tasks and the whole-tree build. *Original:* Replace the human
+    s2n-bignum proofs with the generated ones and run s2n-bignum's own build. Passing removes the
+    inherited-context caveat; it is the cheapest strong upgrade available.
 - [x] **XI.L.4. Containerise the sealed run.** Done 2026-11-24, IX.54. Freeze
   `freeze-x86-sealed-v3` / `2705f5b`; nine tasks emitted and judged inside a `docker`
   container (`--network none`, `--read-only`, tmpfs `/work`, read-only input mounts).
