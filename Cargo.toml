@@ -16,7 +16,7 @@ exclude = ["/target", "/.github"]
 sha2 = "0.10"
 
 [features]
-# Off by default. `tools/mutate_lifecycle.py` enables this feature and drives a
+# Off by default. `src/bin/mutate_lifecycle.rs` enables this feature and drives a
 # deterministic lifecycle fault through TEKMERION_FAULT.
 default = []
 fault-injection = []

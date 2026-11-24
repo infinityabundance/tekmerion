@@ -98,3 +98,19 @@ Tracked under `research/receipts/ix54/`: `build_all.py` (the generator/builder) 
 `dropin-add_p25519.log` (one build log). The full tree, all nine `.ml`/`.correct`/logs are
 under git-ignored `.bench/`. To reproduce, copy `.bench/s2n-bignum` to `.bench/dropin`, then
 run `build_all.py`.
+
+---
+
+## Addendum (Slice D): retired in favour of `dropin sweep`
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/ix54/build_all.py` is **retired, not ported as a byte-identical copy**.
+Its two building blocks already existed in Rust (`dropin assemble`, `dropin build`); the
+driver loop is now
+`cargo run --release --bin dropin -- sweep --arch x86 [--dir D] [--gen G] [--hol H]`,
+which assembles then builds the same nine tasks and prints the same per-task lines and
+`OK n/9` summary. The tracked file and the copy that produced the recorded run
+(`.bench/dropin-gen/build_all.py`) were byte-identical, sha256
+`f93e3ab0b1d530472802db814bc97acc470c487712bf765ac3b596ac8b0deca9`.
+The nine-task build is **unexercised** in the Rust path in this slice; see
+`research/receipts/ix54-dropin-retire.md`. Historical text above is untouched.

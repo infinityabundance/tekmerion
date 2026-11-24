@@ -70,8 +70,16 @@ export PATH=/work/bin:/home/one/.elan/toolchains/leanprover--lean4---v4.29.1/bin
 eval "$(/work/bin/opam env)"
 
 echo "=== EMIT ==="
+# The Python emitter (tools/emit_ref_proof_x86.py) was ported to Rust; the
+# binary is `emit_x86` (src/bin/emit_x86.rs) and takes the same flags.
+# `target/` is not part of the sealed tree, so the NEXT SEALED RUN MUST mount a
+# prebuilt binary read-only into the container and point EMIT_X86 at it, e.g.
+#   --volume "$REPO/target/release/emit_x86:/work/bin/emit_x86:ro" \
+#   --env EMIT_X86=/work/bin/emit_x86
+# This path has not been exercised inside the container since the port.
+EMIT_X86=${EMIT_X86:-target/release/emit_x86}
 for id in $IDS; do
-  python3 tools/emit_ref_proof_x86.py \
+  "$EMIT_X86" \
     --sealed-eval \
     --sealed-manifest research/receipts/ix54-sealed-manifest.json \
     --freeze-tag freeze-x86-sealed-v3 \

@@ -337,3 +337,15 @@ a run without it on `PATH` would be an environment failure, not a proof failure.
 `KeyError`, which is a harness/Python-3.14 issue, not a task failure). All 18 answers passed
 the `ocamlc -i` syntactic gate and none was dropped. Host: 16 cores, 65 GB free RAM at start;
 no OOM. Disk 26 GB before, 25 GB after.
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/bridge/curve_check.py` is deleted. Reproduction is now
+`cargo run --release --bin curve_check -- tools/bridge.ml`; its stdout and exit code are
+byte-identical to the Python original, sha256
+`080cb2a11dcd3ef75b0d09227d506118620d8cfb6ea6427c5f800ce589a9f581`. The golden capture
+and Rust re-run are recorded in `research/receipts/slice-d-rust-receipts.md`. The historical
+command line above is left untouched: it was true when written.

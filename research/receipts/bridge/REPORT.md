@@ -584,3 +584,19 @@ goal's split condition. Expanding the whole context
   `ref_neg` lemma exists yet, so `BRIDGE_SUB_TAC` / `BRIDGE_NEG_TAC` still carry
   the arithmetic split. Converting them is the natural next step.
 - P-384 is `arm` only; x86 and the montgomery/ladder targets remain.
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`). The three Python helpers
+this report names are deleted; reproduction is now:
+
+| former file | Rust command | byte identity |
+|---|---|---|
+| `research/receipts/bridge/instrument.py` | `cargo run --release --bin instrument -- tools/bridge.ml <out.ml>` | output file and stdout identical, sha256 `f4bba97fba1ba3281acd60cb8aa09275ef7f62a205d3c32254c858a5999c5b23` (119 phrases) |
+| `research/receipts/bridge/curve_check.py` | `cargo run --release --bin curve_check -- tools/bridge.ml` | stdout and exit code identical, sha256 `080cb2a11dcd3ef75b0d09227d506118620d8cfb6ea6427c5f800ce589a9f581` (`statements=71 hits=0`) |
+| `research/receipts/bridge/make_inlined_answer.py` | `cargo run --release --bin inline_answer -- <out> <mode>` | all four modes identical, sha256 `39fd3d64…`, `b36a7fd0…`, `b5a674d5…`, `83d90067…` (full digests in `slice-d-rust-receipts.md`) |
+
+The figures this report quotes were measured with the Python original at the time of
+writing; the Rust output reproduces them exactly. Historical text above is untouched.

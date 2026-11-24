@@ -6,9 +6,9 @@ reviewed and reproduced without access to `.bench/`.
 
 | file | what it is |
 |---|---|
-| `build-sealed-court-v3.py` | builds the pruned input tree (nine objects, prefix-only `ml_files`, bench scripts). Host paths are relative to the repository root via `Path(__file__)`; check the copy before running elsewhere. |
+| `build-sealed-court-v3.py` | **Ported to Rust and deleted in Slice D.** The builder is now `src/bin/sealed_court.rs` (`cargo run --release --bin sealed_court`); it reproduces the Python tree byte for byte (`diff -r --no-dereference` clean). The row is kept for the historical record. |
 | `run-sealed-court-v3.sh` | the host launcher: the exact `docker run` line (`--network none`, `--read-only`, tmpfs `/work`, read-only input mounts). |
-| `run-inside.sh` | what runs inside the container: emit → combine → judge → collect, then the O10.2 control. |
+| `run-inside.sh` | what runs inside the container: emit → combine → judge → collect, then the O10.2 control. The emitter is now the prebuilt Rust `emit_x86` binary selected by `EMIT_X86`; the next sealed run must mount it read-only into the container. |
 | `container-run.log` | verbatim host-side output of the **valid** run: 9 × `syntactic check PASSED`, 9 × `PROFILE … OK`, `SUMMARY / OK,9`, `docker_exit=0`. |
 
 ## Limitations, stated plainly
@@ -31,9 +31,10 @@ reviewed and reproduced without access to `.bench/`.
 ## Reproduce
 
 ```
-python3 .bench/build-sealed-court-v3.py      # rebuilds .bench/sealed-court-v3
-bash .bench/run-sealed-court-v3.sh full      # runs the container
+cargo run --release --bin sealed_court   # rebuilds .bench/sealed-court-v3
+bash .bench/run-sealed-court-v3.sh full  # runs the container
 ```
 
-Both scripts are in this directory; copy them to `.bench/` before use, since
-they write there.
+The builder used to be `build-sealed-court-v3.py`; it is deleted (Slice D) and the Rust
+binary now writes the same tree. `run-sealed-court-v3.sh` and `run-inside.sh` are still in
+this directory; copy them to `.bench/` before use, since they write there.

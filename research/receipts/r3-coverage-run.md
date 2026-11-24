@@ -266,3 +266,15 @@ programs were instrumented under `.bench/r3-replay*`:
 These are separate copies. They do not change the frozen files, the answers,
 or any verdict, and they are not used to claim an `OK`. The failing-step labels
 in §5 come from them.
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/bridge/make_inlined_answer.py` is deleted. Reproduction is now
+`cargo run --release --bin inline_answer -- <out-answer.txt> <mode>`; all four modes are
+byte-identical to the Python original (`add-ref` sha256
+`39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f`; the other three
+are tabulated in `research/receipts/slice-d-rust-receipts.md`). Historical text above is
+untouched.

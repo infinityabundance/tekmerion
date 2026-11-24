@@ -382,3 +382,17 @@ must bind-mount the eval directory; this is recorded as limitation 1 in
 `ix54/README.md`.
 
 Disk: 22 GB free before and after (floor 3 GB).  No branch change, no commit.
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/ix54/build-sealed-court-v3.py` is deleted. Reproduction is now
+`cargo run --release --bin sealed_court` (defaults: repo = this repository,
+court = `<repo>/.bench/sealed-court-v3`; `--repo` and `--court` override both). The rebuilt
+tree is byte-identical to the Python one under `diff -r --no-dereference`, and the build
+stdout (per-template `prefix_lines` lines plus `du -sh`) is identical; the golden tree
+manifest digest is `107f0d9821bdda30df75dfb24626d262fb4866927800ff0f84ccc1884404b626`.
+The container has **not** been re-run since the port. See
+`research/receipts/slice-d-rust-receipts.md`. Historical text above is untouched.

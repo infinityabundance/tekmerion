@@ -389,3 +389,14 @@ tactics, `.bench/s2n-bignum` sources, any human proof file.
 * `add_p521` costs 96.882 s of its 120 s budget (0.81) and is the least
   headroom in the set; `add_p384` is 50.168 s (0.42) and `add_p256k1` 22.061 s
   (0.18).  No task timed out.
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/bridge/curve_check.py` is deleted. Reproduction is now
+`cargo run --release --bin curve_check -- tools/bridge.ml`; its stdout and exit code are
+byte-identical to the Python original, sha256
+`080cb2a11dcd3ef75b0d09227d506118620d8cfb6ea6427c5f800ce589a9f581`. See
+`research/receipts/slice-d-rust-receipts.md`. Historical text above is untouched.

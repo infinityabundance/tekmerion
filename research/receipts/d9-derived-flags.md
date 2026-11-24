@@ -163,3 +163,15 @@ correction and was not rewired here.
   kernel-checked only through the certified SAT refutation, not as a standalone lemma.
 - P-256 was not rewired: its add route had no transcribed carry fact to remove. P-521 add is
   still failing (pre-existing; out of scope here).
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/bridge/make_inlined_answer.py` is deleted. Reproduction of the
+`add-p384` tactic is now
+`cargo run --release --bin inline_answer -- <out-answer.txt> add-p384`; the output is
+byte-identical to the Python original, sha256
+`83d90067847d411d3eee7fb7b6ca6b532d790ab262341e6ba5d248d54db15044`. See
+`research/receipts/slice-d-rust-receipts.md`. Historical text above is untouched.

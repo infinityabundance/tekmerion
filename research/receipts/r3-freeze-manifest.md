@@ -128,3 +128,21 @@ part of the official judge and are used unmodified.
   those denominators.
 
 After the run the ten hashes above are recomputed and must match.
+
+---
+
+## Addendum (Slice D): ported to Rust
+
+Ported to Rust in Slice D on `staging` (base commit `b28016c`).
+`research/receipts/bridge/make_inlined_answer.py` is deleted. Reproduction is now
+`cargo run --release --bin inline_answer -- <out-answer.txt> <mode>`; all four modes are
+byte-identical to the Python original:
+
+| mode | sha256 |
+|---|---|
+| `add-ref` | `39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f` |
+| `sub` | `b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176` |
+| `neg` | `b5a674d51aeb621f11611200a7e47451b4d6ada2e434728bf60e6eb49143cb6e` |
+| `add-p384` | `83d90067847d411d3eee7fb7b6ca6b532d790ab262341e6ba5d248d54db15044` |
+
+See `research/receipts/slice-d-rust-receipts.md`. Historical text above is untouched.
