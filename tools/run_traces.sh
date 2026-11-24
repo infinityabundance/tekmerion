@@ -45,11 +45,15 @@ BENCH="$ROOT/.bench"
 HOL="$BENCH/hol-light"
 TT="$HOL/TacticTrace"
 S2N="$BENCH/s2n-bignum"
-INJECT="$ROOT/tools/run_traces_inject.py"
-PATCHER="$ROOT/tools/patch_wrapper.py"
+INJECT_SRC="$ROOT/src/tools/run_traces_inject.rs"
+PATCHER_SRC="$ROOT/src/tools/patch_wrapper.rs"
 MODULE="$ROOT/trace/exptrace_failure.ml"
-ATTEMPT_ID_TOOL="$ROOT/tools/attempt_id.py"
-ATTEMPT_LIFECYCLE="$ROOT/tools/attempt_lifecycle.py"
+ATTEMPT_ID_SRC="$ROOT/src/tools/attempt_id.rs"
+ATTEMPT_LIFECYCLE_SRC="$ROOT/src/tools/attempt_lifecycle.rs"
+INJECT=(cargo run --offline --quiet --manifest-path "$ROOT/Cargo.toml" --bin run_traces_inject --)
+PATCHER=(cargo run --offline --quiet --manifest-path "$ROOT/Cargo.toml" --bin patch_wrapper --)
+ATTEMPT_ID_TOOL=(cargo run --offline --quiet --manifest-path "$ROOT/Cargo.toml" --bin attempt_id --)
+ATTEMPT_LIFECYCLE=(cargo run --offline --quiet --manifest-path "$ROOT/Cargo.toml" --bin attempt_lifecycle --)
 
 usage() {
   sed -n '3,44p' "${BASH_SOURCE[0]}"
@@ -184,10 +188,10 @@ mkdir -p "$work_dir" || die "cannot create work directory: $work_dir"
 [ -s "$TT/hol_lib_inlined.mli" ] || die "missing $TT/hol_lib_inlined.mli"
 [ -s "$MODULE" ] || die "missing $MODULE"
 [ -f "$S2N/$arch/proofs/base.ml" ] || die "missing $S2N/$arch/proofs/base.ml"
-[ -f "$INJECT" ] || die "missing $INJECT"
-[ -f "$PATCHER" ] || die "missing $PATCHER"
-[ -f "$ATTEMPT_ID_TOOL" ] || die "missing $ATTEMPT_ID_TOOL"
-[ -f "$ATTEMPT_LIFECYCLE" ] || die "missing $ATTEMPT_LIFECYCLE"
+[ -f "$INJECT_SRC" ] || die "missing $INJECT_SRC"
+[ -f "$PATCHER_SRC" ] || die "missing $PATCHER_SRC"
+[ -f "$ATTEMPT_ID_SRC" ] || die "missing $ATTEMPT_ID_SRC"
+[ -f "$ATTEMPT_LIFECYCLE_SRC" ] || die "missing $ATTEMPT_LIFECYCLE_SRC"
 
 export HOLLIGHT_DIR="$HOL"
 export TACLOGGER_DIR="$TT"
@@ -218,7 +222,7 @@ prepare_fresh_dir() {
 build_proof="$proof"
 if [ -n "$inject_text" ]; then
   build_proof="$work_dir/proof.injected.ml"
-  python3 "$INJECT" "$proof" "$build_proof" "$inject_text" \
+  "${INJECT[@]}" "$proof" "$build_proof" "$inject_text" \
     > "$work_dir/inject.log" 2>&1 ||
     { cat "$work_dir/inject.log" >&2; die "injection failed"; }
 fi
@@ -226,9 +230,9 @@ fi
 proof_hash="$(sha256sum "$proof" | awk '{print $1}')"
 wrapper_hash="$(sha256sum "$TT/kernel_wrapper.ml" | awk '{print $1}')"
 module_hash="$(sha256sum "$MODULE" | awk '{print $1}')"
-patcher_hash="$(sha256sum "$PATCHER" | awk '{print $1}')"
-inject_helper_hash="$(sha256sum "$INJECT" | awk '{print $1}')"
-lifecycle_hash="$(sha256sum "$ATTEMPT_LIFECYCLE" | awk '{print $1}')"
+patcher_hash="$(sha256sum "$PATCHER_SRC" | awk '{print $1}')"
+inject_helper_hash="$(sha256sum "$INJECT_SRC" | awk '{print $1}')"
+lifecycle_hash="$(sha256sum "$ATTEMPT_LIFECYCLE_SRC" | awk '{print $1}')"
 
 case "$proof" in
   "$S2N"/*) theorem_id="${proof#"$S2N"/}" ;;
@@ -238,19 +242,19 @@ esac
 attempt_id=
 if [ "$mode" = patched ]; then
   attempt_id="$(
-    python3 "$ATTEMPT_ID_TOOL" \
+    "${ATTEMPT_ID_TOOL[@]}" \
       --theorem-id "$theorem_id" \
       --proof "$proof" \
       --inject "$inject_text" \
       --wrapper-sha "$wrapper_hash" \
       --module-sha "$module_hash"
-  )" || die "attempt_id.py failed"
+  )" || die "attempt_id failed"
   case "$attempt_id" in
     *[!0-9a-f]*|'')
-      die "attempt_id.py produced an unexpected id: $attempt_id" ;;
+      die "attempt_id produced an unexpected id: $attempt_id" ;;
   esac
   [ "${#attempt_id}" -eq 64 ] ||
-    die "attempt_id.py did not produce a 64-character digest: $attempt_id"
+    die "attempt_id did not produce a 64-character digest: $attempt_id"
 fi
 
 build_key="$(
@@ -323,9 +327,9 @@ EOF
   [ -s "$work_dir/wrapped.org" ] || die "tracer modify produced no output"
 
   if [ "$mode" = patched ]; then
-    python3 "$ATTEMPT_LIFECYCLE" "$work_dir/wrapped.org" \
+    "${ATTEMPT_LIFECYCLE[@]}" "$work_dir/wrapped.org" \
       "$work_dir/wrapped.org.scaffolded" > "$work_dir/lifecycle.log" 2>&1 ||
-      { cat "$work_dir/lifecycle.log" >&2; die "attempt_lifecycle.py failed"; }
+      { cat "$work_dir/lifecycle.log" >&2; die "attempt_lifecycle failed"; }
     wrapped_org="$work_dir/wrapped.org.scaffolded"
   else
     wrapped_org="$work_dir/wrapped.org"
@@ -335,9 +339,9 @@ EOF
     wrapper="$TT/kernel_wrapper.ml"
   else
     wrapper="$work_dir/kernel_wrapper.patched.ml"
-    python3 "$PATCHER" "$TT/kernel_wrapper.ml" "$wrapper" \
+    "${PATCHER[@]}" "$TT/kernel_wrapper.ml" "$wrapper" \
       > "$work_dir/patch.log" 2>&1 ||
-      { cat "$work_dir/patch.log" >&2; die "patch_wrapper.py failed"; }
+      { cat "$work_dir/patch.log" >&2; die "patch_wrapper failed"; }
   fi
 
   wrapped="$work_dir/wrapped.ml"

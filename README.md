@@ -164,9 +164,9 @@ examples/              reassembly.rs: the gap s2n-bignum names, step by step
 trace/                 failure-side extension to TacticTrace
   exptrace_failure.ml  write-through failure capture, `exptrace_guard`
   fixtures/            wrapper golden file and conformance record pairs
-tools/patch_wrapper.py rewrites a generated kernel_wrapper.ml, fail-closed
-tools/trace_conformance.py  stock vs patched success records, field by field
-tools/test_write_through.py proves a failure reaches disk before any dump
+src/bin/patch_wrapper.rs  rewrites a generated kernel_wrapper.ml, fail-closed
+src/bin/trace_conformance.rs  stock vs patched success records, field by field
+tests/write_through.rs proves a failure reaches disk before any dump
 tools/selftest.sh      runs every check above in one command
 mutation-report.json   last measured parser mutation score
 lifecycle-report.json  last measured lifecycle mutation score

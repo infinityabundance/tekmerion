@@ -51,26 +51,24 @@ else
   fail "tools/run_traces.sh syntax check failed"
 fi
 
-if python3 -c \
-    'import ast, pathlib; ast.parse(pathlib.Path("tools/run_traces_inject.py").read_text())'
-then
-  printf 'OK: tools/run_traces_inject.py parses\n'
+if cargo run --offline --quiet --bin run_traces_inject -- --self-test; then
+  printf 'OK: run_traces_inject self-test passed\n'
 else
-  fail "tools/run_traces_inject.py syntax check failed"
+  fail "cargo run --bin run_traces_inject -- --self-test failed"
 fi
 
-section "2b/7 attempt_id.py self-test"
-if python3 tools/attempt_id.py --self-test; then
+section "2b/7 attempt_id self-test"
+if cargo run --offline --quiet --bin attempt_id -- --self-test; then
   printf 'OK: attempt_id self-test passed\n'
 else
-  fail "tools/attempt_id.py --self-test failed"
+  fail "cargo run --bin attempt_id -- --self-test failed"
 fi
 
-section "2c/7 attempt_lifecycle.py self-test"
-if python3 tools/attempt_lifecycle.py --self-test; then
+section "2c/7 attempt_lifecycle self-test"
+if cargo run --offline --quiet --bin attempt_lifecycle -- --self-test; then
   printf 'OK: attempt_lifecycle self-test passed\n'
 else
-  fail "tools/attempt_lifecycle.py --self-test failed"
+  fail "cargo run --bin attempt_lifecycle -- --self-test failed"
 fi
 
 section "2d/7 run_traces.sh argument parsing"
@@ -96,24 +94,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "3/7 patch_wrapper.py --self-test"
-if python3 tools/patch_wrapper.py --self-test; then
+section "3/7 patch_wrapper --self-test"
+if cargo run --offline --quiet --bin patch_wrapper -- --self-test; then
   printf 'OK: patch_wrapper self-test passed\n'
 else
-  fail "patch_wrapper.py --self-test failed"
+  fail "cargo run --bin patch_wrapper -- --self-test failed"
 fi
 
 # ---------------------------------------------------------------------------
-section "4/7 trace_conformance.py --self-test"
-if python3 tools/trace_conformance.py --self-test; then
+section "4/7 trace_conformance --self-test"
+if cargo run --offline --quiet --bin trace_conformance -- --self-test; then
   printf 'OK: trace_conformance self-test passed\n'
 else
-  fail "trace_conformance.py --self-test failed"
+  fail "cargo run --bin trace_conformance -- --self-test failed"
 fi
 
 # ---------------------------------------------------------------------------
 section "5/7 write-through self-test (module compiled against stubs, no dump)"
-if python3 tools/test_write_through.py; then
+if cargo test --offline --test write_through -- --nocapture; then
   printf 'OK: write-through self-test passed\n'
 else
   fail "write-through self-test failed"

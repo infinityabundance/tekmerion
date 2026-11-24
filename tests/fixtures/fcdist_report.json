@@ -1,0 +1,309 @@
+{
+  "all_declarations": 5811,
+  "all_files_scanned": 689,
+  "commit": "5e0fc782ae6d587c2ae40faf2c2c4d0b637e6240",
+  "corpus": {
+    "corpus_categories": {
+      "bit_vector": 437,
+      "functional_correctness_arm": 463,
+      "functional_correctness_x86": 435,
+      "generic": 686,
+      "program_state": 601
+    },
+    "corpus_fc_by_arch": {
+      "arm": 463,
+      "x86": 435
+    },
+    "corpus_fc_total": 898,
+    "corpus_total_problems": 2622,
+    "direct_fc_by_arch": {
+      "arm": 463,
+      "x86": 435
+    },
+    "direct_fc_total": 898,
+    "matched": 898,
+    "only_corpus": 0,
+    "only_corpus_examples": [],
+    "only_direct": 0,
+    "only_direct_examples": [],
+    "path": "<PROBLEMS>"
+  },
+  "direct": {
+    "ensures2_goal": 0,
+    "equiv_named": 57,
+    "families": {
+      "by_family": {
+        "add": 87,
+        "cmul": 18,
+        "deamont": 12,
+        "demont": 12,
+        "double": 59,
+        "emontredc": 3,
+        "half": 10,
+        "inv": 20,
+        "invsqrt": 4,
+        "madd": 4,
+        "mod": 53,
+        "modinv": 4,
+        "montinv": 12,
+        "montmul": 47,
+        "montsqr": 47,
+        "mul": 58,
+        "neg": 12,
+        "optneg": 12,
+        "sqr": 36,
+        "sqrt": 4,
+        "sub": 25,
+        "tomont": 15,
+        "triple": 15
+      },
+      "by_family_arch": {
+        "add": {
+          "arm": 44,
+          "x86": 43
+        },
+        "cmul": {
+          "arm": 6,
+          "x86": 12
+        },
+        "deamont": {
+          "arm": 5,
+          "x86": 7
+        },
+        "demont": {
+          "arm": 5,
+          "x86": 7
+        },
+        "double": {
+          "arm": 31,
+          "x86": 28
+        },
+        "emontredc": {
+          "arm": 3
+        },
+        "half": {
+          "arm": 5,
+          "x86": 5
+        },
+        "inv": {
+          "arm": 10,
+          "x86": 10
+        },
+        "invsqrt": {
+          "arm": 2,
+          "x86": 2
+        },
+        "madd": {
+          "arm": 2,
+          "x86": 2
+        },
+        "mod": {
+          "arm": 13,
+          "x86": 40
+        },
+        "modinv": {
+          "arm": 2,
+          "x86": 2
+        },
+        "montinv": {
+          "arm": 6,
+          "x86": 6
+        },
+        "montmul": {
+          "arm": 31,
+          "x86": 16
+        },
+        "montsqr": {
+          "arm": 31,
+          "x86": 16
+        },
+        "mul": {
+          "arm": 32,
+          "x86": 26
+        },
+        "neg": {
+          "arm": 6,
+          "x86": 6
+        },
+        "optneg": {
+          "arm": 6,
+          "x86": 6
+        },
+        "sqr": {
+          "arm": 20,
+          "x86": 16
+        },
+        "sqrt": {
+          "arm": 2,
+          "x86": 2
+        },
+        "sub": {
+          "arm": 13,
+          "x86": 12
+        },
+        "tomont": {
+          "arm": 6,
+          "x86": 9
+        },
+        "triple": {
+          "arm": 5,
+          "x86": 10
+        }
+      },
+      "classified": 569,
+      "unclassified": 106
+    },
+    "fc_by_arch": {
+      "arm": 463,
+      "x86": 435
+    },
+    "fc_duplicate_goal_extra": 0,
+    "fc_total": 898,
+    "fc_unique_goal": 898,
+    "length_by_arch": {
+      "arm": {
+        "bands": {
+          "0-24": 88,
+          "100-199": 91,
+          "200-299": 34,
+          "25-49": 59,
+          "300-599": 47,
+          "50-99": 90,
+          "600+": 54
+        },
+        "max": 4119,
+        "mean": 235.46,
+        "median": 92,
+        "min": 4,
+        "n": 463,
+        "q1": 41.0,
+        "q3": 254.5
+      },
+      "x86": {
+        "bands": {
+          "0-24": 97,
+          "100-199": 99,
+          "200-299": 15,
+          "25-49": 38,
+          "300-599": 22,
+          "50-99": 123,
+          "600+": 41
+        },
+        "max": 3871,
+        "mean": 197.21,
+        "median": 77,
+        "min": 2,
+        "n": 435,
+        "q1": 34.5,
+        "q3": 161.5
+      }
+    },
+    "length_by_shape": {
+      "loop": {
+        "bands": {
+          "0-24": 0,
+          "100-199": 35,
+          "200-299": 33,
+          "25-49": 7,
+          "300-599": 42,
+          "50-99": 17,
+          "600+": 89
+        },
+        "max": 4119,
+        "mean": 599.5,
+        "median": 383,
+        "min": 32,
+        "n": 223,
+        "q1": 188.0,
+        "q3": 781.0
+      },
+      "straight_line": {
+        "bands": {
+          "0-24": 185,
+          "100-199": 155,
+          "200-299": 16,
+          "25-49": 90,
+          "300-599": 27,
+          "50-99": 196,
+          "600+": 6
+        },
+        "max": 844,
+        "mean": 90.54,
+        "median": 64,
+        "min": 2,
+        "n": 675,
+        "q1": 20.0,
+        "q3": 115.5
+      }
+    },
+    "length_span": {
+      "bands": {
+        "0-24": 108,
+        "100-199": 217,
+        "200-299": 78,
+        "25-49": 106,
+        "300-599": 69,
+        "50-99": 223,
+        "600+": 97
+      },
+      "max": 4140,
+      "mean": 233.76,
+      "median": 104.0,
+      "min": 12,
+      "n": 898,
+      "q1": 53.0,
+      "q3": 211.25
+    },
+    "length_tactic": {
+      "bands": {
+        "0-24": 185,
+        "100-199": 190,
+        "200-299": 49,
+        "25-49": 97,
+        "300-599": 69,
+        "50-99": 213,
+        "600+": 95
+      },
+      "max": 4119,
+      "mean": 216.93,
+      "median": 87.5,
+      "min": 2,
+      "n": 898,
+      "q1": 40.25,
+      "q3": 188.75
+    },
+    "long_tail_300": {
+      "loop": 131,
+      "loop_share_pct": 79.88,
+      "n": 164,
+      "straight_line": 33
+    },
+    "loop": 223,
+    "loop_share_pct": 24.83,
+    "named_correct_decls": 2721,
+    "reason_counts": {
+      "a top-level subroutine that just uses the _CORRECT of the core part": 1817,
+      "not a proof related to functional correctness": 451,
+      "the goal is evaluated at runtime": 3
+    },
+    "shape_by_arch": {
+      "arm": {
+        "loop": 125,
+        "straight_line": 338
+      },
+      "x86": {
+        "loop": 98,
+        "straight_line": 337
+      }
+    },
+    "straight_line": 675,
+    "straight_line_share_pct": 75.17,
+    "subroutine_correct_decls": 1817,
+    "subroutine_safe_named": 394
+  },
+  "dropped_named": {
+    "a top-level subroutine that just uses the _CORRECT of the core part": 1817,
+    "not a proof related to functional correctness": 394
+  },
+  "repo": "<S2N>"
+}

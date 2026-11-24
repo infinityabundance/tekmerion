@@ -64,9 +64,10 @@ jobs:
 
       # The Python proof-production chain (guard, derive, disasm, emitters) and
       # its pytest suite are now Rust (`src/tools`, `tests/tools_*.rs`), so there
-      # is no pytest-collectable Python test left to run here. The remaining
-      # Python harness, tools/test_write_through.py, is exercised directly by
-      # tools/selftest.sh below.
+      # is no pytest-collectable Python test left to run here. The write-through
+      # harness is now `tests/write_through.rs`, which compiles the OCaml module
+      # against stubs and is exercised by both `cargo test` and
+      # `tools/selftest.sh` below.
 
       - name: Refusal-site mutation harness (offline)
         run: cargo run --offline --quiet --bin mutate
