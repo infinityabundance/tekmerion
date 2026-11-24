@@ -1706,7 +1706,10 @@ carefully justified authority.
 - [ ] **XI.G.2. G1 (bit-blaster equivalence).** Prove `blast` correct for the restricted fragment
   or replace it with a verified generator; state the width-indexed-name caveat. Acceptance:
   machine-checked or an independently generated encoding with a checked certificate.
-- [ ] **XI.G.3. G2 (parser refinement).** Discharge (P1)–(P4) of `research/08-TNPS-SEMANTICS.md`
+- [~] **XI.G.3. G2 (parser refinement).** Progress 2026-11-24: **P1 holds by construction** for
+  `Term`, `Certificate` and `Cnf::parse_dimacs` (each re-renders and compares; new test
+  `dimacs_acceptance_is_exactly_the_canonical_rendering`). Remaining: (P1) for the LRAT reader,
+  (P2)/(P3) grammar lemmas, and (P4) totality. Discharge (P1)–(P4) of `research/08-TNPS-SEMANTICS.md`
   §1.7, ideally by construction (typed parse target) plus a grammar/injectivity proof.
 - [ ] **XI.G.4. G3 (executable refinement).** Connect the compiled checker to the abstract
   acceptance relation; include the parser and every trusted optimisation.

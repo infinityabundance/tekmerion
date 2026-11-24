@@ -670,3 +670,33 @@ where
         .expect("rebuilt certificate is structurally valid")
         .render()
 }
+
+/// TNPS §1.7 (P1): an accepted DIMACS input is exactly its own canonical
+/// rendering. `Term::parse` and `Certificate::parse` already enforced this;
+/// `Cnf::parse_dimacs` now does too, so the property holds by construction
+/// rather than only through the individual structural checks.
+#[test]
+fn dimacs_acceptance_is_exactly_the_canonical_rendering() {
+    let good: [&[u8]; 3] = [
+        b"p cnf 2 3\n1 2 0\n-1 2 0\n-2 0\n",
+        b"p cnf 1 1\n0\n",
+        b"p cnf 3 1\n1 -2 3 0\n",
+    ];
+    for bytes in good {
+        let cnf = tekmerion::native::Cnf::parse_dimacs(bytes).expect("canonical CNF");
+        assert_eq!(cnf.to_dimacs().as_bytes(), bytes);
+    }
+
+    let bad: [&[u8]; 4] = [
+        b"p cnf 2 3\n1 2 0\n-1 2 0\n-2 0",
+        b"p cnf 2 3\n1 2 0\n-1 2 0\n-2 0\n\n",
+        b"p cnf 2 3\n 1 2 0\n-1 2 0\n-2 0\n",
+        b"p cnf 2 3\n1 2 0\n-1 2 0\n-2  0\n",
+    ];
+    for bytes in bad {
+        assert!(
+            tekmerion::native::Cnf::parse_dimacs(bytes).is_err(),
+            "non-canonical DIMACS accepted: {bytes:?}"
+        );
+    }
+}

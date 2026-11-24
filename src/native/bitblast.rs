@@ -143,7 +143,16 @@ impl Cnf {
                 clauses.len()
             )));
         }
-        Ok(Cnf { num_vars, clauses })
+        let cnf = Cnf { num_vars, clauses };
+        // Canonical-language refinement by construction (TNPS §1.7, P1): an
+        // accepted input is exactly its own canonical rendering, so no
+        // non-canonical whitespace, header or clause form can slip through.
+        if cnf.to_dimacs() != text {
+            return Err(Error::BadDimacs(
+                "input is not the canonical DIMACS rendering".to_string(),
+            ));
+        }
+        Ok(cnf)
     }
 }
 

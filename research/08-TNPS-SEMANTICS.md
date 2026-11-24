@@ -218,7 +218,10 @@ ids, sorted blobs, `end\n` last).
 
 **Refinement is a round-trip, not a lookalike.** The implementation does not
 reimplement the grammar as a set of accept/reject checks; it parses, re-renders
-and requires byte equality with the input. The specification therefore reduces
+and requires byte equality with the input. As of 2026-11-24 this holds for
+`Term::parse`, `Certificate::parse` and `Cnf::parse_dimacs`; the LRAT reader
+validates every record and integer but does not yet re-render the whole file.
+The specification therefore reduces
 the whole parser to four properties:
 
 ```
