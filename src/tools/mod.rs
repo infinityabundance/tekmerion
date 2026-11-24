@@ -18,6 +18,7 @@ pub mod guard;
 pub mod inline_answer;
 pub mod instrument;
 pub mod json;
+pub mod lrat_trim;
 pub mod mutate;
 pub mod mutate_guard;
 pub mod mutate_lifecycle;

@@ -1,0 +1,200 @@
+{
+  "schema": "ix62-phase-attribution/1",
+  "kernel": ".bench/hol-light-stamp2",
+  "benchmark_total_inferences": 3697462655,
+  "tasks": [
+    {
+      "task": "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT",
+      "arch": "arm",
+      "op": "add",
+      "family": "p256",
+      "total": 170931670,
+      "replay": 88513205,
+      "other": 82418465,
+      "replay_share": 0.517828001,
+      "closes": 4,
+      "close": [
+        {"key": "71c31aa64e3f76361bb768f313245f0e", "replay": 22968118},
+        {"key": "39619fb4a230fa6ed883b0eb48eebc98", "replay": 16592760},
+        {"key": "cb95e3fb77aa5963df5de72a80241518", "replay": 33973965},
+        {"key": "e49b71b056f3cc30f464bd3bc5323cc1", "replay": 14978362}
+      ],
+      "trim": [
+        {"key": "71c31aa64e3f76361bb768f313245f0e.cnf", "full_bytes": 18195072, "trim_bytes": 7230309, "full_inf": 22968118, "trim_inf": 10156877, "full_s": 2.086, "trim_s": 0.953, "same": true},
+        {"key": "39619fb4a230fa6ed883b0eb48eebc98.cnf", "full_bytes": 14450884, "trim_bytes": 3665845, "full_inf": 16592760, "trim_inf": 4862382, "full_s": 1.517, "trim_s": 0.500, "same": true},
+        {"key": "cb95e3fb77aa5963df5de72a80241518.cnf", "full_bytes": 27946545, "trim_bytes": 12504012, "full_inf": 33973965, "trim_inf": 16501798, "full_s": 2.958, "trim_s": 1.521, "same": true},
+        {"key": "e49b71b056f3cc30f464bd3bc5323cc1.cnf", "full_bytes": 12500824, "trim_bytes": 4052864, "full_inf": 14978362, "trim_inf": 5750777, "full_s": 1.424, "trim_s": 0.572, "same": true}
+      ],
+      "trim_full_bytes": 73093325, "trim_bytes": 27453030, "trim_full_inf": 88513205, "trim_inf": 37271834, "trim_full_s": 7.985, "trim_s": 3.546, "trim_same": true
+    },
+    {
+      "task": "arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT",
+      "arch": "arm",
+      "op": "add",
+      "family": "p384",
+      "total": 349139623,
+      "replay": 175561185,
+      "other": 173578438,
+      "replay_share": 0.502839476,
+      "closes": 4,
+      "close": [
+        {"key": "1dd13d865e4aec8ad1191300cfb48bdc", "replay": 37144117},
+        {"key": "4403dd2d72d4448c9e22e05cbbb2f98b", "replay": 65526270},
+        {"key": "697798d6f94daa504d3c0dc8092d1ddb", "replay": 34230258},
+        {"key": "97a30ad5b92a54dec049debfe2a4784c", "replay": 38660540}
+      ],
+      "trim": [
+        {"key": "1dd13d865e4aec8ad1191300cfb48bdc.cnf", "full_bytes": 32185445, "trim_bytes": 10068290, "full_inf": 37144117, "trim_inf": 13789399, "full_s": 3.728, "trim_s": 1.465, "same": true},
+        {"key": "4403dd2d72d4448c9e22e05cbbb2f98b.cnf", "full_bytes": 54880219, "trim_bytes": 21968818, "full_inf": 65526270, "trim_inf": 28798022, "full_s": 6.144, "trim_s": 2.802, "same": true},
+        {"key": "697798d6f94daa504d3c0dc8092d1ddb.cnf", "full_bytes": 30590921, "trim_bytes": 10106321, "full_inf": 34230258, "trim_inf": 13287512, "full_s": 3.265, "trim_s": 1.354, "same": true},
+        {"key": "97a30ad5b92a54dec049debfe2a4784c.cnf", "full_bytes": 33466837, "trim_bytes": 8696388, "full_inf": 38660540, "trim_inf": 11587735, "full_s": 3.827, "trim_s": 1.231, "same": true}
+      ],
+      "trim_full_bytes": 151123422, "trim_bytes": 50839817, "trim_full_inf": 175561185, "trim_inf": 67462668, "trim_full_s": 16.964, "trim_s": 6.852, "trim_same": true
+    },
+    {
+      "task": "arm.bignum_add_p521.BIGNUM_ADD_P521_CORRECT",
+      "arch": "arm",
+      "op": "add",
+      "family": "p521",
+      "total": 681707202,
+      "replay": 365948270,
+      "other": 315758932,
+      "replay_share": 0.536811506,
+      "closes": 4,
+      "close": [
+        {"key": "1a5f9900e9b2dac85e9e4d63ec35dc28", "replay": 89551480},
+        {"key": "737f4a9269cf03694d1492728b656e82", "replay": 111368611},
+        {"key": "f5dfd7c0884866f5bddfe7d070a1827c", "replay": 131397330},
+        {"key": "31f1d86a42b9c13233ca4889615951b8", "replay": 33630849}
+      ],
+      "trim": [
+        {"key": "1a5f9900e9b2dac85e9e4d63ec35dc28.cnf", "full_bytes": 37706414, "trim_bytes": 13705077, "full_inf": 89551480, "trim_inf": 56836504, "full_s": 7.769, "trim_s": 4.718, "same": true},
+        {"key": "737f4a9269cf03694d1492728b656e82.cnf", "full_bytes": 91976484, "trim_bytes": 32239888, "full_inf": 111368611, "trim_inf": 42624818, "full_s": 10.295, "trim_s": 4.175, "same": true},
+        {"key": "f5dfd7c0884866f5bddfe7d070a1827c.cnf", "full_bytes": 106508743, "trim_bytes": 34393236, "full_inf": 131397330, "trim_inf": 45105774, "full_s": 12.112, "trim_s": 4.544, "same": true},
+        {"key": "31f1d86a42b9c13233ca4889615951b8.cnf", "full_bytes": 32765739, "trim_bytes": 7456046, "full_inf": 33630849, "trim_inf": 9968364, "full_s": 3.626, "trim_s": 1.287, "same": true}
+      ],
+      "trim_full_bytes": 268957380, "trim_bytes": 87794247, "trim_full_inf": 365948270, "trim_inf": 154535460, "trim_full_s": 33.802, "trim_s": 14.724, "trim_same": true
+    },
+    {
+      "task": "arm.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
+      "arch": "arm",
+      "op": "neg",
+      "family": "p25519",
+      "total": 35457948,
+      "replay": 3986659,
+      "other": 31471289,
+      "replay_share": 0.112433438,
+      "closes": 3,
+      "close": [
+        {"key": "c20694446fd6866484fbb5bcadf3f1d8", "replay": 408670},
+        {"key": "ba9e7dece350999e28bcd917a43d5bb6", "replay": 3099448},
+        {"key": "31bc7c39492b81337be93764628459af", "replay": 478541}
+      ],
+      "trim": [
+        {"key": "c20694446fd6866484fbb5bcadf3f1d8.cnf", "full_bytes": 204726, "trim_bytes": 17503, "full_inf": 408670, "trim_inf": 236753, "full_s": 0.069, "trim_s": 0.043, "same": true},
+        {"key": "ba9e7dece350999e28bcd917a43d5bb6.cnf", "full_bytes": 2731979, "trim_bytes": 1435932, "full_inf": 3099448, "trim_inf": 1998291, "full_s": 0.326, "trim_s": 0.225, "same": true},
+        {"key": "31bc7c39492b81337be93764628459af.cnf", "full_bytes": 254238, "trim_bytes": 32979, "full_inf": 478541, "trim_inf": 275027, "full_s": 0.083, "trim_s": 0.048, "same": true}
+      ],
+      "trim_full_bytes": 3190943, "trim_bytes": 1486414, "trim_full_inf": 3986659, "trim_inf": 2510071, "trim_full_s": 0.478, "trim_s": 0.316, "trim_same": true
+    },
+    {
+      "task": "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+      "arch": "x86",
+      "op": "add",
+      "family": "p25519",
+      "total": 160584653,
+      "replay": 82545445,
+      "other": 78039208,
+      "replay_share": 0.514030721,
+      "closes": 4,
+      "close": [
+        {"key": "c68de0302717a0e0b81d7ca6e499d2ec", "replay": 40153634},
+        {"key": "779fe989ad60b7b21a0b623a34f69c4e", "replay": 11122962},
+        {"key": "81d71457a30f5b9aaefbe8c6eb09e340", "replay": 18237151},
+        {"key": "a285cf0a212555be72474239ebfca364", "replay": 13031698}
+      ],
+      "trim": [
+        {"key": "c68de0302717a0e0b81d7ca6e499d2ec.cnf", "full_bytes": 32101985, "trim_bytes": 11031843, "full_inf": 40153634, "trim_inf": 14619152, "full_s": 3.727, "trim_s": 1.364, "same": true},
+        {"key": "779fe989ad60b7b21a0b623a34f69c4e.cnf", "full_bytes": 9404920, "trim_bytes": 3036373, "full_inf": 11122962, "trim_inf": 5141910, "full_s": 1.089, "trim_s": 0.500, "same": true},
+        {"key": "81d71457a30f5b9aaefbe8c6eb09e340.cnf", "full_bytes": 12554076, "trim_bytes": 5436233, "full_inf": 18237151, "trim_inf": 10081093, "full_s": 1.635, "trim_s": 0.926, "same": true},
+        {"key": "a285cf0a212555be72474239ebfca364.cnf", "full_bytes": 11552842, "trim_bytes": 3521847, "full_inf": 13031698, "trim_inf": 4758188, "full_s": 1.220, "trim_s": 0.485, "same": true}
+      ],
+      "trim_full_bytes": 65613823, "trim_bytes": 23026296, "trim_full_inf": 82545445, "trim_inf": 34600343, "trim_full_s": 7.671, "trim_s": 3.275, "trim_same": true
+    },
+    {
+      "task": "x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
+      "arch": "x86",
+      "op": "neg",
+      "family": "p25519",
+      "total": 19973249,
+      "replay": 3961554,
+      "other": 16011695,
+      "replay_share": 0.198342994,
+      "closes": 2,
+      "close": [
+        {"key": "6b8beca5db9d20e455b9554ceec2ac5c", "replay": 209832},
+        {"key": "d79e75433e8ed85906b8c86aeb28453c", "replay": 3751722}
+      ],
+      "trim": [
+        {"key": "6b8beca5db9d20e455b9554ceec2ac5c.cnf", "full_bytes": 130326, "trim_bytes": 83515, "full_inf": 209832, "trim_inf": 178003, "full_s": 0.036, "trim_s": 0.025, "same": true},
+        {"key": "d79e75433e8ed85906b8c86aeb28453c.cnf", "full_bytes": 3292872, "trim_bytes": 1517385, "full_inf": 3751722, "trim_inf": 2130382, "full_s": 0.401, "trim_s": 0.211, "same": true}
+      ],
+      "trim_full_bytes": 3423198, "trim_bytes": 1600900, "trim_full_inf": 3961554, "trim_inf": 2308385, "trim_full_s": 0.437, "trim_s": 0.236, "trim_same": true
+    },
+    {
+      "task": "x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT",
+      "arch": "x86",
+      "op": "neg",
+      "family": "p256k1",
+      "total": 23422025,
+      "replay": 7386030,
+      "other": 16035995,
+      "replay_share": 0.315345492,
+      "closes": 2,
+      "close": [
+        {"key": "4257d37036184dd677c6330c2ad175d0", "replay": 210118},
+        {"key": "688a9a528a98dde88efe77d77f9c0334", "replay": 7175912}
+      ],
+      "trim": [
+        {"key": "4257d37036184dd677c6330c2ad175d0.cnf", "full_bytes": 130563, "trim_bytes": 83858, "full_inf": 210118, "trim_inf": 178438, "full_s": 0.026, "trim_s": 0.023, "same": true},
+        {"key": "688a9a528a98dde88efe77d77f9c0334.cnf", "full_bytes": 5717142, "trim_bytes": 982162, "full_inf": 7175912, "trim_inf": 1435240, "full_s": 0.644, "trim_s": 0.174, "same": true}
+      ],
+      "trim_full_bytes": 5847705, "trim_bytes": 1066020, "trim_full_inf": 7386030, "trim_inf": 1613678, "trim_full_s": 0.670, "trim_s": 0.197, "trim_same": true
+    },
+    {
+      "task": "x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT",
+      "arch": "x86",
+      "op": "neg",
+      "family": "sm2",
+      "total": 18230539,
+      "replay": 3478365,
+      "other": 14752174,
+      "replay_share": 0.190798802,
+      "closes": 2,
+      "close": [
+        {"key": "59555fddf564866f1b56fbbbad8d3089", "replay": 168949},
+        {"key": "36af6219a611be4c8e565231ad01b92d", "replay": 3309416}
+      ],
+      "trim": [
+        {"key": "59555fddf564866f1b56fbbbad8d3089.cnf", "full_bytes": 102679, "trim_bytes": 62137, "full_inf": 168949, "trim_inf": 139285, "full_s": 0.021, "trim_s": 0.018, "same": true},
+        {"key": "36af6219a611be4c8e565231ad01b92d.cnf", "full_bytes": 2780129, "trim_bytes": 1053176, "full_inf": 3309416, "trim_inf": 1530977, "full_s": 0.350, "trim_s": 0.148, "same": true}
+      ],
+      "trim_full_bytes": 2882808, "trim_bytes": 1115313, "trim_full_inf": 3478365, "trim_inf": 1670262, "trim_full_s": 0.371, "trim_s": 0.166, "trim_same": true
+    }
+  ],
+  "totals": {
+    "tasks": 8,
+    "total": 1459446909,
+    "replay": 731380713,
+    "other": 728066196,
+    "replay_share": 0.501135539,
+    "benchmark_coverage": 0.394715794,
+    "trim_full_bytes": 574132604,
+    "trim_bytes": 194382037,
+    "trim_full_inf": 731380713,
+    "trim_inf": 301972701,
+    "trim_full_s": 68.378,
+    "trim_s": 29.312,
+    "trim_same_all": true
+  }
+}

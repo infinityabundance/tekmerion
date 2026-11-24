@@ -2471,7 +2471,10 @@ already exists in deterministic form.
   obligations differ (incomparable), so a quotient would not be a proof-cost ratio.
 - [ ] **XIV.B3.** Separate **successful derivation** inferences from **discarded search**
   inferences (two counters, or a phase switch), so "derivation size" and "search cost"
-  are distinct numbers. Today one counter mixes them (`XIII.E5`).
+  are distinct numbers. Today one counter mixes them (`XIII.E5`). — **Still open (IX.62):**
+  the phase split isolates `LRAT_REFUTE_GEN`, but `other = total − replay` still mixes
+  successful derivation with discarded search. `arm/neg_p25519` has 31,471,289 non-replay
+  inferences against 4,077,908 human; this split cannot say how much of that is search.
 - [x] **XIV.B4.** Report the five costs separately, never as one number: search time;
   successful derivation size; discarded inference work; solver-free replay time; total
   construction + verification cost. Design principle: **expensive discovery is
@@ -2551,7 +2554,7 @@ acceptance" is a per-file build result, not "the theorems upstream states are no
 - [ ] **XIV.G4.** Record the honest current position wherever 27/27 is cited: the same
   obligations upstream states are **0 of 27** today.
 
-## XIV.H — Where the inference work actually goes (hypothesis, to test)
+## XIV.H — Where the inference work actually goes (measured, IX.62)
 
 IX.60 measured, over incomparable obligations: human proof bodies 2.7M–17.6M primitive
 inferences per theorem (total 176,369,762), generated 18.2M–681.7M (total 3,697,462,655).
@@ -2559,13 +2562,35 @@ Generated is larger on every row, by 2.4M to 672.9M. Wall clock differs only ~1.
 generated path performs far more primitive work per second — consistent with the extra work
 being cheap, uniform, mechanical steps.
 
-- [ ] **XIV.H1.** Test the hypothesis that the excess is **certified-SAT replay** (each resolved
+- [x] **XIV.H1.** Test the hypothesis that the excess is **certified-SAT replay** (each resolved
   CNF clause becoming a primitive kernel inference) rather than simulation or rewriting. Split
   the counter by phase (simulation / conversion / LRAT replay / arithmetic) and report the
-  share. If the hypothesis holds, the target is the replay, not the kernel.
-- [ ] **XIV.H2.** The x86 `neg` rows break the pattern (human 17.6M / 8.6M / 8.8M vs generated
+  share. If the hypothesis holds, the target is the replay, not the kernel. — **Done (IX.62):**
+  measured on 8 of 27 tasks (all six mandatory plus the three x86 `neg` rows) with
+  `inference_count` deltas around `LRAT_REFUTE_GEN`. Replay is **50–54%** of the primitive
+  count on the arithmetic-heavy `add` proofs (`arm/add_p521` 365,948,270 of 681,707,202 =
+  **53.68%**; `arm/add_p384` 50.28%; `arm/add_p256` 51.78%; `x86/add_p25519` 51.40%) and
+  **11–32%** on the `neg` proofs. Across the measured set replay is **731,380,713 of
+  1,459,446,909 (50.11%)**; those eight tasks cover 39.47% of the 3,697,462,655 benchmark.
+  The hypothesis holds for the arithmetic-heavy rows: there the target is the replay, not the
+  kernel. `other` still mixes search (`XIV.B3`).
+- [x] **XIV.H2.** The x86 `neg` rows break the pattern (human 17.6M / 8.6M / 8.8M vs generated
   20.0M / 23.4M / 18.2M — nearly equal). Explain that row before generalising anything from
-  the other 24.
+  the other 24. — **Done (IX.62 §4):** the three x86 `neg` rows are measured.
+
+  | row | human | generated | replay | other | replay share |
+  |---|---:|---:|---:|---:|---:|
+  | `x86/neg_p25519` | 17,589,216 | 19,973,249 | 3,961,554 | 16,011,695 | 19.83% |
+  | `x86/neg_p256k1` | 8,632,786 | 23,422,025 | 7,386,030 | 16,035,995 | 31.53% |
+  | `x86/neg_sm2` | 8,761,732 | 18,230,539 | 3,478,365 | 14,752,174 | 19.08% |
+
+  Replay is 3.5–7.4M in absolute terms because each `neg` proof makes only 2 small closes;
+  non-replay work is flat at 14.8–16.0M, the same order as the human counts. The totals are
+  near-equal because the SAT subproblem is small, not because the generated path is cheap.
+  The p25519 row is also a human-side outlier: its human count is >2× the other two, while
+  generated non-replay (16.01M) is *below* it. This explanation does **not** carry to
+  `arm/neg_p25519` (other 31,471,289 vs human 4,077,908; replay share 11.24%) — that row
+  needs `XIV.B3`.
 
 ## XIV.I — Freeze consequence of XIV.A/B (immediate)
 
@@ -2603,11 +2628,22 @@ lrat_total=65657625 cnf_total=4005135
   answer carries the digest, the judge performs exactly one digest-verified read-only
   read, the kernel still replays every step. This changes K2 from "no file I/O" to
   "no writes, no solver, one verified read", and must be declared as such. Do not
-  quietly claim an inert answer under this design.
+  quietly claim an inert answer under this design. — **Measured (IX.62 §3/§5):** the Rust
+  backward-closure trimmer (`src/tools/lrat_trim.rs`) was replayed through the unmodified
+  `LRAT_REFUTE_GEN` on 25 closes across 8 tasks: **574,132,604 → 194,382,037 bytes
+  (2.95×)**, replay **731,380,713 → 301,972,701 inferences (2.42×)**, replay **68.378 s →
+  29.312 s (2.33×)**; every trimmed replay reproduces the same theorem. Per-task trimmed
+  floors on the `add` rows: `x86/add_p25519` 23,026,296 B, `arm/add_p256` 27,453,030 B,
+  `arm/add_p384` 50,839,817 B, `arm/add_p521` 87,794,247 B — all above 8 MB. Trimming is a
+  cheap partial win for a side-artefact; it does **not** make the in-answer design viable.
 - [ ] **XIII.A9. Constraint found:** a *compiled* script cannot load a library at run
   time (`loadt` gives the type-checker no names), so any no-inline route requires the
   court to inject the support-library text into the template prefix and raise
   `inlined_locations`. Record that in the sealed-court protocol notes.
 - [ ] **XIV.J1.** The 65.6 MB figure is the SAT ceiling in bytes as well as in inferences:
   it is direct evidence for `XIII.E4` (parametric lemmas) and `XIV.H1`, not only for
-  packaging work. A 256-bit adder should not need 65 MB of resolution.
+  packaging work. A 256-bit adder should not need 65 MB of resolution. — **Supported
+  (IX.62):** the measured trimmed floor for `arm/add_p521` is 87,794,247 B (11.0× the 8 MB
+  gate) and replay is 53.68% of its inferences; eliminating replay would leave
+  315,758,932 (−54%), while trimming alone reaches 470,294,392 (−31%). The figure is
+  evidence for `XIII.E4`, not for an encoding.
