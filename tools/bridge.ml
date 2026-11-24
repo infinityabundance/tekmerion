@@ -1295,10 +1295,11 @@ let BITVAL_ADD_ZERO = prove
   ARITH_TAC);;
 
 let CSETM_EQ = prove
- (`!p:bool. (if p then (word 0:int64) else word 18446744073709551615) =
+ (`!p:bool. (if p then (word 0:int64) else word (2 EXP 64 - 1)) =
             word_neg(word (bitval(~p)))`,
   GEN_TAC THEN BOOL_CASES_TAC `p:bool` THEN
   REWRITE_TAC[BITVAL_CLAUSES; word_neg] THEN
+  REWRITE_TAC[ARITH_RULE `2 EXP 64 - 1 = 18446744073709551615`] THEN
   CONV_TAC WORD_REDUCE_CONV);;
 
 (* ========================================================================= *)

@@ -861,8 +861,12 @@ yet a held-out result.
   **Lost `add_p384`** relative to R3: its earlier `OK` came from a transcribed real-arithmetic
   flag subgoal, which the reference route does not carry. Receipt:
   `research/receipts/r4-reference-route.md`. Scope: development, all 18 were visible.
-- [ ] **V8.22. Encode flag-only `ADCS`/`SBCS XZR` instructions.** This is the whole remaining
-  failure class (`add_p256k1`, `add_p384`): both select the correction with the **Z flag of a
+- [x] **V8.22. Encode flag-only `ADCS`/`SBCS XZR` instructions.** **Closed 2026-11-24**
+  (`research/receipts/r5-xzr.md`). The generic admission already existed at HEAD
+  (`_is_flag_only` + `_carry_out_feeds_chain`); the R4 answers predated it. Re-running the full
+  18 ARM tasks in one revision gave **OK 18/18**, `add_p256k1` 22.061 s and `add_p384` 50.168 s.
+  No transcribed real-arithmetic flag subgoal was added; `curve_check` stays clean. The description
+  below is the historical diagnosis. *Original:* Both select the correction with the **Z flag of a
   chain of flag-only instructions** (`CMN`/`CMP` + `SBCS XZR`/`ADCS XZR`, then `CSEL`/`CSETM NE`).
   `derive_steps` excludes `XZR` destinations and `ACCUMULATE_ARITH_TAC` needs a register read
   equation, so that flag is a free boolean and `cadical` returns exit 10 (SATISFIABLE) on a
@@ -870,9 +874,10 @@ yet a held-out result.
   accumulator relation per flag-only instruction (a `word_carry`-style hypothesis), still
   bit-level and curve-free. Do not "fix" it by reinstating a transcribed real-arithmetic flag
   subgoal.
-- [ ] **V8.23. `add_p521` headroom.** 95.864 s of the 120 s per-task budget (0.80) on the
-  reference route; `sub_p521` is 35.088 s. Cheap headroom would be a shorter bit-blast for the
-  576-bit chains, not a longer timeout.
+- [x] **V8.23. `add_p521` headroom.** Measured 2026-11-24: **96.882 s of 120 s (0.81)** in the
+  single-revision 18-task run (an earlier run recorded 95.864 s; treat ~96 s as the working
+  figure and re-measure on any slower host before a full-898 run). `sub_p521` is 35.216 s. Cheap
+  headroom would be a shorter bit-blast for the 576-bit chains, not a longer timeout.
 - [x] **V8.19. Freeze and run the whole ARM `add`/`sub`/`neg` family.** Frozen at
   `2026-11-23T13:57:05Z`, base `672cc0b`, ten file hashes matched before and after (combined
   `a6cc2a4d…e2ba9f`). Declared set: 18 tasks = 6 curves × {add, sub, neg}. **Result: 10 OK / 18
@@ -1771,7 +1776,16 @@ carefully justified authority.
 - [ ] **XI.L.1. Label the sealed result correctly.** 9/9 is **leave-one-ISA-out**: the ARM
   versions of these curves/operations were development data. It is not leave-one-curve-out. State
   this in the receipt and in every downstream claim.
-- [ ] **XI.L.2. Fix `XZR` flag accumulation.** Flag-only `ADCS/SBCS XZR` chains are not encoded;
+- [x] **XI.L.2. Fix `XZR` flag accumulation.** **Done 2026-11-24, `r5-xzr.md`.** Correction to
+  the diagnosis: the generic mechanism already existed at HEAD (`derive_steps._is_flag_only` +
+  `_carry_out_feeds_chain`, landed after the R4 run); the R4 judge files simply predated it, so
+  the failures were stale answers, not a missing lemma. All 18 ARM `add`/`sub`/`neg` tasks were
+  regenerated and judged in **one** revision (`.bench/eval-20261124_030015`): **OK 18/18**,
+  `hyps=0`, axioms `2445→2445` unchanged. This is **development data**, not held-out. New guard
+  mode `--spent --spent-manifest` (decision record `ix53-spent-mode.md`) admits only the 18 spent
+  ids and still refuses their proof `.ml`; 54 mode/derivation/x86 tests pass; `curve_check` 0
+  hits. `add_p521` costs **96.882 s of 120 s (0.81)** — the headroom is thin and is now measured,
+  superseding the reviewer's unreceipted 95.864 s. *Original text:* Flag-only `ADCS/SBCS XZR` chains are not encoded;
   the tooling excludes `XZR` destinations, so the correction flag is unconstrained. Fix, then
   re-run the affected `add_p384`/`add_p256k1` tasks.
 - [ ] **XI.L.3. Upstream drop-in build.** Replace the human s2n-bignum proofs with the generated
@@ -1783,7 +1797,11 @@ carefully justified authority.
   unsupported shapes refused fast and counted as FAIL; report `OK/898`, zero `CHEATING`, split
   development-seen vs sealed. Then **submit the CSV to the leaderboard** so adjudication moves
   outside the programme.
-- [ ] **XI.L.6. Timeout headroom measured, not assumed.** A reviewer reports `add_p521` at
+- [x] **XI.L.6. Timeout headroom measured, not assumed.** Measured 2026-11-24 (`r5-xzr.md`):
+  `add_p521` **96.882 s** of 120 s (0.81), `add_p384` 50.168 s, `add_p256k1` 22.061 s, all other
+  tasks ≤ 35.216 s. The reviewer's 95.864 s figure is consistent in magnitude but was unreceipted;
+  96.882 s is the recorded value on this host. A slower host plus another split could time out —
+  measure before the full-898 run. *Original text:* A reviewer reports `add_p521` at
   95.864 s of 120 s; that figure has **no receipt here**. Measure every task under the frozen
   emitter on this host and record it; do not cite 95.864 s until reproduced.
 - [ ] **XI.L.7. `cake_lpr` on every LRAT certificate**, and on the sealed set. This is O2.3 and

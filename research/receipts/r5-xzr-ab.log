@@ -1,0 +1,36 @@
+A/B on ONE bridge (tools/bridge.ml at base 3fedd8c + the CSETM_EQ statement change)
+with the debug copy .bench/r5-xzr-dbg/bridge_dbg.ml (prints only).  The two
+dev harnesses are byte-identical except for the ARM_ACCSTEPS_TAC list, so the
+list (the derive_steps output) is the only variable.
+Command for both:
+  cd .bench/s2n-bignum && cat ../r5-xzr-dbg/<script>.ml | ../hol-light/hol.sh
+
+A. R4 list (flag-only steps 15,17,19,20,21,22 excluded)
+   script .bench/r5-xzr-dbg/p384_dev_r4list.ml
+   ARM_ACCSTEPS_TAC BIGNUM_ADD_P384_EXEC [3;4;7;8;11;12;23;27;29;32;33;34;35] (1--38)
+   first certified-SAT branch, Z/selection hypothesis:
+   CSAT_HYP &(val (word_add (word (bitval carry_s12)) (word (bitval (&2 pow 64 <= &(val sum_s12) + &(bitval (&2 pow 64 <= &(val sum_s11) + &(bitval (&2 pow 64 <= &(val sum_s8) + &(bitval (&18446744073709551614 + &(bitval (&(val sum_s4) < &18446744069414584320 + &(bitval (&(val sum_s3) < &4294967295)))) <= &(val sum_s7)))))))))))) = &0
+   result:
+   Failed after (user) CPU time of 40.538715: Failure("CSAT: cadical did not report UNSAT, exit 10")
+
+B. Current derived list (R4 list plus the six flag-only steps)
+   script .bench/r5-xzr-dbg/p384_dev.ml
+   ARM_ACCSTEPS_TAC BIGNUM_ADD_P384_EXEC [3;4;7;8;11;12;15;17;19;20;21;22;23;27;29;32;33;34;35] (1--38)
+   first certified-SAT branch, Z/selection hypothesis:
+   CSAT_HYP &(val (word_add (word (bitval carry_s12)) (word (bitval carry_s22)))) = &0
+   result:
+   REF_DEV arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT ok=true seconds=269.631 axioms=3
+
+Reading: in A the Z term reaching the selection is the simulator's nested
+per-step condition.  Its bitval subterms --
+   &2 pow 64 <= &(val sum_s12) + &(bitval (...))
+   &(val sum_s4) < &18446744069414584320 + &(bitval (...))
+   &(val sum_s3) < &4294967295
+ -- are unconstrained atoms in the word instance: no accumulator relation for
+steps 15--22 exists to say they are the carries/borrows of those word
+operations, so SAT sets them to falsify output = ref_add.  In B the same term
+is the two-bit word test on carry_s12 and carry_s22, and carry_s22 is pinned
+by the accumulator relation of the last flag-only step (ADCS X3 X3 XZR), which
+consumes carry_s21, carry_s20, ... down to the SBCS chain; the residual is
+UNSAT and the branch closes.  This isolates the cause to the derive_steps
+admission (commit 60ddf31), not to the bridge and not to the arithmetic lemmas.

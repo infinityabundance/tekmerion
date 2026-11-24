@@ -1,0 +1,107 @@
+DIAGNOSTIC ONLY (not a judge verdict, not a receipt of a claim):
+the first certified-SAT branch of arm.bignum_add_p384, printed from a copy
+of tools/bridge.ml with one Printf added inside BRIDGE_CSAT_TAC.  The answer
+bytes, the tactic and the judge run are otherwise unchanged; the same four
+branches close and the fresh-process dev run reports ok=true axioms=3.
+Command: cat .bench/r5-xzr-dbg/p384_dev.ml | hol.sh   (bytecode dev harness)
+CSAT_BRANCH 1 hyps=28
+CSAT_HYP &(val (word_add (word (bitval carry_s12)) (word (bitval carry_s22)))) = &0
+CSAT_HYP true
+CSAT_HYP word_ult
+(word_add
+ (word_join
+  (word_join (word_join (word_join (word_join m_5 m_4) m_3) m_2) m_1)
+ m_0)
+(word_join
+ (word_join (word_join (word_join (word_join n_5 n_4) n_3) n_2) n_1)
+n_0))
+(word_join
+ (word_join (word_join (word_join (word_join m_5 m_4) m_3) m_2) m_1)
+m_0) \/
+word_ule
+(word
+39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319)
+(word_add
+ (word_join
+  (word_join (word_join (word_join (word_join m_5 m_4) m_3) m_2) m_1)
+ m_0)
+(word_join
+ (word_join (word_join (word_join (word_join n_5 n_4) n_3) n_2) n_1)
+n_0))
+CSAT_HYP true
+CSAT_HYP &(val n_0) +
+&(val (word_join n_1 (word 0))) +
+&(val (word_join n_2 (word 0))) +
+&(val (word_join n_3 (word 0))) +
+&(val (word_join n_4 (word 0))) +
+&(val (word_join n_5 (word 0))) <
+&39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319
+CSAT_HYP &(val m_0) +
+&(val (word_join m_1 (word 0))) +
+&(val (word_join m_2 (word 0))) +
+&(val (word_join m_3 (word 0))) +
+&(val (word_join m_4 (word 0))) +
+&(val (word_join m_5 (word 0))) <
+&39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319
+CSAT_HYP -- &(val (word_join (word (bitval carry_s35)) (word 0))) + &(val sum_s35) =
+&(val sum_s12) - &(val (word 0)) - &(bitval carry_s34)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s34)) (word 0))) + &(val sum_s34) =
+&(val sum_s11) - &(val (word 0)) - &(bitval carry_s33)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s33)) (word 0))) + &(val sum_s33) =
+&(val sum_s8) - &(val (word 0)) - &(bitval carry_s32)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s32)) (word 0))) + &(val sum_s32) =
+&(val sum_s7) -
+&(val (word_and (word 18446744073709551614) (word 0))) -
+&(bitval carry_s29)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s29)) (word 0))) + &(val sum_s29) =
+&(val sum_s4) -
+&(val (word_xor (word_and (word 4294967295) (word 0)) (word 0))) -
+&(bitval carry_s27)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s27)) (word 0))) + &(val sum_s27) =
+&(val sum_s3) - &(val (word_and (word 4294967295) (word 0)))
+CSAT_HYP &(val (word_join (word (bitval carry_s23)) (word 0))) + &(val sum_s23) =
+&(bitval carry_s12) + &(bitval carry_s22)
+CSAT_HYP &(val (word_join (word (bitval carry_s22)) (word 0))) + &(val sum_s22) =
+&(val sum_s12) + &(bitval carry_s21)
+CSAT_HYP &(val (word_join (word (bitval carry_s21)) (word 0))) + &(val sum_s21) =
+&(val sum_s11) + &(bitval carry_s20)
+CSAT_HYP &(val (word_join (word (bitval carry_s20)) (word 0))) + &(val sum_s20) =
+&(val sum_s8) + &1 - &(bitval carry_s19)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s19)) (word 0))) + &(val sum_s19) =
+&(val sum_s7) - &18446744073709551614 - &(bitval carry_s17)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s17)) (word 0))) + &(val sum_s17) =
+&(val sum_s4) - &18446744069414584320 - &(bitval carry_s15)
+CSAT_HYP -- &(val (word_join (word (bitval carry_s15)) (word 0))) + &(val sum_s15) =
+&(val sum_s3) - &4294967295
+CSAT_HYP &(val (word_join (word (bitval carry_s12)) (word 0))) + &(val sum_s12) =
+&(val m_5) + &(val n_5) + &(bitval carry_s11)
+CSAT_HYP &(val (word_join (word (bitval carry_s11)) (word 0))) + &(val sum_s11) =
+&(val m_4) + &(val n_4) + &(bitval carry_s8)
+CSAT_HYP &(val (word_join (word (bitval carry_s8)) (word 0))) + &(val sum_s8) =
+&(val m_3) + &(val n_3) + &(bitval carry_s7)
+CSAT_HYP &(val (word_join (word (bitval carry_s7)) (word 0))) + &(val sum_s7) =
+&(val m_2) + &(val n_2) + &(bitval carry_s4)
+CSAT_HYP &(val (word_join (word (bitval carry_s4)) (word 0))) + &(val sum_s4) =
+&(val m_1) + &(val n_1) + &(bitval carry_s3)
+CSAT_HYP &(val (word_join (word (bitval carry_s3)) (word 0))) + &(val sum_s3) =
+&(val m_0) + &(val n_0)
+CSAT_HYP true
+CSAT_HYP true
+CSAT_HYP nonoverlapping_modulo (2 EXP 64) (pc,156) (val z,8 * 6)
+CSAT_GOAL &(val
+ (word_sub
+  (word_add
+   (word_join
+    (word_join (word_join (word_join (word_join m_5 m_4) m_3) m_2) m_1)
+   m_0)
+  (word_join
+   (word_join (word_join (word_join (word_join n_5 n_4) n_3) n_2) n_1)
+  n_0))
+ (word
+ 39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319))) =
+&(val
+ (word_join
+  (word_join
+   (word_join (word_join (word_join sum_s35 sum_s34) sum_s33) sum_s32)
+  sum_s29)
+ sum_s27))

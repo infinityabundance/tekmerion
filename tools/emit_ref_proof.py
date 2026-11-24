@@ -22,7 +22,10 @@ simulation/expansion idiom, which is labelled DEVELOPMENT_ONLY.
 Guard modes come from tools/heldout_guard.py.  ``--develop`` (default) refuses
 held-out task ids, objects and proof reads; ``--sealed-eval`` with an explicit
 manifest and freeze tag allows exactly the listed ids and objects and still
-refuses their proof text, including in ``--mode dev``.
+refuses their proof text, including in ``--mode dev``.  ``--spent`` with
+``--spent-manifest`` re-answers already-disclosed development ids: it admits
+only the listed ids and their objects, and still refuses every listed proof
+``.ml``.
 
 Usage:
   python3 tools/emit_ref_proof.py --task <id> --mode answer --out answer.txt
@@ -30,6 +33,9 @@ Usage:
   python3 tools/emit_ref_proof.py --sealed-eval \
       --sealed-manifest research/receipts/sealed.json \
       --freeze-tag freeze-x86-sealed-v1 --task <id> --mode answer --out answer.txt
+  python3 tools/emit_ref_proof.py --spent \
+      --spent-manifest research/receipts/spent-r4-arm.json \
+      --task <id> --mode answer --out answer.txt
 """
 
 from __future__ import annotations

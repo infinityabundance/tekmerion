@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""IX.52 -- two explicit, fail-closed held-out guard modes.
+"""IX.52/IX.53 -- explicit, fail-closed held-out guard modes.
 
-The six behaviours under test:
+The behaviours under test:
 
 1. ``--develop`` still refuses a held-out task id and its object.
 2. ``--sealed-eval`` with the nine declared ids allows them (and their objects).
@@ -10,6 +10,9 @@ The six behaviours under test:
    ``--mode dev`` proof-read path).
 5. A wrong tag, a wrong recorded commit, or a dirty ``tools/`` tree is refused.
 6. Duplicate or malformed manifest entries are refused.
+7. ``--spent --spent-manifest`` admits exactly the manifest's disclosed
+   development ids and their objects, refuses every unlisted held-out id, and
+   still refuses any listed id's proof ``.ml``.  The default stays ``--develop``.
 
 Freeze verification is exercised against a throw-away git repository so the
 tests do not depend on the real repository's tag or working-tree state.
@@ -297,3 +300,176 @@ def test_manifest_duplicate_message_names_the_id(tmp_path):
     path = _write_manifest(tmp_path, [NINE[0], NINE[0]], "0" * 40, "dup.json")
     with pytest.raises(heldout_guard.HeldOutRefused, match="duplicate"):
         heldout_guard.load_sealed_manifest(str(path))
+
+
+# --------------------------------------------------------------------------
+# 7. Spent mode: disclosed development ids, still no proof text
+# --------------------------------------------------------------------------
+
+DECISION = ("IX.53 decision record research/receipts/ix53-spent-mode.md; "
+            "R4 disclosed these ids as development data in "
+            "research/receipts/r4-reference-route.md")
+REAL_SPENT = REPO / "research" / "receipts" / "spent-r4-arm.json"
+
+
+def _write_spent_manifest(tmp_path: Path, ids, reasons=None, decision=DECISION,
+                          name="spent.json", extra=None) -> Path:
+    payload = {
+        "decision": decision,
+        "spent": {task: (reasons or {}).get(task, "disclosed development id")
+                  for task in ids},
+    }
+    if extra:
+        payload.update(extra)
+    path = tmp_path / name
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _spent(tmp_path: Path, ids, **kwargs):
+    return heldout_guard.spent_policy(
+        str(_write_spent_manifest(tmp_path, ids, **kwargs)))
+
+
+def _args(**kwargs):
+    defaults = {"develop": False, "sealed_eval": False, "sealed_manifest": None,
+                "freeze_tag": None, "spent": False, "spent_manifest": None,
+                "held_out": []}
+    defaults.update(kwargs)
+    return type("Args", (), defaults)()
+
+
+def test_spent_allows_only_listed_ids(tmp_path):
+    policy = _spent(tmp_path, NINE[:-1])
+    assert policy.mode == heldout_guard.MODE_SPENT
+    for task in NINE[:-1]:
+        assert policy.check_task(task) == task
+    with pytest.raises(heldout_guard.HeldOutRefused):
+        policy.check_task(NINE[-1])
+    # A held-out id that was never declared is refused even in spent mode.
+    with pytest.raises(heldout_guard.HeldOutRefused):
+        policy.check_task("x86.bignum_cmul_p25519.BIGNUM_CMUL_P25519_CORRECT")
+
+
+def test_spent_allows_listed_object_and_refuses_unlisted(tmp_path):
+    policy = _spent(tmp_path, [NINE[0]])
+    op, family = _task_parts(NINE[0])
+    obj = _object(op, family)
+    if obj is None:
+        pytest.skip("x86 s2n-bignum objects not present")
+    assert Path(policy.check_object(str(obj), root=S2N)).name == obj.name
+
+    op, family = _task_parts(NINE[-1])
+    other = _object(op, family)
+    if other is not None:
+        with pytest.raises(heldout_guard.HeldOutRefused):
+            policy.check_object(str(other), root=S2N)
+
+    # An object allowance still requires an allowed root.
+    with pytest.raises(heldout_guard.HeldOutRefused):
+        policy.check_object(str(obj))
+
+
+def test_spent_refuses_listed_proof_files(tmp_path):
+    policy = _spent(tmp_path, NINE)
+    proof = _proof("add", "p25519")
+    with pytest.raises(heldout_guard.HeldOutRefused, match="never readable"):
+        policy.check_proof(str(proof), root=S2N)
+    with pytest.raises(heldout_guard.HeldOutRefused, match="never readable"):
+        policy.check_path(str(proof), root=S2N)
+
+    # The emitters' --mode dev proof-read path is refused for a spent id too.
+    with pytest.raises(SystemExit):
+        emit_ref_proof_x86.modulus_definition("add", "p25519", policy)
+    with pytest.raises(SystemExit):
+        emit_ref_proof_x86.machine_code_phrase(
+            "add", "p25519", "p25519_mc",
+            "x86/curve25519/bignum_add_p25519.o", policy)
+    with pytest.raises(SystemExit):
+        emit_ref_proof.modulus_definition("add", "p25519", policy)
+
+    # A proof file is never accepted as an object in spent mode either.
+    with pytest.raises(heldout_guard.HeldOutRefused):
+        policy.check_object(str(proof), root=S2N)
+
+
+def test_spent_manifest_requires_decision_and_reasons(tmp_path):
+    cases = {
+        "no-decision": {"decision": "", "spent": {NINE[0]: "r"}},
+        "uncited": {"decision": "because I said so",
+                    "spent": {NINE[0]: "r"}},
+        "no-reason": {"decision": DECISION, "spent": {NINE[0]: "  "}},
+        "bad-id": {"decision": DECISION, "spent": {"x86.bignum_add": "r"}},
+        "empty": {"decision": DECISION, "spent": {}},
+        "unknown-key": {"decision": DECISION, "spent": {NINE[0]: "r"},
+                        "allow_all": True},
+        "not-an-object": [NINE[0]],
+    }
+    for name, payload in cases.items():
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(heldout_guard.HeldOutRefused):
+            heldout_guard.load_spent_manifest(str(path))
+
+    dup = tmp_path / "dup-spent.json"
+    dup.write_text('{"decision": "' + DECISION + '", "spent": {'
+                   '"' + NINE[0] + '": "a", "' + NINE[0] + '": "b"}}',
+                   encoding="utf-8")
+    with pytest.raises(heldout_guard.HeldOutRefused, match="duplicate key"):
+        heldout_guard.load_spent_manifest(str(dup))
+
+
+def test_spent_mode_is_explicit_and_develop_is_the_default(tmp_path):
+    manifest = _write_spent_manifest(tmp_path, NINE)
+    policy = heldout_guard.policy_from_args(
+        _args(spent=True, spent_manifest=str(manifest)))
+    assert policy.mode == heldout_guard.MODE_SPENT
+    assert policy.check_task(NINE[0]) == NINE[0]
+
+    # Default remains develop.
+    assert heldout_guard.policy_from_args(_args()).mode == \
+        heldout_guard.MODE_DEVELOP
+
+    for bad in (_args(spent=True),
+                _args(spent=True, spent_manifest=str(manifest),
+                      sealed_eval=True),
+                _args(spent=True, spent_manifest=str(manifest),
+                      freeze_tag=FREEZE_TAG),
+                _args(spent_manifest=str(manifest)),
+                _args(spent=True, spent_manifest=str(manifest),
+                      sealed_manifest=str(manifest))):
+        with pytest.raises(heldout_guard.HeldOutRefused):
+            heldout_guard.policy_from_args(bad)
+
+    # The CLI entry point agrees: a spent run without its manifest is refused.
+    assert heldout_guard.main(["--spent", NINE[0]]) == \
+        heldout_guard.EXIT_REFUSED
+
+
+def test_real_spent_manifest_lists_the_eighteen_r4_arm_ids():
+    manifest = heldout_guard.load_spent_manifest(str(REAL_SPENT))
+    assert len(manifest.spent) == 18
+    assert "research/receipts/r4-reference-route.md" in manifest.decision
+    for task, reason in manifest.spent.items():
+        assert heldout_guard.parse_task_id(task) is not None
+        assert task.startswith("arm.bignum_")
+        assert reason.strip()
+
+    # The manifest's ids are exactly the 18 in the R4 verdict CSV.
+    import csv
+    with open(REPO / "research" / "receipts" / "r4-verdicts.csv",
+              encoding="utf-8") as fh:
+        rows = [r["Problem"] for r in csv.DictReader(fh)]
+    declared = {r for r in rows if heldout_guard.parse_task_id(r) is not None}
+    assert set(manifest.spent) == declared
+
+    policy = heldout_guard.spent_policy(str(REAL_SPENT))
+    assert policy.check_task(
+        "arm.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT")
+    assert policy.check_task("arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT")
+    # The real manifest is ARM-only: an x86 held-out id is still refused.
+    with pytest.raises(heldout_guard.HeldOutRefused):
+        policy.check_task("x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT")
+    with pytest.raises(heldout_guard.HeldOutRefused, match="never readable"):
+        policy.check_proof(
+            str(S2N / "arm" / "proofs" / "bignum_add_p256k1.ml"), root=S2N)

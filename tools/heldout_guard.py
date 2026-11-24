@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """heldout_guard.py -- fail-closed modes for held-out evaluation targets.
 
-Two controls are deliberately kept separate:
+Three controls are deliberately kept separate:
 
 ``develop`` (the default, and the only behaviour the older entry points have)
     Development tooling must not read evaluation targets.  Any path or task id
@@ -22,6 +22,17 @@ Two controls are deliberately kept separate:
       * the manifest's optional ``freeze_tag`` (when present) equals ``<TAG>``,
       * the working tree has no changes to tracked files under ``tools/``.
 
+``spent``
+    Development data that has already been disclosed is *spent*: answering it
+    again is no longer a blind evaluation, but the guard still must not be
+    disabled wholesale.  ``--spent --spent-manifest PATH`` allows exactly the
+    task ids recorded in that manifest, together with the objects those ids
+    name, and it still refuses to open any proof ``.ml`` for them.  The
+    manifest must state, per id, why the id is spent, and carry a ``decision``
+    that cites a receipt under ``research/receipts/``.  Unlike ``sealed-eval``
+    no freeze tag is involved: a spent id is not a secrecy boundary, it is a
+    scope boundary.
+
 Held-out markers are matched case-insensitively against the requested path and
 its fully resolved path (so a symlink with an innocent name does not slip
 through).  Defaults cover the programme's held-out curves:
@@ -32,7 +43,7 @@ through).  Defaults cover the programme's held-out curves:
 
 Markers can be added (never removed) with ``--held-out``.
 
-Manifest format (JSON; duplicate top-level keys are refused, and the
+Sealed manifest format (JSON; duplicate keys are refused, and the
 ``sealed_ids`` list must itself be duplicate-free)::
 
   {
@@ -50,6 +61,21 @@ with the theorem name consistent with the operation and family.  Wildcards,
 partial ids and duplicates are refused.  Unknown top-level keys are refused so
 that a manifest cannot quietly carry a second meaning.
 
+Spent manifest format (JSON; duplicate keys are refused)::
+
+  {
+    "decision": "receipt path and rationale",
+    "spent": {
+      "arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT":
+        "R4 development task; baseline verdict FAIL (r4-verdicts.csv)"
+    },
+    "note": "optional free text"
+  }
+
+``decision`` must be non-empty and cite a path under ``research/receipts/``;
+``spent`` must map at least one declared id to a non-empty reason.  The reason
+is required for every id, so a spent allowance cannot be granted silently.
+
 Usage:
   python3 tools/heldout_guard.py PATH [PATH ...]                    # develop
   python3 tools/heldout_guard.py PATH --root .bench/s2n-bignum
@@ -57,6 +83,9 @@ Usage:
   python3 tools/heldout_guard.py PATH --sealed-eval \
       --sealed-manifest research/receipts/sealed.json \
       --freeze-tag freeze-x86-sealed-v1 --root .bench/s2n-bignum
+  python3 tools/heldout_guard.py PATH --spent \
+      --spent-manifest research/receipts/spent-r4-arm.json \
+      --root .bench/s2n-bignum
 
 Exit status: 0 allowed (and the file was opened read-only for hashing),
              2 refused (fail closed).
@@ -87,6 +116,7 @@ EXIT_REFUSED = 2
 
 MODE_DEVELOP = "develop"
 MODE_SEALED_EVAL = "sealed-eval"
+MODE_SPENT = "spent"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -103,6 +133,12 @@ _PROOF_RE = re.compile(r"^bignum_(?P<op>add|sub|neg)_(?P<family>[a-z0-9]+)\.ml$"
 _HEX40_RE = re.compile(r"^[0-9a-f]{40}$")
 
 _MANIFEST_KEYS = frozenset({"freeze_commit", "freeze_tag", "sealed_ids", "note"})
+_SPENT_MANIFEST_KEYS = frozenset({"decision", "spent", "note"})
+_DECISION_CITATION = "research/receipts/"
+_MANIFEST_NOUN = {
+    MODE_SEALED_EVAL: "sealed",
+    MODE_SPENT: "spent",
+}
 
 
 class HeldOutRefused(Exception):
@@ -363,6 +399,84 @@ def load_sealed_manifest(path) -> SealedManifest:
     )
 
 
+@dataclass(frozen=True)
+class SpentManifest:
+    """An allow-list of disclosed development ids, each with its reason."""
+
+    path: str
+    spent: dict  # canonical task id -> non-empty reason
+    decision: str
+    note: str = ""
+
+
+def load_spent_manifest(path) -> SpentManifest:
+    """Load and strictly validate a spent manifest.  Fail closed on anything.
+
+    A spent allowance is a scope decision, not a secrecy one, so no freeze tag
+    is involved; the evidence that the scope decision was made is the
+    ``decision`` string, which must cite a receipt, and a per-id reason.
+    """
+    if not path:
+        raise HeldOutRefused("no spent manifest given")
+
+    if os.path.islink(path):
+        raise HeldOutRefused(f"spent manifest may not be a symlink: {path}")
+    try:
+        st = os.stat(path)
+    except OSError as exc:
+        raise HeldOutRefused(f"cannot stat spent manifest {path}: {exc}") from exc
+    if not os.path.isfile(path):
+        raise HeldOutRefused(f"spent manifest is not a regular file: {path}")
+    if st.st_size == 0:
+        raise HeldOutRefused(f"spent manifest is empty: {path}")
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh, object_pairs_hook=_reject_duplicate_keys)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HeldOutRefused(f"cannot parse spent manifest {path}: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise HeldOutRefused("spent manifest must be a JSON object")
+
+    unknown = set(payload) - _SPENT_MANIFEST_KEYS
+    if unknown:
+        raise HeldOutRefused(
+            f"spent manifest has unknown keys: {sorted(unknown)}")
+
+    decision = payload.get("decision")
+    if not isinstance(decision, str) or not decision.strip():
+        raise HeldOutRefused("spent manifest needs a non-empty decision")
+    if _DECISION_CITATION not in decision:
+        raise HeldOutRefused(
+            "spent manifest decision must cite a path under "
+            f"{_DECISION_CITATION}")
+
+    raw = payload.get("spent")
+    if not isinstance(raw, dict) or not raw:
+        raise HeldOutRefused("spent must be a non-empty JSON object")
+
+    spent = {}
+    for task, reason in raw.items():
+        if parse_task_id(task) is None:
+            raise HeldOutRefused(
+                f"spent id is not in the declared format: {task!r}")
+        if not isinstance(reason, str) or not reason.strip():
+            raise HeldOutRefused(f"spent id {task!r} has no reason")
+        spent[task] = reason
+
+    note = payload.get("note", "")
+    if not isinstance(note, str):
+        raise HeldOutRefused("note must be a string")
+
+    return SpentManifest(
+        path=os.path.realpath(path),
+        spent=spent,
+        decision=decision,
+        note=note,
+    )
+
+
 def _git(repo, *args):
     """Run git in *repo* with a bounded timeout.  Refuse on any error."""
     cmd = ["git", "--no-optional-locks", *args]
@@ -417,12 +531,14 @@ class GuardPolicy:
 
     def __init__(self, mode, manifest=None, repo=REPO_ROOT,
                  held_out=DEFAULT_HELD_OUT):
-        if mode not in (MODE_DEVELOP, MODE_SEALED_EVAL):
+        if mode not in (MODE_DEVELOP, MODE_SEALED_EVAL, MODE_SPENT):
             raise HeldOutRefused(f"unknown guard mode: {mode!r}")
         if not held_out:
             raise HeldOutRefused("empty held-out list; refusing by default")
-        if mode == MODE_SEALED_EVAL and manifest is None:
+        if mode == MODE_SEALED_EVAL and not isinstance(manifest, SealedManifest):
             raise HeldOutRefused("sealed-eval requires a sealed manifest")
+        if mode == MODE_SPENT and not isinstance(manifest, SpentManifest):
+            raise HeldOutRefused("spent requires a spent manifest")
         self.mode = mode
         self.manifest = manifest
         self.repo = Path(repo)
@@ -432,12 +548,27 @@ class GuardPolicy:
     def sealed(self) -> bool:
         return self.mode == MODE_SEALED_EVAL
 
+    @property
+    def spent(self) -> bool:
+        return self.mode == MODE_SPENT
+
+    @property
+    def admitted(self) -> bool:
+        """Does the mode admit any held-out marker at all?"""
+        return self.mode in (MODE_SEALED_EVAL, MODE_SPENT)
+
+    def _manifest_noun(self) -> str:
+        return _MANIFEST_NOUN.get(self.mode, "sealed")
+
     def _marker(self, text):
         return _marker_in(text, self.held_out)
 
     def _listed(self, task) -> bool:
-        return (self.sealed and self.manifest is not None
-                and task is not None and task in self.manifest.sealed_ids)
+        if not self.admitted or self.manifest is None or task is None:
+            return False
+        if self.sealed:
+            return task in self.manifest.sealed_ids
+        return task in self.manifest.spent
 
     def check_task(self, task):
         """Allow a task id only if it is not held out or is manifest-listed."""
@@ -446,16 +577,17 @@ class GuardPolicy:
         marker = self._marker(task)
         if marker is None:
             return task
-        if not self.sealed:
+        if not self.admitted:
             raise HeldOutRefused(
                 f"held-out marker {marker!r} in task {task!r}")
         if parse_task_id(task) is None:
             raise HeldOutRefused(
-                f"held-out task id is not in the declared sealed-set format: "
+                f"held-out task id is not in the declared task-id format: "
                 f"{task!r}")
-        if task not in self.manifest.sealed_ids:
+        if not self._listed(task):
             raise HeldOutRefused(
-                f"held-out task id {task!r} is not in the sealed manifest")
+                f"held-out task id {task!r} is not in the "
+                f"{self._manifest_noun()} manifest")
         return task
 
     def check_object(self, path, root=None):
@@ -467,7 +599,7 @@ class GuardPolicy:
         marker = self._marker(path)
         if marker is None:
             return check_path(path, held_out=self.held_out, root=root)
-        if not self.sealed:
+        if not self.admitted:
             raise HeldOutRefused(f"held-out marker {marker!r} in {path}")
         task = task_id_for_object(path)
         if task is None:
@@ -476,20 +608,22 @@ class GuardPolicy:
         if not self._listed(task):
             raise HeldOutRefused(
                 f"object {path} belongs to {task!r}, which is not in the "
-                f"sealed manifest")
+                f"{self._manifest_noun()} manifest")
         if root is None:
             raise HeldOutRefused(
-                f"sealed object allowance for {path} requires an allowed root")
+                f"{self._manifest_noun()} object allowance for {path} requires "
+                f"an allowed root")
         return _check_regular(path, root=root)
 
     def check_proof(self, path, root=None):
-        """A sealed task's proof text is never readable, in either mode."""
+        """A listed task's proof text is never readable, in any mode."""
         if not path:
             raise HeldOutRefused("empty path")
         task = task_id_for_proof(path)
         if self._listed(task):
             raise HeldOutRefused(
-                f"sealed proof file is never readable: {path} ({task!r})")
+                f"{self._manifest_noun()} proof file is never readable: "
+                f"{path} ({task!r})")
         marker = self._marker(path)
         if marker is not None:
             raise HeldOutRefused(
@@ -522,6 +656,14 @@ def sealed_policy(manifest_path, freeze_tag, repo=REPO_ROOT,
                        held_out=held_out)
 
 
+def spent_policy(manifest_path, repo=REPO_ROOT,
+                 held_out=DEFAULT_HELD_OUT) -> GuardPolicy:
+    """Load and return a spent policy.  No freeze tag is involved."""
+    manifest = load_spent_manifest(manifest_path)
+    return GuardPolicy(MODE_SPENT, manifest=manifest, repo=repo,
+                       held_out=held_out)
+
+
 # --------------------------------------------------------------------------
 # CLI plumbing shared by the emitters
 # --------------------------------------------------------------------------
@@ -539,36 +681,65 @@ def add_mode_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--freeze-tag", default=None, metavar="TAG",
                     help="git tag that must resolve to the manifest's freeze "
                          "commit (required with --sealed-eval)")
+    ap.add_argument("--spent", action="store_true",
+                    help="spent development data: allow only the ids listed in "
+                         "--spent-manifest and their objects; never read "
+                         "their proof text")
+    ap.add_argument("--spent-manifest", default=None, metavar="PATH",
+                    help="spent manifest (required with --spent)")
 
 
 def policy_from_args(args, repo=REPO_ROOT) -> GuardPolicy:
     """Build the policy named by parsed CLI arguments.  Fail closed."""
     sealed = bool(getattr(args, "sealed_eval", False))
+    spent = bool(getattr(args, "spent", False))
     develop = bool(getattr(args, "develop", False))
-    manifest_path = getattr(args, "sealed_manifest", None)
+    sealed_manifest = getattr(args, "sealed_manifest", None)
     freeze_tag = getattr(args, "freeze_tag", None)
+    spent_manifest = getattr(args, "spent_manifest", None)
     extra = tuple(getattr(args, "held_out", None) or ())
     held_out = DEFAULT_HELD_OUT + extra
 
-    if sealed and develop:
-        raise HeldOutRefused("--develop and --sealed-eval are mutually exclusive")
+    chosen = [name for name, flag in
+              ((MODE_DEVELOP, develop), (MODE_SEALED_EVAL, sealed),
+               (MODE_SPENT, spent)) if flag]
+    if len(chosen) > 1:
+        raise HeldOutRefused(
+            "guard modes are mutually exclusive: " + ", ".join(chosen))
+
+    if spent:
+        if spent_manifest is None:
+            raise HeldOutRefused("--spent requires --spent-manifest PATH")
+        if sealed_manifest is not None:
+            raise HeldOutRefused(
+                "--sealed-manifest requires --sealed-eval, not --spent")
+        if freeze_tag is not None:
+            raise HeldOutRefused("--freeze-tag requires --sealed-eval")
+        return spent_policy(spent_manifest, repo=repo, held_out=held_out)
+
     if not sealed:
-        if manifest_path is not None or freeze_tag is not None:
+        if sealed_manifest is not None or freeze_tag is not None:
             raise HeldOutRefused(
                 "--sealed-manifest and --freeze-tag require --sealed-eval")
+        if spent_manifest is not None:
+            raise HeldOutRefused("--spent-manifest requires --spent")
         return GuardPolicy(MODE_DEVELOP, repo=repo, held_out=held_out)
-    if manifest_path is None:
+    if spent_manifest is not None:
+        raise HeldOutRefused("--spent-manifest requires --spent, not --sealed-eval")
+    if sealed_manifest is None:
         raise HeldOutRefused("--sealed-eval requires --sealed-manifest PATH")
     if freeze_tag is None:
         raise HeldOutRefused("--sealed-eval requires --freeze-tag TAG")
-    return sealed_policy(manifest_path, freeze_tag, repo=repo, held_out=held_out)
+    return sealed_policy(sealed_manifest, freeze_tag, repo=repo,
+                         held_out=held_out)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Fail-closed guard against reading held-out s2n-bignum "
-                    "proofs (develop) or gate their declared objects "
-                    "(sealed-eval).",
+                    "proofs (develop), gate their declared objects "
+                    "(sealed-eval), or re-answer disclosed development ids "
+                    "(spent).",
     )
     ap.add_argument("paths", nargs="*", help="files that development tooling wants to read")
     ap.add_argument("--root", default=None,
