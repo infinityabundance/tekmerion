@@ -1824,7 +1824,7 @@ carefully justified authority.
   (9/9). Evidence: `research/receipts/ix55/` + `eval.sha256` binding the 282 MB directory.
   Residual limit: host userland is borrowed read-only (glibc).
 - [x] **XI.L.11. [NEW] Statement provenance from upstream.** Done 2026-11-24:
-  `challenge.py verify --upstream` extracts the goal quotation from the pinned `.ml` and
+  `challenge verify --upstream` extracts the goal quotation from the pinned `.ml` and
   compares it to the bench statement. **27/27 PASS**. Decision record
   `research/receipts/ix-o1-upstream-audit.md` states the exception (goal range only, public
   statement, sealed run already frozen). Extractor handles the `let <NAME> = …` shape; a
@@ -1850,7 +1850,7 @@ carefully justified authority.
 - [ ] **XI.L.9. Signed tags.** Sign `freeze-*` tags; record the public key and verification
   command in the receipt.
 - [x] **XI.L.10. Challenge files + comparator** for the nine statements (O1.1/O1.2). Done
-  2026-11-24, `research/receipts/ix-o1-challenges.md`. `tools/challenge.py` freezes the exact
+  2026-11-24, `research/receipts/ix-o1-challenges.md`. `src/tools/challenge.rs` freezes the exact
   statement bytes + corpus/object digests and verifies them against the judge program that ran.
   **27/27 PASS** (nine x86 sealed at `eval-20261124_003911`, eighteen ARM at
   `eval-20261124_030015`). **Honest limit:** all were frozen *after* the run (`pre-search
@@ -1937,7 +1937,7 @@ HOL Light's guarantee is enforced by OCaml's type system; a generated script is 
 OCaml. The bench's `axioms()` comparison catches none of the following. Long-recognised LCF
 risks: `Obj.magic`, `Marshal`, mutable strings/state.
 
-- [x] **XII.F1.1 (gate implemented; grammar target open).** `tools/script_gate.py` parses with
+- [x] **XII.F1.1 (gate implemented; grammar target open).** `src/tools/script_gate.rs` parses with
   the real OCaml front end through `hol.sh -pp` and refuses `Obj`/`Marshal`/`Unix`/`Sys.command`,
   `external`, and any binding or parameter named after a kernel/judge primitive; `--profile
   strict` also refuses `Sys`, `ref`, `:=` and file I/O. **Measurement: 0/26 answers pass even
@@ -1947,7 +1947,7 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
 - [ ] **XII.F1.1b. Closed proof-term artifact (the actual fix).** Emit only a closed tactic
   term; take the LRAT as a **certificate input**; load the support library from the judge; no
   subprocess and no file I/O at check time. Then require the strict gate to accept all 27.
-- [x] **XII.F1.2. Firing controls.** 12 tests (`tools/test_script_gate.py`): `Obj.magic`,
+- [x] **XII.F1.2. Firing controls.** 12 tests (`tests/tools.rs`): `Obj.magic`,
   `Marshal`, `Sys.command`, `external`, shadowed `check_axioms`, rebound `prove`, kernel name as
   a parameter, `ref`/`:=` under strict, `Sys.getenv` under strict; plus the authoritative
   front-end control. All fire.
@@ -2004,7 +2004,7 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
   statement; the kernel arbitrates each.
 - [ ] **XII.F6.2.** Seed statement defects the agents do not know about; report recall.
 - [x] **XII.F6.3 (partial).** Dual extraction: `problems.json` vs pinned upstream `.ml`
-  goal quotation, term-for-term. Implemented 2026-11-24 (`challenge.py verify --upstream`),
+  goal quotation, term-for-term. Implemented 2026-11-24 (`challenge verify --upstream`),
   **27/27 PASS**; decision record `ix-o1-upstream-audit.md`. Corpus-wide extension is
   XI.L.12.
 - [ ] **XII.F6.4.** Non-vacuity by construction: for every precondition emit a concrete

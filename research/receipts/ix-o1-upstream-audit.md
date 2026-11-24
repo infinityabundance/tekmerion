@@ -4,7 +4,7 @@
 - **Trigger:** review defect: the challenge comparator reads the same `problems.json` the
   producer used, so it cannot catch an error in the corpus. The independent source is the
   pinned upstream s2n-bignum proof file.
-- **Implementation:** `tools/challenge.py` `verify --upstream` (helper `upstream_goal`).
+- **Implementation:** `src/tools/challenge.rs` `verify --upstream` (helper `upstream_goal`).
 - **Result:** 27/27 challenges pass `statement==upstream-goal` (9 x86 sealed at
   `eval-20261124_061439`, 18 ARM at `eval-20261124_030015`).
 
@@ -52,7 +52,7 @@ the audit must not be run on them until after the new evaluation.
 ## Commands
 
 ```
-python3 tools/challenge.py verify --challenge research/challenges/<task>.challenge \
+cargo run --offline -q --bin challenge -- verify --challenge research/challenges/<task>.challenge \
     --evaldir <judge dir> --upstream
 ```
 

@@ -76,10 +76,10 @@ jobs:
         run: python3 tools/mutate_lifecycle.py
 
       # The Python guard decides which tasks may be opened, so its refusals are
-      # on the acceptance path. This harness mutates every HeldOutRefused site
-      # and requires the mode tests to notice. Restores the file in finally.
-      - name: Guard refusal-site mutation harness (offline)
-        run: python3 tools/mutate_guard.py
+      # on the acceptance path. The Rust harness mutates every HeldOutRefused
+      # site and requires the mode tests to notice; it restores the file in Drop.
+      - name: Guard refusal-site mutation harness (Rust, offline)
+        run: cargo run --offline --quiet --bin mutate_guard
 
       # selftest.sh re-runs cargo test and both mutation harnesses as part of its
       # 7 sections; it does not require HOL Light.

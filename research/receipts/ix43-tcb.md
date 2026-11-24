@@ -23,12 +23,17 @@ change the checker's verdict.
 | `src/native/lrat.rs` | 458 | RUP, hint discipline, deletions, empty-clause rule |
 | `src/native/cert.rs` | 628 | canonical container, DAG/cycle check, blob binding |
 | `src/native/check.rs` | 217 | the five rules and the only `Theorem` constructor |
-| `src/lib.rs` lines 205–319 | 115 | `Digest` parsing/hex and `Canon` domain-separated hashing |
+| `src/lib.rs` lines 206–320 | 115 | `Digest` parsing/hex and `Canon` domain-separated hashing |
 | **total** | **2,681** | |
 
-`src/lib.rs` is 1,121 lines; only the digest/hasher slice above is on the
+`src/lib.rs` is 1,122 lines; only the digest/hasher slice above is on the
 verdict path. The store/revocation code in the same file is not consulted by
 `native::check`, but it is linked into the same crate.
+
+**Not on the verdict path (added 2026-11-24):** `src/tools/` and `src/bin/`
+are Tekmerion's Rust tooling (challenge comparator, OCaml script gate, guard
+mutation harness) plus `tests/tools.rs`, 1,548 lines in total. `native::check`
+never calls them, and they are excluded from the 2,681 above.
 
 ## 2. Not trusted (compiled, but cannot affect a verdict)
 

@@ -2,14 +2,14 @@
 
 - **Date:** 2026-11-24
 - **Branch:** `staging`
-- **Artefacts:** `tools/challenge.py`, `tools/test_challenge.py`,
+- **Artefacts:** `src/tools/challenge.rs`, `tests/tools.rs`,
   `research/challenges/*.challenge` (twenty-seven files: nine x86 sealed, eighteen ARM)
 - **Corpus:** `.bench/problems.json` sha256 `74f314445fa5f579d18b03e73c167ea0ca56e0581e26add8a11d8d077f7ea8d4`
 - **s2n-bignum:** `5e0fc782ae6d587c2ae40faf2c2c4d0b637e6240`
 
 ## 1. What was built
 
-`tools/challenge.py` has two subcommands and no third-party dependencies.
+`src/tools/challenge.rs` has two subcommands and no third-party dependencies.
 
 * `freeze --task ID --out PATH [--post-hoc REASON]` writes a plain-text challenge:
   the exact statement bytes from `problems.json`, its sha256 and length, the
@@ -64,7 +64,7 @@ exactly one to embed the statement. Regression test:
 
 ## 4. Firing controls (the clause must be able to fail)
 
-`python3 -m pytest tools/test_challenge.py -q` → **7 passed**. Each control plants
+`cargo test --offline --test tools` → **7 passed**. Each control plants
 a defect and requires rejection:
 
 | control | required result |
@@ -85,9 +85,9 @@ a defect and requires rejection:
 ## 5. Commands
 
 ```
-python3 tools/challenge.py freeze --task <ID> --out research/challenges/<op>_<family>.challenge \
+cargo run --offline -q --bin challenge -- freeze --task <ID> --out research/challenges/<op>_<family>.challenge \
     --post-hoc "judged at eval-20261124_003911; challenge recorded after the run"
-python3 tools/challenge.py verify --challenge research/challenges/<op>_<family>.challenge \
+cargo run --offline -q --bin challenge -- verify --challenge research/challenges/<op>_<family>.challenge \
     --evaldir .bench/eval-20261124_003911
-python3 -m pytest tools/test_challenge.py -q
+cargo test --offline --test tools
 ```

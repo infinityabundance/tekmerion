@@ -1,7 +1,7 @@
 # F1 — the emitted proof script is arbitrary OCaml: gate implemented, 0/26 pass
 
 - **Date:** 2026-11-24
-- **Artefacts:** `tools/script_gate.py`, `tools/test_script_gate.py`
+- **Artefacts:** `src/tools/script_gate.rs`, `tests/tools.rs`
 - **Subject:** the 26 emitted answers under `.bench/dropin-gen/answers{,-arm}/`
 
 ## 1. Why this exists
@@ -13,7 +13,7 @@ generated proof script is arbitrary OCaml, so an untrusted producer can shadow `
 
 ## 2. What was built
 
-`tools/script_gate.py` parses a candidate with the **real OCaml front end**, through HOL
+`src/tools/script_gate.rs` parses a candidate with the **real OCaml front end**, through HOL
 Light's own quotation preprocessor:
 
 ```
@@ -35,7 +35,7 @@ Exit codes: 0 allowed, 1 refused by policy, 2 parse error, 3 tool unavailable.
 
 ## 3. Firing controls
 
-`python3 -m pytest tools/test_script_gate.py -q` → **12 passed**, including the authoritative
+`python3 -m pytest tests/tools.rs -q` → **12 passed**, including the authoritative
 front-end control. Each control plants a defect that must be refused:
 
 | control | result |

@@ -77,7 +77,7 @@ All nine `*.judge.txt` files exist and contain `OK`.
 The challenge comparator was also re-run against the preserved directory:
 
 ```
-$ python3 tools/challenge.py verify --challenge research/challenges/<task>.challenge \
+$ cargo run --offline -q --bin challenge -- verify --challenge research/challenges/<task>.challenge \
       --evaldir <preserved eval dir>
 x86 challenges: VERIFIED 9 of 9; failures 0
 ```
@@ -107,5 +107,5 @@ upstream drop-in (`ix54-upstream-dropin.md`, all nine, `check_axioms`).
 python3 .bench/build-sealed-court-v4.py
 bash .bench/run-sealed-court-v4.sh full
 python3 .bench/collect-verdicts.py .bench/out-v4/eval-20261124_061439 /tmp/recollect.csv
-python3 tools/challenge.py verify --challenge <challenge> --evaldir .bench/out-v4/eval-20261124_061439
+cargo run --offline -q --bin challenge -- verify --challenge <challenge> --evaldir .bench/out-v4/eval-20261124_061439
 ```

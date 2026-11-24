@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-24
 - **Branch:** `staging`
-- **Artefacts:** `tools/mutate_guard.py`, `tools/test_guard_refusals.py`,
+- **Artefacts:** `src/tools/mutate_guard.rs`, `tools/test_guard_refusals.py`,
   `.github/workflows/ci.yml`
 - **Subject:** `tools/heldout_guard.py` (the Python guard that decides which tasks and
   objects may be opened). `tools/mutate.py` mutates the *Rust* refusal sites only; the
@@ -17,15 +17,16 @@ suite to notice.
 
 ## 2. Method
 
-`tools/mutate_guard.py` parses `heldout_guard.py` with `ast`, finds every
-`raise HeldOutRefused(...)`, and for each one replaces the whole statement with
-`pass  # MUTATED`. It runs `pytest -x -q` over
-`tools/test_heldout_modes.py tools/test_guard_refusals.py tools/test_challenge.py`
+`src/tools/mutate_guard.rs` scans `heldout_guard.py` for every
+`raise HeldOutRefused(...)` span with a balanced-paren scanner (skipping string
+literals and extending over a trailing `from …`), and for each one replaces the
+whole statement with `pass  # MUTATED`. It runs `pytest -x -q` over
+`tools/test_heldout_modes.py tools/test_guard_refusals.py`
 and records `KILLED` (suite fails) or `SURVIVED` (suite passes). The file is restored
 after every mutant and once more in `finally`, with a SHA-256 check; a stale `.orig`
 backup makes the tool refuse to start.
 
-AST-based rewriting is used so multi-line raises and `... from exc` are handled without
+The balanced-paren scanner is used so multi-line raises and `... from exc` are handled without
 regex fragility.
 
 ## 3. Measured
@@ -97,7 +98,7 @@ Effective coverage of non-equivalent sites is **66/66**.
 specific `HeldOutRefused` message, so a mutated guard that stops refusing fails the test.
 
 The harness itself is falsifiable: every survivor must either be killed or appear in the
-line-anchored `EQUIVALENT` table in `tools/mutate_guard.py`. Any new unlisted survivor makes
+line-anchored `EQUIVALENT` table in `src/tools/mutate_guard.rs`. Any new unlisted survivor makes
 the tool exit 1 and fails CI; and because the table is keyed by `(line, source)`,
 an edit that shifts a listed site also fails until it is re-reviewed.
 
@@ -112,7 +113,7 @@ The current run ends with `all survivors are recorded equivalent mutants`.
 
 ```
 - name: Guard refusal-site mutation harness (offline)
-  run: python3 tools/mutate_guard.py
+  run: cargo run --offline -q --bin mutate_guard
 ```
 
 The step is not `continue-on-error`.

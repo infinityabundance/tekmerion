@@ -60,6 +60,7 @@ use std::fmt;
 use sha2::{Digest as _, Sha256};
 
 pub mod native;
+pub mod tools;
 pub mod wire;
 
 // ---------------------------------------------------------------------------
