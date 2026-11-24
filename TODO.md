@@ -1898,3 +1898,224 @@ only; every "nobody has combined X and Y" names the search terms and the closest
 
 Every step pushes to `staging` on completion. No step is marked done without its receipt and,
 where the standard requires it, its firing control.
+
+---
+
+# PART XII — Mentorship findings F1–F9, priorities P0–P7 (intake 2026-11-24)
+
+Source: `tekmerion-mentorship-findings.md` and the accompanying findings text. **Nothing is
+omitted.** Findings are ranked by how much each moves Tekmerion toward a result nobody can
+argue with. The governing idea: **build a proof compiler, not a proof search engine** —
+compile executable behaviour into mathematical evidence.
+
+## XII.0 — Architectural frame (must shape every item below)
+
+- [ ] **XII.0.1. Semantic compiler pipeline, not tactic search.** Executable artifact →
+  verified decoding / symbolic execution / memory & flag semantics → mathematical-structure
+  discovery (carry chains, polynomial relations, bounds, invariants, equivalences) → certificate
+  synthesis (planning, algebra, SAT/SMT, rewriting, composition) → native checker → verified
+  theorem. Unfamiliar routines must be proved from their semantics, not from name resemblance.
+- [ ] **XII.0.2. Do not let SAT become the ceiling of the math.** Choose the representation that
+  makes the obligation easiest: carry → integer conservation; reduction → quotient/residue
+  certificates; multiplication → polynomial identities/limb decomposition; Montgomery →
+  algebraic cancellation/divisibility; ranges → interval analysis; bitwise → certified SAT;
+  nonlinear → polynomial normalisation; loops → inductive invariants + termination; schedules →
+  relational equivalence; constant-time → relational trace reasoning.
+- [ ] **XII.0.3. Stop measuring progress by code volume.** Track: previously unsolved theorems;
+  new families; reusable certified algorithms; unverified trusted assumptions (down);
+  task-specific branches (down); human-authored intermediate facts (down); proof-generation cost
+  per theorem (down); native replay time (down); declared-semantics coverage (up); surviving
+  soundness mutations (down); cross-version proof migration (up). Watch the ratio of new engine
+  complexity to newly enabled *capability*.
+- [ ] **XII.0.4. Keep architecture docs from outrunning the math.** Every proposed subsystem
+  must eventually produce an executable artifact, a checked theorem, or a measured capability
+  increase.
+
+## XII.F1 — The proof script is the attack surface (HIGHEST VALUE) [P0/P1]
+
+HOL Light's guarantee is enforced by OCaml's type system; a generated script is arbitrary
+OCaml. The bench's `axioms()` comparison catches none of the following. Long-recognised LCF
+risks: `Obj.magic`, `Marshal`, mutable strings/state.
+
+- [ ] **XII.F1.1. Closed tactic grammar.** Emit proofs in a typed, closed language (allow-listed
+  tactic combinators, term literals, named lemmas) with a printer to OCaml. Acceptance parses
+  the emitted OCaml with the OCaml front end (compiler-libs) and refuses any AST that is not
+  exactly the printer's output for a grammar program: no `let` rebinding of kernel/judge names,
+  no `Obj`, `Marshal`, `Sys`, `Unix`, no references/mutable state, no `external`.
+- [ ] **XII.F1.2. Firing controls.** Planted `Obj.magic` forgery; shadowed `check_axioms`;
+  rebinding of `prove`; a mutable-state trick. Each must be refused by the grammar gate *before*
+  HOL Light runs.
+- [ ] **XII.F1.3. Milestone: one sealed s2n-bignum theorem accepted by Candle.** Candle is a
+  fully verified HOL Light clone (every exported fact valid in HOL) parsing the same OCaml
+  variant. First obstacle: loading the s2n-bignum libraries. Taking OCaml out of the trust base
+  for that result is the highest-value single outcome in the programme.
+- [ ] **XII.F1.4.** Gate every emitted answer in the existing pipeline (not only in tests) and
+  record the refusal rate.
+
+## XII.F2 — Export the derivation, not just the verdict
+
+- [ ] **XII.F2.1. Proof recording on for every accepted theorem.** Export the trace.
+- [ ] **XII.F2.2. Per-theorem axiom dependencies (foundation stamp O17), measured.**
+  `axioms()` lists the *session's* axioms, not the theorem's; the trace shows whether
+  `SELECT_AX`/`INFINITY_AX` are actually used. Do this for the nine x86 and 18 ARM theorems.
+- [ ] **XII.F2.3. Re-check outside the OCaml process** (HOLTrace-style replay).
+- [ ] **XII.F2.4. Export to a second logic** (Dedukti via hol2dk) on the small fragment needed.
+- [ ] **XII.F2.5. Inference-level size/shape baseline** generated vs human proofs.
+
+## XII.F3 — Check time is a first-class metric
+
+- [ ] **XII.F3.1. Report check time next to every `OK`**; set the target of parity with the
+  human proof on matched theorems. Baseline: P-256 add human 1.555 s vs ~24 s judged; suite
+  ~2×10⁵ CPU-s/arch; `bstep` ARM 241,319 → 190,772 s; `add_p521` 96.9/120 s.
+- [ ] **XII.F3.2. SAT for discovery, induction for reuse.** Use certified SAT to find and
+  validate carry/selection facts, then generalise into **width- and modulus-parametric lemmas**
+  proved once by induction over limbs and instantiated cheaply. This also lowers the foundation
+  needed (arithmetic induction, not a 256-bit circuit) — helps O17.
+- [ ] **XII.F3.3. Share the word-level `ref` lemmas across ARM and x86.** The identity
+  "outputs equal ref(x,y)" for an (operation, curve) is ISA-independent.
+- [ ] **XII.F3.4.** Re-measure the 18 ARM + 9 x86 tasks under the parametric-lemma route.
+
+## XII.F4 — Regeneration is the property nobody else has
+
+- [ ] **XII.F4.1.** Nightly: run the **frozen** compiler against upstream s2n-bignum HEAD and
+  publish the survival curve (X% regenerated unchanged and green, no human edits).
+- [ ] **XII.F4.2.** Attribute each break: upstream proof-infrastructure change, object-code
+  change, ISA-model change.
+- [ ] **XII.F4.3.** This is the "proof repair after change" measurement on industrial machine
+  code; it is also the strongest argument for AI-driven verification.
+
+## XII.F5 — Let the AI extend the compiler, under sealed evaluation
+
+- [ ] **XII.F5.1.** Give an agent an unseen family (double, half, optneg, triple, then
+  `montmul`/`montsqr`) with only object code, spec and compiler interfaces; it extends the
+  witness generators and close strategies; freeze; evaluate sealed on unseen curves/ISAs.
+- [ ] **XII.F5.2.** Metric: **time-to-coverage for an unseen family**, kernel as sole judge.
+
+## XII.F6 — Statement fidelity, done by machines
+
+- [ ] **XII.F6.1.** Adversarial statement agents (different model families) generate weakened
+  mutants, vacuity probes, and intent-violating implementations that satisfy a weakened
+  statement; the kernel arbitrates each.
+- [ ] **XII.F6.2.** Seed statement defects the agents do not know about; report recall.
+- [x] **XII.F6.3 (partial).** Dual extraction: `problems.json` vs pinned upstream `.ml`
+  goal quotation, term-for-term. Implemented 2026-11-24 (`challenge.py verify --upstream`),
+  **27/27 PASS**; decision record `ix-o1-upstream-audit.md`. Corpus-wide extension is
+  XI.L.12.
+- [ ] **XII.F6.4.** Non-vacuity by construction: for every precondition emit a concrete
+  satisfying state and run it through the machine model; for every postcondition a concrete
+  wrong output it rejects.
+
+## XII.F7 — The upstream tree is the scoreboard
+
+- [ ] **XII.F7.1. Upstream coverage**: the fraction of s2n-bignum's **675 straight-line FC
+  theorems** (at the pin) that Tekmerion regenerates green **in s2n-bignum's own build**, by
+  family and ISA, with check time. Rerunnable mechanically; needs no benchmark context.
+- [x] **XII.F7.2 (partial).** All nine x86 sealed tasks built upstream with `check_axioms`
+  passing (IX.54, `ix54-upstream-dropin.md`).
+- [~] **XII.F7.3 (in progress).** ARM 18: **16/18 built** when the run was interrupted
+  (`neg_p521`, `neg_sm2` remain). Same tree as the x86 nine.
+- [ ] **XII.F7.4.** Run the whole set (27) in one upstream tree in one pass and publish the
+  coverage table.
+
+## XII.F8 — Next coverage blocks, in order of yield
+
+- [ ] **XII.F8.1. Linear families** (double, half, optneg, triple, cmul by small constants):
+  same reference-route machinery plus F3 parametric lemmas.
+- [ ] **XII.F8.2. Montgomery families** (`montmul`, `montsqr`): use upstream's own `ensures2`
+  equivalence route with an agent-synthesised scalar reference program (the de-optimisation
+  twin); compose with the reference's correctness as upstream does by hand.
+- [ ] **XII.F8.3. Loops** (~25% of FC): postcondition-prefix invariants fitted on the
+  executable model (v4 L-FIT), closed per iteration with F3 lemmas.
+- [ ] **XII.F8.4. Montgomery reduction as the next research target:** discover `q` with
+  `T + q·p ≡ 0 (mod R)`, `u = (T+q·p)/R`, prove `u ≡ T·R⁻¹ (mod p)`, plus a range proof for the
+  final correction. The producer finds the witness; the checker validates algebra, divisibility,
+  instruction correspondence and ranges. Do not ask SAT to rediscover number theory.
+
+## XII.F9 — Determinism and timing hygiene
+
+- [ ] **XII.F9.1.** Fix core count, memory and HOL Light build for every judged run; record
+  them.
+- [ ] **XII.F9.2.** Any task above **70% of its timeout is a defect to fix before a sealed
+  run**, not a pass (`add_p521` at 96.9/120 s = 0.81 already fails this).
+- [ ] **XII.F9.3.** Persist every judge output; no tmpfs-only verdicts. (IX.55 does this for
+  the nine; make it the default.)
+
+## XII.P — Immediate engineering mandate (P0–P7)
+
+- [x] **P0. Fix outstanding assurance defects.** Freeze identity now binds `tools/` content
+  (O10.1); missing verdict fails and no-`--evaldir` is INCOMPLETE (comparator); mutation CI
+  passes offline with synthetic tests. Receipts `ix-o9-guard-mutation.md`, `ix-o1-challenges.md`.
+- [ ] **P1. Close G1** — machine-checked bit-blaster soundness, no opaque hypothesis.
+- [ ] **P2. Native multi-limb arithmetic** — checked identities beyond the 64-bit term
+  fragment (the 256/384-bit obligations are currently outside the native logic).
+- [ ] **P3. Multiplication proof generation** — one generic mechanism across unfamiliar
+  multiplication routines.
+- [ ] **P4. Native machine-code theorem** — complete native verification of the Curve25519
+  addition theorem (the two halves united).
+- [ ] **P5. Montgomery reduction** — generic proof construction from executable semantics.
+- [ ] **P6. Autonomous lemma discovery** — demonstrated improvement on reserved obligations.
+- [ ] **P7. Verified optimized checking** — measured acceleration with justified acceptance
+  semantics.
+
+## XII.R — Research inventions to pursue (from §13)
+
+- [ ] XII.R.1 Arithmetic Structure Compiler (recover identities from arbitrary supported
+  instruction sequences).
+- [ ] XII.R.2 Proof Failure Intelligence (distinguish mathematical / semantic / abstraction /
+  resource failures; CEGAR-style repair loop; genuine counterexample vs spurious; missing
+  carry/range/lemma; unsupported instruction; SAT too expensive; bad induction invariant).
+- [ ] XII.R.3 Autonomous Theory Exploration (Hipster/QuickSpec-style; generalise across
+  families, measure new capability per discovered theorem).
+- [ ] XII.R.4 Semantic Proof Fingerprints (recognise shared behaviour across implementations).
+- [ ] XII.R.5 Proof-Cost Optimizer (choose representations/decompositions minimising
+  verification cost).
+- [ ] XII.R.6 Proof-Preserving Superoptimizer (optimise code and its evidence together; SLOTHY
+  interface).
+- [ ] XII.R.7 Verified Certificate Module System (modules with checked correctness contracts).
+- [ ] XII.R.8 Self-Improving Proof Compiler (convert discoveries into reusable verified
+  algorithms; improvement must not depend on the model).
+- [ ] XII.R.9 Native Semantic Migration.
+- [ ] XII.R.10 Millennial Proof Representation.
+
+## XII.S — Additional technical mandates from the findings
+
+- [ ] **XII.S.1. Proof-planning architecture.** Typed graph of obligations, not an agent
+  transcript. Roles: semantic analyst, proof architect, algebraist, invariant synthesiser,
+  countermodel analyst, metatheory agent, performance engineer, adversarial agent. None may
+  construct an accepted theorem. AI strategy is disposable; evidence is permanent.
+- [ ] **XII.S.2. Capability-based Rust kernel API** (`CandidateCertificate` vs private
+  `CheckedJudgment` vs `VerifiedArtifact`; `check(expected, candidate, budget)`). Invalid
+  states unrepresentable; refinement still required.
+- [ ] **XII.S.3. Relational verification early** (constant-time, implementation equivalence;
+  transfer a reference theorem to an optimised twin via a proved equivalence; discover
+  register/state/memory maps, reorderings, synchronisation cut points). Study the 2025
+  relational Hoare logic for realistic machine code.
+- [ ] **XII.S.4. Verification-aware optimisation** (optimise executable and proof together;
+  proof complexity as part of the objective).
+- [ ] **XII.S.5. Profile before accelerating.** Dense clause storage, SIMD bitsets, multicore/CUDA
+  batches only where measured; hash-consing; streaming bounded-memory checking; blocked DAG
+  execution; content-bound theorem reuse. Targets: wall time, peak memory, certificate size,
+  generation cost, replay cost, energy, scaling.
+- [ ] **XII.S.6. Benchmark revision discipline.** State the exact dataset revision and
+  denominator: the published dataset lists **2,301 tasks / 862 FC**, the pinned corpus here is
+  **2,622 / 898 FC**. Never mix them.
+- [ ] **XII.S.7. Full-corpus attempt as research data.** Failed and unsupported tasks are
+  findings, not noise; each gets a failure class from XII.R.2.
+
+## XII.T — Frontier claims these findings set up (adjudicator in brackets)
+
+- [ ] Generated proofs that cannot forge through the script language (kernel; Candle).
+- [ ] A measured foundation per theorem (exported proof object).
+- [ ] Check-time parity with human proofs (the clock).
+- [ ] Self-maintaining machine-code proofs (upstream HEAD nightly).
+- [ ] AI-extended coverage on unseen families (kernel; sealed manifests).
+- [ ] Upstream coverage of s2n-bignum FC (s2n-bignum's own build).
+
+## XII.U — Order of execution (supersedes XI.N)
+
+1. XII.F1 grammar gate + firing controls (P0/P1 blocker; do first).
+2. XII.F7.3/F7.4 finish the ARM drop-in and publish the 27-task upstream table.
+3. XII.F2 proof recording + per-theorem axiom stamp on the nine.
+4. XII.F3 parametric lemmas (check-time reduction), then XII.F8.1 linear families.
+5. P1 (G1) and P2 (multi-limb native arithmetic).
+6. XII.F4 nightly regeneration, then XII.F5 sealed agent extension.
