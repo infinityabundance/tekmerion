@@ -1499,10 +1499,12 @@ diverse double-compiling (DDC) for each checker binary not already verified to m
 (different ISA *and* vendor), ECC where available; transcript digests must agree. Control: one
 bit flip in one transcript must be caught.
 
-**O9 — adversarial robustness.** [ ] O9.1 standing hostile corpus (malformed, truncated,
-transplanted, ill-typed, definitional exploits, hash-collision padding); [ ] O9.2 differential
-fuzzing of kernels against each other; [ ] O9.3 refusal-site mutation score = 1.0 across the whole
-TCB, not just the current 16 sites.
+**O9 — adversarial robustness.** [~] O9.1 standing hostile corpus (malformed, truncated,
+transplanted, ill-typed, definitional exploits, hash-collision padding); [~] O9.2 differential
+fuzzing of kernels against each other; [~] O9.3 refusal-site mutation score = 1.0 across the whole
+TCB — **Rust 16/16; lifecycle 5/5 + parser 16/16; Python guard 66/71 with the 5 survivors
+proved equivalent (`ix-o9-guard-mutation.md`), so 66/66 non-equivalent sites.** Remaining TCB:
+the native checker's refusal sites.
 
 **O10 — evaluation integrity.** [ ] O10.1 freeze tagged and pushed *before* the run; manifest is
 the only authority; [ ] O10.2 sealed runs in structural isolation (container/VM, read-only, no
