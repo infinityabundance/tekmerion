@@ -814,6 +814,110 @@ pub fn post_simulation_x86(op: &str, state: &str, modulus: &str, uses_neg: bool)
 }
 
 // ---------------------------------------------------------------------------
+// Phase markers (IX.65; measurement mode only)
+// ---------------------------------------------------------------------------
+//
+// `--mode phase` is the normal answer with `csat_mark` boundaries inserted
+// between the emitter's own blocks.  The block boundaries are the lines of the
+// emitted chain (the emitter writes them with ` THEN\n`), plus the
+// `ENSURES_INIT_TAC` that shares a line with the memory rewrite.  Nothing here
+// is on the `--mode answer` path, and `strip_phase_marks` restores the normal
+// tactic byte-for-byte (unit-tested), so a measurement run cannot change what
+// is proved or how.
+
+/// The class a block is charged to.  `Accumulator` is deliberately absent: the
+/// only accumulator reasoning in the emitted chain is inside upstream's single
+/// `*_ACCSTEPS_TAC`, which cannot be split without editing upstream's tactic, so
+/// it is reported with `Play` and the limit is stated in the receipt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhaseClass {
+    Play,
+    Rewrite,
+    Finalisation,
+    Bridge,
+}
+
+impl PhaseClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PhaseClass::Play => "play",
+            PhaseClass::Rewrite => "rewrite",
+            PhaseClass::Finalisation => "finalisation",
+            PhaseClass::Bridge => "bridge",
+        }
+    }
+}
+
+/// Classification is by the tactic name on the emitted line.  It is mechanical
+/// and total: every line matches exactly one arm.
+pub fn phase_class(line: &str) -> PhaseClass {
+    if line.contains("ACCSTEPS_TAC") || line.contains("STEPS_TAC") {
+        PhaseClass::Play
+    } else if line.contains("BRIDGE_") {
+        PhaseClass::Bridge
+    } else if line.contains("ENSURES_INIT_TAC")
+        || line.contains("ENSURES_FINAL_STATE_TAC")
+        || line.contains("DISCARD_STATE_TAC")
+    {
+        PhaseClass::Finalisation
+    } else {
+        PhaseClass::Rewrite
+    }
+}
+
+const PHASE_PREFIX: &str = "(csat_mark_reader := inference_count;\ncsat_mark_enabled := true;\n";
+const INIT_MARK: &str = "csat_mark \"init finalisation\" THEN ";
+
+/// The measurement answer's tactic.  Labels are `<line> <class>`.  There is no
+/// trailing marker: the last block is closed by `BRIDGE_*_TAC`, which solves the
+/// goal, so a tactic after it would never run.  The receipt reconciles the last
+/// block as `STAMP_INF_AFTER - last_mark_count`.
+pub fn phase_tactic(tactic: &str) -> String {
+    let mut out = String::with_capacity(tactic.len() + 4096);
+    out.push_str(PHASE_PREFIX);
+    let lines: Vec<&str> = tactic.split('\n').collect();
+    for (i, line) in lines.iter().enumerate() {
+        out.push_str(&format!(
+            "csat_mark \"{:02} {}\" THEN ",
+            i,
+            phase_class(line).as_str()
+        ));
+        if let Some(pos) = line.find(" THEN ENSURES_INIT_TAC") {
+            let split = pos + " THEN ".len();
+            out.push_str(&line[..split]);
+            out.push_str(INIT_MARK);
+            out.push_str(&line[split..]);
+        } else {
+            out.push_str(line);
+        }
+        if i + 1 < lines.len() {
+            out.push('\n');
+        }
+    }
+    out.push(')');
+    out
+}
+
+/// Remove every phase marker, restoring the normal tactic.  Refuses (returns
+/// `None`) when the text does not have the shape `phase_tactic` emits, so a
+/// silent partial strip is impossible.
+pub fn strip_phase_marks(phase: &str) -> Option<String> {
+    let body = phase.strip_prefix(PHASE_PREFIX)?.strip_suffix(')')?;
+    let mut out = Vec::new();
+    for line in body.split('\n') {
+        let line = strip_one_mark(line)?;
+        out.push(line.replace(INIT_MARK, ""));
+    }
+    Some(out.join("\n"))
+}
+
+fn strip_one_mark(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix("csat_mark \"")?;
+    let end = rest.find("\" THEN ")?;
+    Some(&rest[end + "\" THEN ".len()..])
+}
+
+// ---------------------------------------------------------------------------
 // Answer assembly (the judged artefact)
 // ---------------------------------------------------------------------------
 
@@ -1639,7 +1743,7 @@ fn parse_emit_args(argv: &[String]) -> std::result::Result<EmitArgs, String> {
         }
         i += 1;
     }
-    if !matches!(mode.as_str(), "answer" | "dev" | "cert-producer") {
+    if !matches!(mode.as_str(), "answer" | "dev" | "cert-producer" | "phase") {
         return Err(format!("invalid --mode {mode:?}"));
     }
     Ok(EmitArgs {
@@ -1737,6 +1841,8 @@ fn emit_arm(args: &EmitArgs, repo: &Path) -> Result<()> {
     }
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
+    } else if args.mode == "phase" {
+        inlined_answer(&phase_tactic(&info.tactic), repo)?
     } else {
         dev_script_arm(&info, &policy, repo)?
     };
@@ -1783,6 +1889,8 @@ fn emit_x86(args: &EmitArgs, repo: &Path) -> Result<()> {
     let info = build_x86(&op, &args.task, &policy, repo)?;
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
+    } else if args.mode == "phase" {
+        inlined_answer(&phase_tactic(&info.tactic), repo)?
     } else {
         dev_script_x86(&info, &policy, repo)?
     };

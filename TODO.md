@@ -2348,8 +2348,24 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
   counts is published side by side in `research/receipts/ix60-matched-inference.md`.
 - [ ] **XIII.E4.** Parametric carry lemmas: proved once over width and modulus by
   induction over limbs, instantiated per theorem; replaces per-theorem SAT replay.
-- [ ] **XIII.E5.** Emit proofs that do not search: separate successful derivations from
+  — **Verdict from data (IX.65):** aimed at the right block, not proved removable.
+  On the six mandatory theorems, **98.2%** of primitive inferences are inside
+  `BRIDGE_*_REF_TAC` (67.85% bridge-minus-replay, 30.35% certified replay) and
+  simulation is **0.77%**, so the warning "the cost is in simulation, which
+  parametric lemmas do not touch" does **not** apply. The targeted block is the
+  per-theorem proof of `val (ref_add (word p) x y) = val w`, already built on the
+  width-parametric `ADD_REF_VAL_WORD`. What IX.65 does **not** show is that a
+  parametric lemma removes it: the block also contains `CSAT_PROVE` encoding and
+  `BRIDGE_TO_WORD_CONV`, which are not separated here. Next measurement: split the
+  bridge into prepare / encoding / replay before building the lemma.
+  `research/receipts/ix65-same-obligation-and-phases.md`.
+- [~] **XIII.E5.** Emit proofs that do not search: separate successful derivations from
   discarded search in the inference count, and drive the discarded part down.
+  — **Partial (IX.65):** a phase switch now separates certified replay from the
+  bridge's own work, and the certified replay from solver search (cadical's search
+  is outside the kernel and produces no primitive inferences). Discarded search
+  *inside* a successful HOL block is still mixed into that block; not separated and
+  not driven down. `research/receipts/ix65-same-obligation-and-phases.md` §3.
 - [ ] **XIII.E6.** Cost observatory: definition dependencies, lemma dependencies,
   successful vs discarded inference nodes, repeated subderivations (sharing),
   inference cost per tactic, certificate size, cost per theory.
@@ -2482,12 +2498,16 @@ already exists in deterministic form.
   before it is called a comparison of *the same obligation*. — **Done (IX.60):** per-task
   counts and side totals are published. **No ratio is published**: `XIII.E3` decided the
   obligations differ (incomparable), so a quotient would not be a proof-cost ratio.
-- [ ] **XIV.B3.** Separate **successful derivation** inferences from **discarded search**
+- [~] **XIV.B3.** Separate **successful derivation** inferences from **discarded search**
   inferences (two counters, or a phase switch), so "derivation size" and "search cost"
-  are distinct numbers. Today one counter mixes them (`XIII.E5`). — **Still open (IX.62):**
-  the phase split isolates `LRAT_REFUTE_GEN`, but `other = total − replay` still mixes
-  successful derivation with discarded search. `arm/neg_p25519` has 31,471,289 non-replay
-  inferences against 4,077,908 human; this split cannot say how much of that is search.
+  are distinct numbers. Today one counter mixes them (`XIII.E5`). — **Partial (IX.65):**
+  a phase switch exists (`csat_mark`, `--mode phase`) and separates certified replay
+  (30.35% of the six mandatory proofs) from the bridge's own work (67.85%) and from
+  simulation (0.77%); it also confirms cadical's search contributes zero primitive
+  inferences. It does **not** separate discarded search inside a successful HOL
+  block, so "search cost" is still not a number. `arm/neg_p25519` now reads
+  31,832,876 bridge/SAT of 33,981,360 with 2,510,071 replay:
+  `research/receipts/ix65-same-obligation-and-phases.md`.
 - [x] **XIV.B4.** Report the five costs separately, never as one number: search time;
   successful derivation size; discarded inference work; solver-free replay time; total
   construction + verification cost. Design principle: **expensive discovery is
@@ -2565,11 +2585,20 @@ acceptance" is a per-file build result, not "the theorems upstream states are no
   derived step costs 0.33–0.36 s CPU (ARM), 0.39–0.42 s (x86 NOIBT) + 0.0002–0.0004 s (IBT).
   Firing control: replacing the tactic with `ALL_TAC` fails with
   `TAC_PROOF: Unsolved goals`.
-- [ ] **XIV.G2.** A same-obligation check-time or inference-count comparison is now
+- [x] **XIV.G2.** A same-obligation check-time or inference-count comparison is now
   **possible** (the contract is identical for 27/27) but has not been performed under a
   matched instrument: the proof bodies still differ, and IX.60's human timings were taken
   under a different instrument. `XIV.B2`'s ratio remains blocked on running both sides under
-  one measurement pass.
+  one measurement pass. — **Done (IX.65) for n = 6 of 27:** both sides measured under
+  `.bench/hol-light-stamp2` at `-j1 -B`, `_CORRECT` proof body only, typed `compare`
+  accepts **6/6** pairs. **Per-task inference ratio median 60.20×, range
+  12.93×–109.07×, aggregate 70.87×** (993,573,633 / 14,019,340). Wall seconds median
+  106.97× (aggregate 90.59×). The derived `_SUBROUTINE_CORRECT` step (0.33–0.42 s,
+  IX.64) is excluded from both sides. Human `_CORRECT` bodies are 0.72M–4.31M, not
+  IX.60's 2.7M–17.6M, which was the whole-file body including decode and the wrapper.
+  `research/receipts/ix65-same-obligation-and-phases.md`. Remaining 21 tasks not
+  measured inside the 90-minute budget. A freeze `v6` is still required before any
+  sealed run.
 - [x] **XIV.G3.** Whole-tree build: the directory default target (`libs2nbignum.a`, assembly)
   is green under `make -j1` in both `arm/` and `x86/`, and upstream's `collect-specs.sh` now
   finds all 27 names. **Not** done: a full `make proofs` over the whole tree (452 ARM + 1758

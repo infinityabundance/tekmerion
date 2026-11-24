@@ -12,6 +12,11 @@
 //! originals. That older baseline is retired and recorded in
 //! `research/receipts/slice-b-rust-emitters.md` ("IX.63 retirement"). The
 //! theorems are unchanged (IX.63 T4).
+//!
+//! IX.65 boundary: `tools/csat_lib.ml` gained the guarded `csat_mark` phrases
+//! used only by `--mode phase`. The normal tactic is untouched, which the
+//! phase-contract tests below prove by stripping every marker and comparing to
+//! the answer the same binary emits in `--mode answer`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -330,4 +335,76 @@ fn template_prefix_keeps_everything_when_linenum_exceeds_the_file() {
 fn template_prefix_refuses_a_task_without_locations() {
     let repo = template_repo("tpl-missing", r#"{"t":{}}"#, "");
     assert!(emit::template_prefix(repo.path(), "t").is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Phase markers (IX.65): measurement mode is additive only.
+// ---------------------------------------------------------------------------
+
+/// The tactic text of an answer: everything between the `(fun g ->` wrapper's
+/// `(` and its `) g`.
+fn answer_tactic(answer: &str) -> String {
+    let start = answer
+        .find("  try\n    (")
+        .unwrap_or_else(|| panic!("no answer wrapper in {answer:?}"))
+        + "  try\n    (".len();
+    let end = answer
+        .rfind(") g\n  with e ->")
+        .unwrap_or_else(|| panic!("no answer wrapper end"));
+    answer[start..end].to_string()
+}
+
+#[test]
+fn phase_markers_are_removable_and_the_class_is_mechanical() {
+    let tactic = "MAP_EVERY X_GEN_TAC [`z:int64`] THEN\n\
+                  REWRITE_TAC[C_ARGUMENTS] THEN\n\
+                  REWRITE_TAC[BIGNUM_FROM_MEMORY_BYTES] THEN ENSURES_INIT_TAC \"s0\" THEN\n\
+                  ARM_ACCSTEPS_TAC EXEC [3;4] (1--4) THEN\n\
+                  ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN\n\
+                  ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC \"s4\" THEN\n\
+                  BRIDGE_ADD_REF_TAC (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) p";
+    let phase = emit::phase_tactic(tactic);
+    assert_eq!(emit::strip_phase_marks(&phase).as_deref(), Some(tactic));
+    assert_eq!(
+        emit::phase_class("MAP_EVERY X_GEN_TAC [`z:int64`]"),
+        emit::PhaseClass::Rewrite
+    );
+    assert_eq!(
+        emit::phase_class("REWRITE_TAC[X] THEN ENSURES_INIT_TAC \"s0\""),
+        emit::PhaseClass::Finalisation
+    );
+    assert_eq!(
+        emit::phase_class("ARM_ACCSTEPS_TAC EXEC [3;4] (1--4)"),
+        emit::PhaseClass::Play
+    );
+    assert_eq!(
+        emit::phase_class("BRIDGE_ADD_REF_TAC x p"),
+        emit::PhaseClass::Bridge
+    );
+    assert_eq!(
+        emit::phase_class("ENSURES_FINAL_STATE_TAC THEN DISCARD_STATE_TAC \"s4\""),
+        emit::PhaseClass::Finalisation
+    );
+}
+
+#[test]
+fn phase_mode_is_the_normal_emitter_plus_marks() {
+    if !answers_arm().is_dir() {
+        return;
+    }
+    let policy = spent_policy();
+    let task = "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
+    let parsed = guard::parse_task_id(task).expect("declared task id");
+    let info = emit::build_arm(&parsed.op, task, &policy, &repo()).expect("build");
+    let normal = emit::inlined_answer(&info.tactic, &repo()).expect("normal answer");
+    let phase =
+        emit::inlined_answer(&emit::phase_tactic(&info.tactic), &repo()).expect("phase answer");
+    assert_ne!(normal, phase);
+    assert_eq!(answer_tactic(&phase), emit::phase_tactic(&info.tactic));
+    let stripped = emit::strip_phase_marks(&answer_tactic(&phase)).expect("strip");
+    assert_eq!(stripped, info.tactic);
+    assert_eq!(answer_tactic(&normal), info.tactic);
+    // The library text is the same on both paths: only the tactic differs.
+    let lib_end = normal.find("(fun g ->").unwrap();
+    assert_eq!(&normal[..lib_end], &phase[..lib_end]);
 }

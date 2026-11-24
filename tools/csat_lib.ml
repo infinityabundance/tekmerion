@@ -196,6 +196,35 @@ let csat_trim_lrat path =
 (* Disabled only by a controlled comparison run (T4), never by the emitter. *)
 let csat_trim_enabled = ref true;;
 
+(* --- phase markers (IX.65; measurement mode only) -------------------------
+   `csat_mark label` is the identity on the goal.  A measurement answer is
+   emitted with
+     `csat_mark_reader := inference_count; csat_mark_enabled := true;`
+   in front of the tactic; each marker then prints
+     `PHASE_MARK <label> <primitive inferences at this point>`
+   A normal answer never enables them, so nothing is printed and no inference
+   is added anywhere.  `csat_mark_reader` defaults to a function that raises,
+   so enabling a marker without a reader fails loudly instead of reporting a
+   fabricated count.
+
+   `CSAT_REFUTE_GEN` also brackets `LRAT_REFUTE_GEN` with two markers when
+   measurement mode is on, so the bridge block can be split into the certified
+   replay and the bridge's own rewriting.  The bracket is inert in every normal
+   answer.  This block adds phrases to every inlined answer, exactly as the
+   IX.63 trimmer did; see that receipt for why byte identity with the Python-era
+   answers is already retired. *)
+
+let csat_mark_enabled = ref false;;
+
+let csat_mark_reader : (unit -> int) ref =
+  ref (fun () -> failwith "csat_mark: no inference reader set");;
+
+let csat_mark (label : string) : tactic =
+  fun g ->
+    if !csat_mark_enabled then
+      Printf.printf "PHASE_MARK %s %d\n%!" label (!csat_mark_reader ());
+    ALL_TAC g;;
+
 (* --- native-LRAT refuter ------------------------------------------------- *)
 
 let CSAT_REFUTE_GEN amap tm =
@@ -210,7 +239,13 @@ let CSAT_REFUTE_GEN amap tm =
     (ignore (Sys.command ("rm -f "^cnfname^" "^lratname^" "^logname));
      failwith ("CSAT: cadical did not report UNSAT, exit "^string_of_int rc));
   let _ = if !csat_trim_enabled then csat_trim_lrat lratname in
+  let _ = if !csat_mark_enabled then
+            Printf.printf "PHASE_MARK bridge:pre-replay %d\n%!"
+              (!csat_mark_reader ()) in
   let res = LRAT_REFUTE_GEN amap cnfname lratname in
+  let _ = if !csat_mark_enabled then
+            Printf.printf "PHASE_MARK bridge:post-replay %d\n%!"
+              (!csat_mark_reader ()) in
   let _ = if !csat_debug then ()
           else ignore (Sys.command
                  ("rm -f "^cnfname^" "^lratname^" "^logname)) in

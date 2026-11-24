@@ -416,3 +416,31 @@ $ git ls-files '*.py' | wc -l
 - Disk floor: 8 GB. `.bench/hol-light-stamp` (the superseded v1 instrument,
   409 MB) was deleted; scratch is git-ignored.
 - No Python was used and none is tracked.
+
+---
+
+## Addendum (IX.65, 2026-11-24) — these totals are the same-obligation baseline
+
+The totals in §2 are the **baseline for the same-obligation ratio** in
+`research/receipts/ix65-same-obligation-and-phases.md`. Once IX.64 showed our
+`BIGNUM_*_CORRECT` conclusion is the same statement as upstream's `_CORRECT`
+quotation for 27/27, the `after_inferences` column of this receipt became the
+generated side of a legal quotient.
+
+Two things follow, and neither changes a number above:
+
+1. **The per-task `after_inferences` values in §2.1 are reproduced exactly** by the
+   six IX.65 phase-marked runs (`arm/add_p25519` 119,194,788, `arm/add_p384`
+   241,041,106, `arm/add_p521` 470,294,392, `arm/neg_p25519` 33,981,360,
+   `x86/add_p25519` 112,639,551, `x86/neg_sm2` 16,422,436). The marker is a no-op,
+   which is the control that the measurement did not perturb the derivation.
+2. **One word in §1.1 is wrong.** Line ~66 says the retained LRAT additions are
+   "each replayed as one primitive inference". The IX.65 replay brackets measure
+   `arm/add_p25519` at **40,808,833** primitive inferences over **246,832**
+   retained addition lines, i.e. ≈165 primitive inferences per retained line. The
+   `steps_after` column is addition lines, not inferences, and must not be read as
+   an inference count. This addendum is the correction of record; the original line
+   is left as it was.
+
+`XIV.B3`/`XIII.E5` remain open: searching inside a successful block is still not
+separated (IX.65 §3). Freeze `v6` is still required before any sealed run.

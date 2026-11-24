@@ -1,0 +1,878 @@
+{
+  "schema": "ix65-phases/1",
+  "kernel": "hol-light-stamp2 (axiom-stamp v2)",
+  "s2n_bignum_pin": "5e0fc782",
+  "marker": "tools/csat_lib.ml csat_mark; emitted by --mode phase only",
+  "tasks": [
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "total": 119194788,
+      "initial": 1476272,
+      "classes": {
+        "bridge": 75932113,
+        "finalisation": 188116,
+        "play": 787891,
+        "replay": 40808833,
+        "rewrite": 1563
+      },
+      "sum_blocks": 117718516,
+      "reconciliation": {
+        "sum_blocks_plus_initial": 119194788
+      },
+      "blocks": [
+        {
+          "index": 0,
+          "class": "initial",
+          "label": "initial",
+          "inferences": 1476272
+        },
+        {
+          "index": 1,
+          "class": "rewrite",
+          "label": "00 rewrite",
+          "inferences": 0
+        },
+        {
+          "index": 2,
+          "class": "rewrite",
+          "label": "01 rewrite",
+          "inferences": 132
+        },
+        {
+          "index": 3,
+          "class": "rewrite",
+          "label": "02 rewrite",
+          "inferences": 1
+        },
+        {
+          "index": 4,
+          "class": "finalisation",
+          "label": "03 finalisation",
+          "inferences": 162
+        },
+        {
+          "index": 5,
+          "class": "finalisation",
+          "label": "init finalisation",
+          "inferences": 674
+        },
+        {
+          "index": 6,
+          "class": "rewrite",
+          "label": "04 rewrite",
+          "inferences": 361
+        },
+        {
+          "index": 7,
+          "class": "rewrite",
+          "label": "05 rewrite",
+          "inferences": 465
+        },
+        {
+          "index": 8,
+          "class": "play",
+          "label": "06 play",
+          "inferences": 787891
+        },
+        {
+          "index": 9,
+          "class": "finalisation",
+          "label": "07 finalisation",
+          "inferences": 187224
+        },
+        {
+          "index": 10,
+          "class": "rewrite",
+          "label": "08 rewrite",
+          "inferences": 198
+        },
+        {
+          "index": 11,
+          "class": "rewrite",
+          "label": "09 rewrite",
+          "inferences": 406
+        },
+        {
+          "index": 12,
+          "class": "finalisation",
+          "label": "10 finalisation",
+          "inferences": 56
+        },
+        {
+          "index": 13,
+          "class": "bridge",
+          "label": "11 bridge",
+          "inferences": 19186196
+        },
+        {
+          "index": 14,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 11861350
+        },
+        {
+          "index": 15,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 18508088
+        },
+        {
+          "index": 16,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 4655376
+        },
+        {
+          "index": 17,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 19423960
+        },
+        {
+          "index": 18,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 12906253
+        },
+        {
+          "index": 19,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 18559844
+        },
+        {
+          "index": 20,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 11385854
+        },
+        {
+          "index": 21,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 254025
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p384",
+      "op": "add",
+      "family": "p384",
+      "theorem": "BIGNUM_ADD_P384_CORRECT",
+      "total": 241041106,
+      "initial": 1476928,
+      "classes": {
+        "bridge": 170177104,
+        "finalisation": 210422,
+        "play": 1711062,
+        "replay": 67462668,
+        "rewrite": 2922
+      },
+      "sum_blocks": 239564178,
+      "reconciliation": {
+        "sum_blocks_plus_initial": 241041106
+      },
+      "blocks": [
+        {
+          "index": 0,
+          "class": "initial",
+          "label": "initial",
+          "inferences": 1476928
+        },
+        {
+          "index": 1,
+          "class": "rewrite",
+          "label": "00 rewrite",
+          "inferences": 0
+        },
+        {
+          "index": 2,
+          "class": "rewrite",
+          "label": "01 rewrite",
+          "inferences": 132
+        },
+        {
+          "index": 3,
+          "class": "rewrite",
+          "label": "02 rewrite",
+          "inferences": 1
+        },
+        {
+          "index": 4,
+          "class": "finalisation",
+          "label": "03 finalisation",
+          "inferences": 162
+        },
+        {
+          "index": 5,
+          "class": "finalisation",
+          "label": "init finalisation",
+          "inferences": 678
+        },
+        {
+          "index": 6,
+          "class": "rewrite",
+          "label": "04 rewrite",
+          "inferences": 477
+        },
+        {
+          "index": 7,
+          "class": "rewrite",
+          "label": "05 rewrite",
+          "inferences": 657
+        },
+        {
+          "index": 8,
+          "class": "play",
+          "label": "06 play",
+          "inferences": 1711062
+        },
+        {
+          "index": 9,
+          "class": "finalisation",
+          "label": "07 finalisation",
+          "inferences": 209512
+        },
+        {
+          "index": 10,
+          "class": "rewrite",
+          "label": "08 rewrite",
+          "inferences": 1033
+        },
+        {
+          "index": 11,
+          "class": "rewrite",
+          "label": "09 rewrite",
+          "inferences": 622
+        },
+        {
+          "index": 12,
+          "class": "finalisation",
+          "label": "10 finalisation",
+          "inferences": 70
+        },
+        {
+          "index": 13,
+          "class": "bridge",
+          "label": "11 bridge",
+          "inferences": 42282193
+        },
+        {
+          "index": 14,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 13789399
+        },
+        {
+          "index": 15,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 42333880
+        },
+        {
+          "index": 16,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 28798022
+        },
+        {
+          "index": 17,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 42687182
+        },
+        {
+          "index": 18,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 13287512
+        },
+        {
+          "index": 19,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 42309697
+        },
+        {
+          "index": 20,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 11587735
+        },
+        {
+          "index": 21,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 564152
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "p521",
+      "op": "add",
+      "family": "p521",
+      "theorem": "BIGNUM_ADD_P521_CORRECT",
+      "total": 470294392,
+      "initial": 1477902,
+      "classes": {
+        "bridge": 311674550,
+        "finalisation": 334810,
+        "play": 2268528,
+        "replay": 154535460,
+        "rewrite": 3142
+      },
+      "sum_blocks": 468816490,
+      "reconciliation": {
+        "sum_blocks_plus_initial": 470294392
+      },
+      "blocks": [
+        {
+          "index": 0,
+          "class": "initial",
+          "label": "initial",
+          "inferences": 1477902
+        },
+        {
+          "index": 1,
+          "class": "rewrite",
+          "label": "00 rewrite",
+          "inferences": 0
+        },
+        {
+          "index": 2,
+          "class": "rewrite",
+          "label": "01 rewrite",
+          "inferences": 132
+        },
+        {
+          "index": 3,
+          "class": "rewrite",
+          "label": "02 rewrite",
+          "inferences": 1
+        },
+        {
+          "index": 4,
+          "class": "finalisation",
+          "label": "03 finalisation",
+          "inferences": 162
+        },
+        {
+          "index": 5,
+          "class": "finalisation",
+          "label": "init finalisation",
+          "inferences": 704
+        },
+        {
+          "index": 6,
+          "class": "rewrite",
+          "label": "04 rewrite",
+          "inferences": 681
+        },
+        {
+          "index": 7,
+          "class": "rewrite",
+          "label": "05 rewrite",
+          "inferences": 1005
+        },
+        {
+          "index": 8,
+          "class": "play",
+          "label": "06 play",
+          "inferences": 2268528
+        },
+        {
+          "index": 9,
+          "class": "finalisation",
+          "label": "07 finalisation",
+          "inferences": 333853
+        },
+        {
+          "index": 10,
+          "class": "rewrite",
+          "label": "08 rewrite",
+          "inferences": 380
+        },
+        {
+          "index": 11,
+          "class": "rewrite",
+          "label": "09 rewrite",
+          "inferences": 943
+        },
+        {
+          "index": 12,
+          "class": "finalisation",
+          "label": "10 finalisation",
+          "inferences": 91
+        },
+        {
+          "index": 13,
+          "class": "bridge",
+          "label": "11 bridge",
+          "inferences": 78728675
+        },
+        {
+          "index": 14,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 56836504
+        },
+        {
+          "index": 15,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 79255522
+        },
+        {
+          "index": 16,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 42624818
+        },
+        {
+          "index": 17,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 76497454
+        },
+        {
+          "index": 18,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 45105774
+        },
+        {
+          "index": 19,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 76278667
+        },
+        {
+          "index": 20,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 9968364
+        },
+        {
+          "index": 21,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 914232
+        }
+      ]
+    },
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "neg",
+      "family": "p25519",
+      "theorem": "BIGNUM_NEG_P25519_CORRECT",
+      "total": 33981360,
+      "initial": 1475563,
+      "classes": {
+        "bridge": 29322805,
+        "finalisation": 143306,
+        "play": 528862,
+        "replay": 2510071,
+        "rewrite": 753
+      },
+      "sum_blocks": 32505797,
+      "reconciliation": {
+        "sum_blocks_plus_initial": 33981360
+      },
+      "blocks": [
+        {
+          "index": 0,
+          "class": "initial",
+          "label": "initial",
+          "inferences": 1475563
+        },
+        {
+          "index": 1,
+          "class": "rewrite",
+          "label": "00 rewrite",
+          "inferences": 0
+        },
+        {
+          "index": 2,
+          "class": "rewrite",
+          "label": "01 rewrite",
+          "inferences": 112
+        },
+        {
+          "index": 3,
+          "class": "rewrite",
+          "label": "02 rewrite",
+          "inferences": 1
+        },
+        {
+          "index": 4,
+          "class": "finalisation",
+          "label": "03 finalisation",
+          "inferences": 120
+        },
+        {
+          "index": 5,
+          "class": "finalisation",
+          "label": "init finalisation",
+          "inferences": 534
+        },
+        {
+          "index": 6,
+          "class": "rewrite",
+          "label": "04 rewrite",
+          "inferences": 309
+        },
+        {
+          "index": 7,
+          "class": "play",
+          "label": "05 play",
+          "inferences": 528862
+        },
+        {
+          "index": 8,
+          "class": "finalisation",
+          "label": "06 finalisation",
+          "inferences": 142572
+        },
+        {
+          "index": 9,
+          "class": "rewrite",
+          "label": "07 rewrite",
+          "inferences": 331
+        },
+        {
+          "index": 10,
+          "class": "finalisation",
+          "label": "08 finalisation",
+          "inferences": 80
+        },
+        {
+          "index": 11,
+          "class": "bridge",
+          "label": "09 bridge",
+          "inferences": 8827084
+        },
+        {
+          "index": 12,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 236753
+        },
+        {
+          "index": 13,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 10288916
+        },
+        {
+          "index": 14,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 1998291
+        },
+        {
+          "index": 15,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 10076208
+        },
+        {
+          "index": 16,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 275027
+        },
+        {
+          "index": 17,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 130597
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "total": 112639551,
+      "initial": 1511665,
+      "classes": {
+        "bridge": 74947034,
+        "finalisation": 233990,
+        "play": 1344960,
+        "replay": 34600343,
+        "rewrite": 1559
+      },
+      "sum_blocks": 111127886,
+      "reconciliation": {
+        "sum_blocks_plus_initial": 112639551
+      },
+      "blocks": [
+        {
+          "index": 0,
+          "class": "initial",
+          "label": "initial",
+          "inferences": 1511665
+        },
+        {
+          "index": 1,
+          "class": "rewrite",
+          "label": "00 rewrite",
+          "inferences": 0
+        },
+        {
+          "index": 2,
+          "class": "rewrite",
+          "label": "01 rewrite",
+          "inferences": 132
+        },
+        {
+          "index": 3,
+          "class": "rewrite",
+          "label": "02 rewrite",
+          "inferences": 1
+        },
+        {
+          "index": 4,
+          "class": "finalisation",
+          "label": "03 finalisation",
+          "inferences": 162
+        },
+        {
+          "index": 5,
+          "class": "finalisation",
+          "label": "init finalisation",
+          "inferences": 686
+        },
+        {
+          "index": 6,
+          "class": "rewrite",
+          "label": "04 rewrite",
+          "inferences": 361
+        },
+        {
+          "index": 7,
+          "class": "rewrite",
+          "label": "05 rewrite",
+          "inferences": 465
+        },
+        {
+          "index": 8,
+          "class": "play",
+          "label": "06 play",
+          "inferences": 1344960
+        },
+        {
+          "index": 9,
+          "class": "finalisation",
+          "label": "07 finalisation",
+          "inferences": 233086
+        },
+        {
+          "index": 10,
+          "class": "rewrite",
+          "label": "08 rewrite",
+          "inferences": 194
+        },
+        {
+          "index": 11,
+          "class": "rewrite",
+          "label": "09 rewrite",
+          "inferences": 406
+        },
+        {
+          "index": 12,
+          "class": "finalisation",
+          "label": "10 finalisation",
+          "inferences": 56
+        },
+        {
+          "index": 13,
+          "class": "bridge",
+          "label": "11 bridge",
+          "inferences": 18978344
+        },
+        {
+          "index": 14,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 14619152
+        },
+        {
+          "index": 15,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 18299346
+        },
+        {
+          "index": 16,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 5141910
+        },
+        {
+          "index": 17,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 19138194
+        },
+        {
+          "index": 18,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 10081093
+        },
+        {
+          "index": 19,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 18276850
+        },
+        {
+          "index": 20,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 4758188
+        },
+        {
+          "index": 21,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 254300
+        }
+      ]
+    },
+    {
+      "arch": "x86",
+      "dir": "sm2",
+      "op": "neg",
+      "family": "sm2",
+      "theorem": "BIGNUM_NEG_SM2_CORRECT",
+      "total": 16422436,
+      "initial": 1510972,
+      "classes": {
+        "bridge": 12058824,
+        "finalisation": 215766,
+        "play": 965819,
+        "replay": 1670262,
+        "rewrite": 793
+      },
+      "sum_blocks": 14911464,
+      "reconciliation": {
+        "sum_blocks_plus_initial": 16422436
+      },
+      "blocks": [
+        {
+          "index": 0,
+          "class": "initial",
+          "label": "initial",
+          "inferences": 1510972
+        },
+        {
+          "index": 1,
+          "class": "rewrite",
+          "label": "00 rewrite",
+          "inferences": 0
+        },
+        {
+          "index": 2,
+          "class": "rewrite",
+          "label": "01 rewrite",
+          "inferences": 112
+        },
+        {
+          "index": 3,
+          "class": "rewrite",
+          "label": "02 rewrite",
+          "inferences": 1
+        },
+        {
+          "index": 4,
+          "class": "finalisation",
+          "label": "03 finalisation",
+          "inferences": 120
+        },
+        {
+          "index": 5,
+          "class": "finalisation",
+          "label": "init finalisation",
+          "inferences": 550
+        },
+        {
+          "index": 6,
+          "class": "rewrite",
+          "label": "04 rewrite",
+          "inferences": 309
+        },
+        {
+          "index": 7,
+          "class": "play",
+          "label": "05 play",
+          "inferences": 965819
+        },
+        {
+          "index": 8,
+          "class": "finalisation",
+          "label": "06 finalisation",
+          "inferences": 215028
+        },
+        {
+          "index": 9,
+          "class": "rewrite",
+          "label": "07 rewrite",
+          "inferences": 331
+        },
+        {
+          "index": 10,
+          "class": "finalisation",
+          "label": "08 finalisation",
+          "inferences": 68
+        },
+        {
+          "index": 11,
+          "class": "rewrite",
+          "label": "09 rewrite",
+          "inferences": 40
+        },
+        {
+          "index": 12,
+          "class": "bridge",
+          "label": "10 bridge",
+          "inferences": 2945201
+        },
+        {
+          "index": 13,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 139285
+        },
+        {
+          "index": 14,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 8998056
+        },
+        {
+          "index": 15,
+          "class": "replay",
+          "label": "bridge:pre-replay",
+          "inferences": 1530977
+        },
+        {
+          "index": 16,
+          "class": "bridge",
+          "label": "bridge:post-replay",
+          "inferences": 115567
+        }
+      ]
+    }
+  ]
+}

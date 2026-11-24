@@ -1,0 +1,81 @@
+{
+  "tree": ".bench/ix65/human (scratch copy of .bench/human-baseline)",
+  "s2n_bignum_pin": "5e0fc782",
+  "cores": 1,
+  "force": true,
+  "kernel_build": "hol-light-stamp2",
+  "tasks": [
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 0.499,
+      "inference_delta": 1848494,
+      "log": ".bench/ix65/arm_add_p25519.human.correct"
+    },
+    {
+      "arch": "arm",
+      "dir": "p384",
+      "op": "add",
+      "family": "p384",
+      "theorem": "BIGNUM_ADD_P384_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 1.261,
+      "inference_delta": 3989992,
+      "log": ".bench/ix65/arm_add_p384.human.correct"
+    },
+    {
+      "arch": "arm",
+      "dir": "p521",
+      "op": "add",
+      "family": "p521",
+      "theorem": "BIGNUM_ADD_P521_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 1.034,
+      "inference_delta": 4312009,
+      "log": ".bench/ix65/arm_add_p521.human.correct"
+    },
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "neg",
+      "family": "p25519",
+      "theorem": "BIGNUM_NEG_P25519_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 0.177,
+      "inference_delta": 721473,
+      "log": ".bench/ix65/arm_neg_p25519.human.correct"
+    },
+    {
+      "arch": "x86",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 0.586,
+      "inference_delta": 1877546,
+      "log": ".bench/ix65/x86_add_p25519.human.correct"
+    },
+    {
+      "arch": "x86",
+      "dir": "sm2",
+      "op": "neg",
+      "family": "sm2",
+      "theorem": "BIGNUM_NEG_SM2_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 0.373,
+      "inference_delta": 1269826,
+      "log": ".bench/ix65/x86_neg_sm2.human.correct"
+    }
+  ]
+}

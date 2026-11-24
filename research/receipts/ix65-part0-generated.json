@@ -1,0 +1,81 @@
+{
+  "tree": ".bench/dropin (phase runs)",
+  "s2n_bignum_pin": "5e0fc782",
+  "cores": 1,
+  "force": true,
+  "kernel_build": "hol-light-stamp2",
+  "tasks": [
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 42.000000,
+      "inference_delta": 119194788,
+      "log": ".bench/ix65/arm_add_p25519.correct"
+    },
+    {
+      "arch": "arm",
+      "dir": "p384",
+      "op": "add",
+      "family": "p384",
+      "theorem": "BIGNUM_ADD_P384_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 64.000000,
+      "inference_delta": 241041106,
+      "log": ".bench/ix65/arm_add_p384.correct"
+    },
+    {
+      "arch": "arm",
+      "dir": "p521",
+      "op": "add",
+      "family": "p521",
+      "theorem": "BIGNUM_ADD_P521_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 103.000000,
+      "inference_delta": 470294392,
+      "log": ".bench/ix65/arm_add_p521.correct"
+    },
+    {
+      "arch": "arm",
+      "dir": "curve25519",
+      "op": "neg",
+      "family": "p25519",
+      "theorem": "BIGNUM_NEG_P25519_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 29.000000,
+      "inference_delta": 33981360,
+      "log": ".bench/ix65/arm_neg_p25519.correct"
+    },
+    {
+      "arch": "x86",
+      "dir": "curve25519",
+      "op": "add",
+      "family": "p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 67.000000,
+      "inference_delta": 112639551,
+      "log": ".bench/ix65/x86_add_p25519.correct"
+    },
+    {
+      "arch": "x86",
+      "dir": "sm2",
+      "op": "neg",
+      "family": "sm2",
+      "theorem": "BIGNUM_NEG_SM2_CORRECT",
+      "exit": 0,
+      "check_axioms": true,
+      "seconds": 51.000000,
+      "inference_delta": 16422436,
+      "log": ".bench/ix65/x86_neg_sm2.correct"
+    }
+  ]
+}

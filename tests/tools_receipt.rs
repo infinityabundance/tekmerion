@@ -173,7 +173,8 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     }
     let parts = inline_answer::collect(&repo).unwrap();
     // 155 before IX.63; the trimmer adds five `let` phrases to csat_lib.ml.
-    assert_eq!(parts.len(), 160);
+    // 160 after IX.63; the IX.65 phase markers add three more `let` phrases.
+    assert_eq!(parts.len(), 163);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -181,25 +182,33 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     //   add-p384  83d90067847d411d3eee7fb7b6ca6b532d790ab262341e6ba5d248d54db15044
     // tools/csat_lib.ml gained the backward-closure LRAT trim, so the inlined
     // answer text changed. Byte identity with the Python originals is retired
-    // as of IX.63; the theorems are unchanged (IX.63 T4), and these four
-    // digests now pin the post-IX.63 text. The old values stay here as the
-    // boundary marker, not as an assertion.
+    // as of IX.63.
+    //
+    // IX.65 boundary. The IX.63 digests were:
+    //   add-ref   9e869067312631a3d43c869d6d031209e7a01e793557b25dfe5f6e76233b93c7
+    //   sub       4b387ca42073cfbd25c40817b2bcb071da874fbadd1dc7b7454f6cfc33298736
+    //   neg       3c57f6e67d72a6b03b3d53213a82a2dabea12afe7cb107292c58fdf8a8127c9d
+    //   add-p384  7893ac4a7a2b7245b9661c3932f56def5f6c7cd19ba5b10bf397a11cc5b7ae48
+    // `tools/csat_lib.ml` gained the guarded `csat_mark` phrases (IX.65). The
+    // tactics are unchanged (the marker block is a no-op unless a measurement
+    // answer sets `csat_mark_enabled`), so the change is the appended library
+    // text only. The IX.63 values stay here as the boundary, not an assertion.
     for (mode, digest) in [
         (
             "add-ref",
-            "9e869067312631a3d43c869d6d031209e7a01e793557b25dfe5f6e76233b93c7",
+            "ce830bce4eea32d0e6e20b25d17bcc2003f39eda44b3fefc45eeebbded7f17f0",
         ),
         (
             "sub",
-            "4b387ca42073cfbd25c40817b2bcb071da874fbadd1dc7b7454f6cfc33298736",
+            "0f6d299d9ff7ccd0d3183a7866e6aab2d74ccbf65507cffaa6f5963aca8884c6",
         ),
         (
             "neg",
-            "3c57f6e67d72a6b03b3d53213a82a2dabea12afe7cb107292c58fdf8a8127c9d",
+            "a22340aad872514a0cb869982ec8fcc817d5297091481b6d06b74c49f10cace0",
         ),
         (
             "add-p384",
-            "7893ac4a7a2b7245b9661c3932f56def5f6c7cd19ba5b10bf397a11cc5b7ae48",
+            "0de579654cb3e618cd25a80cc7f2cab3a7109967570928c1ed6f8fefaac105ed",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

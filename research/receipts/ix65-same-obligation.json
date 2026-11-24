@@ -1,0 +1,22 @@
+{
+  "generated_at": 1795548776,
+  "label": "ix60-matched-inference",
+  "human_file": ".bench/ix65/human.json",
+  "generated_file": ".bench/ix65/generated.json",
+  "human_kernel_build": "hol-light-stamp2",
+  "generated_kernel_build": "hol-light-stamp2",
+  "human_tree": ".bench/ix65/human (scratch copy of .bench/human-baseline)",
+  "scope": {"s2n_bignum_pin": "5e0fc782", "jobs": 1, "force": true},
+  "counts": {"human_rows": 6, "generated_rows": 6, "task_rows": 6, "matched_pairs": 6, "unmatched": 0},
+  "matched_totals": {"denominator": 6, "human_inferences": 14019340, "generated_inferences": 993573633, "inference_ratio": 70.871641, "human_seconds": 3.930000, "generated_seconds": 356.000000, "seconds_ratio": 90.585242},
+  "tasks": [
+    {"arch": "arm", "dir": "curve25519", "op": "add", "family": "p25519", "human_theorem": "BIGNUM_ADD_P25519_CORRECT", "generated_theorem": "BIGNUM_ADD_P25519_CORRECT", "human_inferences": 1848494, "generated_inferences": 119194788, "human_inferences_whole_file": null, "human_seconds": 0.499000, "generated_seconds": 42.000000, "matched": true, "verdict": "matched", "reasons": []},
+    {"arch": "arm", "dir": "p384", "op": "add", "family": "p384", "human_theorem": "BIGNUM_ADD_P384_CORRECT", "generated_theorem": "BIGNUM_ADD_P384_CORRECT", "human_inferences": 3989992, "generated_inferences": 241041106, "human_inferences_whole_file": null, "human_seconds": 1.261000, "generated_seconds": 64.000000, "matched": true, "verdict": "matched", "reasons": []},
+    {"arch": "arm", "dir": "p521", "op": "add", "family": "p521", "human_theorem": "BIGNUM_ADD_P521_CORRECT", "generated_theorem": "BIGNUM_ADD_P521_CORRECT", "human_inferences": 4312009, "generated_inferences": 470294392, "human_inferences_whole_file": null, "human_seconds": 1.034000, "generated_seconds": 103.000000, "matched": true, "verdict": "matched", "reasons": []},
+    {"arch": "arm", "dir": "curve25519", "op": "neg", "family": "p25519", "human_theorem": "BIGNUM_NEG_P25519_CORRECT", "generated_theorem": "BIGNUM_NEG_P25519_CORRECT", "human_inferences": 721473, "generated_inferences": 33981360, "human_inferences_whole_file": null, "human_seconds": 0.177000, "generated_seconds": 29.000000, "matched": true, "verdict": "matched", "reasons": []},
+    {"arch": "x86", "dir": "curve25519", "op": "add", "family": "p25519", "human_theorem": "BIGNUM_ADD_P25519_CORRECT", "generated_theorem": "BIGNUM_ADD_P25519_CORRECT", "human_inferences": 1877546, "generated_inferences": 112639551, "human_inferences_whole_file": null, "human_seconds": 0.586000, "generated_seconds": 67.000000, "matched": true, "verdict": "matched", "reasons": []},
+    {"arch": "x86", "dir": "sm2", "op": "neg", "family": "sm2", "human_theorem": "BIGNUM_NEG_SM2_CORRECT", "generated_theorem": "BIGNUM_NEG_SM2_CORRECT", "human_inferences": 1269826, "generated_inferences": 16422436, "human_inferences_whole_file": null, "human_seconds": 0.373000, "generated_seconds": 51.000000, "matched": true, "verdict": "matched", "reasons": []}
+  ],
+  "ok": 6,
+  "total": 6
+}
