@@ -1,0 +1,187 @@
+=== IDENTITY ===
+uid=1000(one) gid=1000(one) groups=1000(one)
+Python 3.14.10
+git version 2.56.1
+/usr/sbin/objdump
+cwd=/work/repo
+=== ISOLATION PROBE (Step 2/4) ===
+find_proofs_ml_lines=12
+/usr/lib/ocaml/rocq-runtime/plugins/funind/functional_principles_proofs.ml
+/usr/lib/ocaml/rocq-runtime/proofs/clenv.ml
+/usr/lib/ocaml/rocq-runtime/proofs/miscprint.ml
+/usr/lib/ocaml/rocq-runtime/proofs/logic.ml
+/usr/lib/ocaml/rocq-runtime/proofs/goal_select.ml
+/usr/lib/ocaml/rocq-runtime/proofs/tacmach.ml
+/usr/lib/ocaml/rocq-runtime/proofs/proof_bullet.ml
+/usr/lib/ocaml/rocq-runtime/proofs/refine.ml
+/usr/lib/ocaml/rocq-runtime/proofs/proof.ml
+/usr/lib/ocaml/rocq-runtime/proofs/subproof.ml
+/usr/lib/ocaml/rocq-runtime/vernac/g_proofs.ml
+/mnt/1tb_kingston/Tekmerion/.bench/hol-light/ProofTrace/proofs.ml
+find_proofs_dirs_lines=1
+/usr/lib/ocaml/rocq-runtime/proofs
+--- scoped: s2n-bignum .ml anywhere in view ---
+s2n_bignum_ml_lines=0
+--- scoped: all .ml in the court ---
+/court/repo/.bench/ml_files/x86/bignum_add_p25519.ml
+/court/repo/.bench/ml_files/x86/bignum_add_p256k1.ml
+/court/repo/.bench/ml_files/x86/bignum_add_sm2.ml
+/court/repo/.bench/ml_files/x86/bignum_neg_p25519.ml
+/court/repo/.bench/ml_files/x86/bignum_neg_p256k1.ml
+/court/repo/.bench/ml_files/x86/bignum_neg_sm2.ml
+/court/repo/.bench/ml_files/x86/bignum_sub_p25519.ml
+/court/repo/.bench/ml_files/x86/bignum_sub_p256k1.ml
+/court/repo/.bench/ml_files/x86/bignum_sub_sm2.ml
+/court/repo/tools/bridge.ml
+/court/repo/tools/csat_bridge.ml
+/court/repo/tools/csat_hol.ml
+/court/repo/tools/csat_lib.ml
+/court/repo/tools/csat_probe.ml
+/court/repo/tools/hol_tests/bridge_flag_wordify.ml
+/court/repo/tools/hol_tests/p256_carry_reuse.ml
+/court/repo/tools/w1_hol_capture.ml
+/work/repo/.bench/ml_files/x86/bignum_add_p25519.ml
+/work/repo/.bench/ml_files/x86/bignum_add_p256k1.ml
+/work/repo/.bench/ml_files/x86/bignum_add_sm2.ml
+/work/repo/.bench/ml_files/x86/bignum_neg_p25519.ml
+/work/repo/.bench/ml_files/x86/bignum_neg_p256k1.ml
+/work/repo/.bench/ml_files/x86/bignum_neg_sm2.ml
+/work/repo/.bench/ml_files/x86/bignum_sub_p25519.ml
+/work/repo/.bench/ml_files/x86/bignum_sub_p256k1.ml
+/work/repo/.bench/ml_files/x86/bignum_sub_sm2.ml
+/work/repo/tools/bridge.ml
+/work/repo/tools/csat_bridge.ml
+/work/repo/tools/csat_hol.ml
+/work/repo/tools/csat_lib.ml
+/work/repo/tools/csat_probe.ml
+/work/repo/tools/hol_tests/bridge_flag_wordify.ml
+/work/repo/tools/hol_tests/p256_carry_reuse.ml
+/work/repo/tools/w1_hol_capture.ml
+court_ml_lines=34
+--- mounts ---
+/dev/nvme1n1p1 on /court type ext4 (ro
+/dev/nvme1n1p3 on /etc type ext4 (ro,noatime,commit=60)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,noexec
+/dev/nvme1n1p3 on /usr type ext4 (ro,noatime,commit=60)
+tmpfs on /work type tmpfs (rw,nosuid,nodev
+TEST_E_ABSENT
+TEMPLATE_PRESENT
+template_line_count=38482
+=== O10.2 FIRING CONTROL ===
+cat: /work/repo/.bench/s2n-bignum/x86/proofs/bignum_add_p25519.ml: No such file or directory
+cat_exit=1
+cat: /mnt/1tb_kingston/Tekmerion/.bench/s2n-bignum/x86/proofs/bignum_add_p25519.ml: No such file or directory
+cat_hostpath_exit=1
+=== EMIT ===
+wrote /work/answers/x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT/answer.txt mode=answer task=x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT entry=0 last=25 neg=False accumulate=[2, 4, 6, 8, 13, 14, 15, 16] bytes=103709
+wrote /work/answers/x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT/answer.txt mode=answer task=x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT entry=0 last=20 neg=False accumulate=[2, 4, 6, 8, 12, 14, 16, 18] bytes=103614
+wrote /work/answers/x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT/answer.txt mode=answer task=x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT entry=0 last=23 neg=True accumulate=[13, 16, 19, 21] bytes=103579
+wrote /work/answers/x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT/answer.txt mode=answer task=x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT entry=0 last=26 neg=False accumulate=[2, 4, 6, 8, 14, 15, 16, 19, 21, 23, 25] bytes=103718
+wrote /work/answers/x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT/answer.txt mode=answer task=x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT entry=0 last=19 neg=False accumulate=[3, 5, 7, 9, 12, 14, 16, 18] bytes=103614
+wrote /work/answers/x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT/answer.txt mode=answer task=x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT entry=0 last=22 neg=True accumulate=[13, 16, 19, 21] bytes=103579
+wrote /work/answers/x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT/answer.txt mode=answer task=x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT entry=0 last=27 neg=False accumulate=[3, 5, 7, 9, 11, 13, 14, 16, 17, 20, 22, 24, 26] bytes=103719
+wrote /work/answers/x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT/answer.txt mode=answer task=x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT entry=0 last=21 neg=False accumulate=[2, 4, 6, 8, 14, 16, 18, 20] bytes=103609
+wrote /work/answers/x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT/answer.txt mode=answer task=x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT entry=0 last=23 neg=True accumulate=[17, 18, 19] bytes=103571
+=== COMBINE ===
+Loaded per-problem timeouts for 2622 problems from timeout-map.json
+x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT: syntactic check PASSED
+x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT: syntactic check PASSED
+x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT: syntactic check PASSED
+x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT: syntactic check PASSED
+x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT: syntactic check PASSED
+x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT: syntactic check PASSED
+x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT: syntactic check PASSED
+x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT: syntactic check PASSED
+x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT: syntactic check PASSED
+eval-20261124_043844
+EVALDIR=eval-20261124_043844
+total 13860
+drwxr-xr-x 2 one one     220 Nov 24 04:39 .
+drwxr-xr-x 6 one one     320 Nov 24 04:39 ..
+-rw-r--r-- 1 one one 1576675 Nov 24 04:39 ml_files_x86_bignum_add_p25519.ml
+-rw-r--r-- 1 one one 1576751 Nov 24 04:39 ml_files_x86_bignum_add_p256k1.ml
+-rw-r--r-- 1 one one 1576823 Nov 24 04:39 ml_files_x86_bignum_add_sm2.ml
+-rw-r--r-- 1 one one 1576277 Nov 24 04:39 ml_files_x86_bignum_neg_p25519.ml
+-rw-r--r-- 1 one one 1576198 Nov 24 04:39 ml_files_x86_bignum_neg_p256k1.ml
+-rw-r--r-- 1 one one 1576271 Nov 24 04:39 ml_files_x86_bignum_neg_sm2.ml
+-rw-r--r-- 1 one one 1576272 Nov 24 04:39 ml_files_x86_bignum_sub_p25519.ml
+-rw-r--r-- 1 one one 1576238 Nov 24 04:39 ml_files_x86_bignum_sub_p256k1.ml
+-rw-r--r-- 1 one one 1576326 Nov 24 04:39 ml_files_x86_bignum_sub_sm2.ml
+=== RUN ===
+run_answers_exit=0
+=== COLLECT ===
+collect_exit=0
+=== VERDICTS CSV ===
+Problem,Verdict
+x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT,OK
+x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT,OK
+x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT,OK
+x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT,OK
+x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT,OK
+x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT,OK
+x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT,OK
+x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT,OK
+x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT,OK
+--,
+SUMMARY,
+OK,9
+=== JUDGE FILES ===
+x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT.judge.txt=OK
+x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT.judge.txt=OK
+x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT.judge.txt=OK
+x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT.judge.txt=OK
+x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT.judge.txt=OK
+x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT.judge.txt=OK
+x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT.judge.txt=OK
+x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT.judge.txt=OK
+x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT.judge.txt=OK
+=== PROFILES ===
+PROFILE x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT 22.650 OK
+PROFILE x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT 23.864 OK
+PROFILE x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT 18.777 OK
+PROFILE x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT 3.394 OK
+PROFILE x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT 3.748 OK
+PROFILE x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT 3.203 OK
+PROFILE x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT 9.276 OK
+PROFILE x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT 16.268 OK
+PROFILE x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT 9.940 OK
+=== RUN ERRLOGS (non-empty only) ===
+=== RUN OUTLOG TAILS ===
+--- ml_files_x86_bignum_add_p25519.run.outlog 6466 lines
+Stepping to state s25
+CPU time (user): 0.015321
+PROFILE x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT 22.650 OK
+--- ml_files_x86_bignum_add_p256k1.run.outlog 6468 lines
+Stepping to state s26
+CPU time (user): 0.015609
+PROFILE x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT 23.864 OK
+--- ml_files_x86_bignum_add_sm2.run.outlog 6470 lines
+Stepping to state s27
+CPU time (user): 0.016079
+PROFILE x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT 18.777 OK
+--- ml_files_x86_bignum_neg_p25519.run.outlog 6462 lines
+Stepping to state s23
+CPU time (user): 0.014606
+PROFILE x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT 3.394 OK
+--- ml_files_x86_bignum_neg_p256k1.run.outlog 6460 lines
+Stepping to state s22
+CPU time (user): 0.016089
+PROFILE x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT 3.748 OK
+--- ml_files_x86_bignum_neg_sm2.run.outlog 6462 lines
+Stepping to state s23
+CPU time (user): 0.015079
+PROFILE x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT 3.203 OK
+--- ml_files_x86_bignum_sub_p25519.run.outlog 6456 lines
+Stepping to state s20
+CPU time (user): 0.01457
+PROFILE x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT 9.276 OK
+--- ml_files_x86_bignum_sub_p256k1.run.outlog 6454 lines
+Stepping to state s19
+CPU time (user): 0.014793
+PROFILE x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT 16.268 OK
+--- ml_files_x86_bignum_sub_sm2.run.outlog 6458 lines
+Stepping to state s21
+CPU time (user): 0.015242
+PROFILE x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT 9.940 OK
+DONE
+docker_exit=0

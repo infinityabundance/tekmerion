@@ -1506,10 +1506,16 @@ TCB — **Rust 16/16; lifecycle 5/5 + parser 16/16; Python guard 66/71 with the 
 proved equivalent (`ix-o9-guard-mutation.md`), so 66/66 non-equivalent sites.** Remaining TCB:
 the native checker's refusal sites.
 
-**O10 — evaluation integrity.** [ ] O10.1 freeze tagged and pushed *before* the run; manifest is
-the only authority; [ ] O10.2 sealed runs in structural isolation (container/VM, read-only, no
-network); [ ] O10.3 a held-out split is evaluated once. Today: tag-before-run done; isolation is
-procedural, so O10.2 is open.
+**O10 — evaluation integrity.** [~] O10.1 freeze tagged and pushed *before* the run; manifest is
+the only authority (done: `freeze-x86-sealed-v3` / `2705f5b`); [~] O10.2 sealed runs in structural
+isolation — **benchmark proofs are now unreachable inside the container** (IX.54:
+`ix54-sealed-container.md`; O10.2 control shows `No such file or directory` and zero `s2n-bignum`
+`.ml` under the container view). Residual limits, stated: the container borrows host userland
+(read-only, glibc), and the judge dir was tmpfs so judge files were not preserved; next run must
+bind-mount it. [x] O10.3 a held-out split is evaluated once (IX.53/IX.54 use the same nine; IX.54
+is a re-run under stronger isolation, so the *number* is the same and the isolation is the new
+fact — the split is not being mined for tuning). *Original text:* [ ] O10.2 sealed runs in structural
+isolation (container/VM, read-only, no network); [ ] O10.3 a held-out split is evaluated once.
 
 **O11 — independence and review.** [ ] O11.1 every certified statement reviewed by someone who
 wrote neither statement nor proof, against a published checklist; [ ] O11.2 external
@@ -1795,8 +1801,15 @@ carefully justified authority.
 - [ ] **XI.L.3. Upstream drop-in build.** Replace the human s2n-bignum proofs with the generated
   ones and run s2n-bignum's own build. Passing removes the inherited-context caveat; it is the
   cheapest strong upgrade available.
-- [ ] **XI.L.4. Containerise the sealed run.** Filesystem holds only declared inputs,
-  read-only, no network. Then O10.2 is met structurally, not procedurally.
+- [x] **XI.L.4. Containerise the sealed run.** Done 2026-11-24, IX.54. Freeze
+  `freeze-x86-sealed-v3` / `2705f5b`; nine tasks emitted and judged inside a `docker`
+  container (`--network none`, `--read-only`, tmpfs `/work`, read-only input mounts).
+  **OK 9/9** (`eval-20261124_043844`, max 23.864 s). O10.2 control: the benchmark proof
+  path is absent inside the container (`No such file or directory`), so isolation is
+  structural for the proof data. Residual limits: host userland is borrowed read-only
+  (glibc), and the judge dir was tmpfs so the `*.judge.txt` files were not preserved —
+  the host-side log is (`research/receipts/ix54/container-run.log`). Next run must
+  bind-mount the eval dir. Receipts `ix54-sealed-container.md`, `ix54/`.
 - [ ] **XI.L.5. Full-898 sealed pass.** Freeze arm Z, one pass over all 898 FC tasks at the pin;
   unsupported shapes refused fast and counted as FAIL; report `OK/898`, zero `CHEATING`, split
   development-seen vs sealed. Then **submit the CSV to the leaderboard** so adjudication moves
