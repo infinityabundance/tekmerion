@@ -709,6 +709,11 @@ Everything else stays parked until step 7 produces a number.
 - [x] **V7.8. Drop "generated proofs check faster" for linear families.** Human: 1.555 s add,
   1.174 s sub, 0.522 s neg; one 256-bit SAT close is 2.7–4.7 s. Revisit only for long simulations
   where the stepping engine dominates.
+  **CORRECTION (XIV.0.1, 2026-11-24):** the 1.555 s / 1.174 s / 0.522 s figures are withdrawn
+  as a comparison basis — they measured a single human `prove` call against different scopes.
+  The decision to drop the "checks faster" claim stands and is now over-determined. Matched
+  whole-file data (`research/receipts/wip/ix58-checktime.partial.json`, 25 of 27 rows, not a
+  receipt) indicates 24–26 s human for ARM and 50–53 s for x86.
 
 ## Order
 
@@ -2009,6 +2014,10 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
 - [ ] **XII.F3.1. Report check time next to every `OK`**; set the target of parity with the
   human proof on matched theorems. Baseline: P-256 add human 1.555 s vs ~24 s judged; suite
   ~2×10⁵ CPU-s/arch; `bstep` ARM 241,319 → 190,772 s; `add_p521` 96.9/120 s.
+  **CORRECTION (XIV.0.1):** "P-256 add human 1.555 s" is withdrawn — it compared a single
+  `prove` call against a judge run of a different scope. Use the matched whole-file numbers
+  instead (human 24–26 s ARM / 50–53 s x86; generated 30–122 s), and prefer the deterministic
+  primitive-inference ratio (`XIV.B2`) over wall clock as the F3 metric.
 - [ ] **XII.F3.2. SAT for discovery, induction for reuse.** Use certified SAT to find and
   validate carry/selection facts, then generalise into **width- and modulus-parametric lemmas**
   proved once by induction over limbs and instantiated cheaply. This also lowers the foundation
@@ -2299,11 +2308,13 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
 - [ ] **XIII.E2.** `arm/p521/add_p521`: 681,707,202 inferences, 122 s against a 120 s
   budget. Bring it under budget with the statement unchanged, and report against the
   900 s sweep timeout too so the two budget notions are never conflated again.
-- [ ] **XIII.E3.** Matched human baseline, but **compare the goals first**: upstream's
+- [~] **XIII.E3.** Matched human baseline, but **compare the goals first**: upstream's
   human files prove `BIGNUM_*_SUBROUTINE_CORRECT`, our drop-in files prove
   `BIGNUM_*_CORRECT`. Partial data in `research/receipts/wip/ix58-checktime.partial.json`
-  (26 of 27: ARM 24–26 s, x86 50–53 s) is **not a receipt**; no ratio may be published
-  until the statements are compared.
+  — **25** tasks, not 26 (18 ARM + 7 x86; missing x86 `secp256k1/neg` and `sm2/neg`;
+  verified with `grep -c '"dir"'` = 25). It is **not a receipt**; no ratio may be
+  published until the statements are compared. See `XIV.B` for the deterministic
+  replacement metric.
 - [ ] **XIII.E4.** Parametric carry lemmas: proved once over width and modulus by
   induction over limbs, instantiated per theorem; replaces per-theorem SAT replay.
 - [ ] **XIII.E5.** Emit proofs that do not search: separate successful derivations from
@@ -2362,3 +2373,121 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
 6. **XIII.G1** — first new family under freeze.
 7. **XIII.E4/E5** — parametric lemmas; stop searching.
 8. **XIII.H** — native foundations, then XIII.F.
+
+---
+
+# XIV — Intake 2026-11-24 (after `f98dd9d` / `1186058`)
+
+Three reviews and two follow-ups. Nothing omitted. `XIV.C` supersedes `XIII.I`. Two
+corrections are owed and are recorded here rather than edited out of history.
+
+## XIV.0 — Corrections owed
+
+- [ ] **XIV.0.1. Retract the "10–20×" check-time framing.** `TODO.md` line ~709
+  ("Drop 'generated proofs check faster' for linear families. Human: 1.555 s add")
+  and line ~2010 ("P-256 add human 1.555 s vs ~24 s judged") compare a single human
+  `prove` against a judge run that includes far more. Append a correction at both
+  places: the figure is withdrawn; a matched whole-file comparison suggests **1.2–5×**
+  on the partial data, pending the goal comparison in `XIII.E3`. Do not delete the
+  original lines — they are history.
+- [ ] **XIV.0.2. Count correction.** `research/receipts/wip/ix58-checktime.partial.json`
+  contains **25** task rows (18 ARM + 7 x86; `x86 secp256k1/neg` and `x86 sm2/neg`
+  missing), not the 26 claimed in commit `f98dd9d` and in the earlier `XIII.E3` text.
+  Verified with `grep -c '"dir"'` = 25. The commit message cannot be rewritten; this
+  entry is the correction of record, and `XIII.E3` now says 25.
+
+## XIV.A — Measurement integrity (defects in the machinery that just landed)
+
+Source-inspection findings on `src/tools/dropin.rs`. The table can currently produce a
+ratio, and exit 0, over populations that are not the same theorem.
+
+- [ ] **XIV.A1. Comparability must be a typed precondition.** Add
+  `compare(human: &MeasuredProof, generated: &MeasuredProof) -> Result<MatchedComparison,
+  ComparisonError>`. Constructing `MatchedComparison` must require: exact **theorem
+  identity** (not architecture + directory + operation + curve), executable identity,
+  identical measurement scope, identical checking configuration, and both judgments
+  successful. `checktime_table` must not be able to exit 0 without a `MatchedComparison`
+  per row it reports.
+- [ ] **XIV.A2. `read_timed_tasks()` must retain acceptance.** It currently discards the
+  exit status and the axiom-check result, so a failed or rejected measurement can still
+  contribute a time. Carry both through and exclude rejected measurements.
+- [ ] **XIV.A3. Aggregates only over matched pairs.** When a generated time exists and
+  its human counterpart does not, the generated time must not enter the numerator of any
+  aggregate. Report `n` pairs, list unmatched measurements separately, and label every
+  aggregate with its denominator.
+- [ ] **XIV.A4. Counts recomputed from files, with a test.** The printed task count must
+  equal the number of rows parsed; add a test that a pair file with a missing row cannot
+  yield a ratio for it.
+
+## XIV.B — Matched inference counts (the deterministic F3 number)
+
+The reviewer's point, and it is right: wall-clock is the wrong metric and the comparison
+already exists in deterministic form.
+
+- [ ] **XIV.B1.** Run the **human** tree under the axiom-stamp kernel and fill
+  `inference_delta` for the human side. Every human row is `null` today while the
+  generated side is counted (3,697,462,655 total; 681,707,202 for `arm/p521/add_p521`).
+- [ ] **XIV.B2.** Publish per-task human vs generated primitive-inference counts and the
+  total ratio, as the F3 result. Deterministic, machine-independent, and it needs no
+  wall-clock comparison to be publishable. It still requires `XIII.E3`'s goal comparison
+  before it is called a comparison of *the same obligation*.
+- [ ] **XIV.B3.** Separate **successful derivation** inferences from **discarded search**
+  inferences (two counters, or a phase switch), so "derivation size" and "search cost"
+  are distinct numbers. Today one counter mixes them (`XIII.E5`).
+- [ ] **XIV.B4.** Report the five costs separately, never as one number: search time;
+  successful derivation size; discarded inference work; solver-free replay time; total
+  construction + verification cost. Design principle: **expensive discovery is
+  acceptable; paying the discovery cost again at verification is not.**
+
+## XIV.C — Ordering resolution (supersedes `XIII.I`)
+
+One reviewer would bring native foundations forward; the other would put the freeze and
+certificates first. Both are satisfied by this order:
+
+1. **Freeze closure — done** (`freeze-rust-closure-v5`). It gates every later claim, so it
+   goes first, as the reviewer asks.
+2. **XIII.A certificates as data** — strict gate 27/27, solver out of the check path.
+3. **XIV.A + XIV.B** — comparability typed, then the matched inference table.
+4. **XIII.E2 `add_p521`** under budget.
+5. **XIII.G1 first new family** under freeze (and per `XIV.E`, prefer Montgomery or a loop
+   over another linear operation).
+6. **XIII.H1 (G1 bit-blaster soundness)** — brought forward: native foundations must not
+   be starved while the HOL Light side is optimised.
+7. `XIII.B3`, `XIII.B7`, `XIII.C5`, `XIII.D*` as small jobs in between.
+
+Rationale for pushing B down: IX.57 §10 settled that the stamp is inherited from the
+substrate and cannot discriminate inside HOL Light. Only B3 (negative control) and B7
+(receipt correction) still protect something published. The rest matters again only in the
+separate weak checker (`XIII.F3`).
+
+## XIV.D — Certificate form is an upstream-acceptability question
+
+- [ ] **XIV.D1.** A proof that needs an external SAT binary at check time is awkward to
+  carry inside upstream s2n-bignum. Certificates-as-data (`XIII.A`) is therefore a
+  precondition for upstream acceptability, not only a trust-surface improvement.
+- [ ] **XIV.D2.** Emitted proofs must replay **without searching**: measure the search
+  share of the inference count (`XIV.B3`) and drive it to zero in the emitted path.
+
+## XIV.E — Coverage pressure
+
+- [ ] **XIV.E1.** "Show me `montmul` or a loop." After the first linear family, prefer
+  upstream's `ensures2` equivalence route with an agent-written scalar twin
+  (`XIII.F8.2`), or a loop family with postcondition-prefix invariants (`XIII.F8.3`).
+  Add/sub/neg are the shortest and easiest FC proofs in the library; 4% of the
+  straight-line set does not move the frontier claim.
+- [ ] **XIV.E2.** `XII.F5` made concrete: an agent extends the compiler to a family it
+  has never seen, under a sealed freeze; metric is **time-to-coverage**, kernel sole judge.
+- [ ] **XIV.E3.** Never conflate "replaced a core correctness proof" with "full upstream
+  subroutine compatibility": `_SUBROUTINE_CORRECT` adds calling convention, return
+  behaviour, stack handling and permitted register modifications. Preserve exact theorem
+  semantics in every comparison (`XIII.G3`).
+
+## XIV.F — The AI part must become measurable
+
+- [ ] **XIV.F1.** Record plainly that the current 27 wins are compiler-driven with zero
+  model calls. That is a differentiator only if the AI contribution is then measured:
+  `XIV.E2`/`XII.F5` is that measurement.
+- [ ] **XIV.F2.** State the honest comparison point: AlphaProof Code operates at
+  libsignal scale; 27 theorems is small. The differentiators to defend are functional
+  correctness of *optimised* crypto bignum code, drop-in acceptance by upstream, and the
+  measurement discipline — not scale.
