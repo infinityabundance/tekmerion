@@ -2576,3 +2576,38 @@ after `freeze-rust-closure-v5` was sealed. That is the closure working as design
   the run record that v5 covers only its own commit.
 - [ ] **XIV.I2.** A sealed run must refuse to start when the closure does not verify — check
   that this is enforced in the sealed path, not just available.
+
+## XIV.J — IX.61: certificates-as-data measured, and the in-answer design is infeasible
+
+Measured on `arm/curve25519/add_p25519` with a counting hook on a generated copy of
+`csat_lib.ml` (tracked library untouched), reproduced twice:
+
+```
+CERTCLOSE n=1 key=4fe73a19… cnf_bytes=1022278 lrat_bytes=14453899 nvars=22018 nclauses=60831
+CERTCLOSE n=2 key=6353242d… cnf_bytes=979842  lrat_bytes=9985779  nvars=21249 nclauses=58529
+CERTCLOSE n=3 key=251e2a94… cnf_bytes=1022631 lrat_bytes=26518204 nvars=22023 nclauses=60845
+CERTCLOSE n=4 key=bb8ee8c8… cnf_bytes=980384  lrat_bytes=14699743 nvars=21254 nclauses=58543
+PRODUCER ok=true hyps=0 closes=4 seconds=24.058
+lrat_total=65657625 cnf_total=4005135
+```
+
+- **4 SAT closes** per proof (within the budget), but **65,657,625 bytes** of LRAT —
+  8.2× the 8 MB ceiling. The answer would grow from 103,709 B to ~66.4 MB.
+- `clauses_of_term` reproduces `read_dimacs` exactly on all four instances
+  (`clauses_equal=true`), so the in-memory CNF is provably the problem the solver saw.
+- Encoding probes: binary caDiCaL LRAT 29,057,164 B (3.6×); deletion lines only ~8%
+  (163,294 of 729,373); **backward-closure trim 22,765,098 B (2.8×)**. No encoding
+  reaches the ceiling.
+
+- [ ] **XIII.A8. Redesigned:** certificates as **content-addressed side artefacts** — the
+  answer carries the digest, the judge performs exactly one digest-verified read-only
+  read, the kernel still replays every step. This changes K2 from "no file I/O" to
+  "no writes, no solver, one verified read", and must be declared as such. Do not
+  quietly claim an inert answer under this design.
+- [ ] **XIII.A9. Constraint found:** a *compiled* script cannot load a library at run
+  time (`loadt` gives the type-checker no names), so any no-inline route requires the
+  court to inject the support-library text into the template prefix and raise
+  `inlined_locations`. Record that in the sealed-court protocol notes.
+- [ ] **XIV.J1.** The 65.6 MB figure is the SAT ceiling in bytes as well as in inferences:
+  it is direct evidence for `XIII.E4` (parametric lemmas) and `XIV.H1`, not only for
+  packaging work. A 256-bit adder should not need 65 MB of resolution.
