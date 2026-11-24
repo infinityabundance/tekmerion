@@ -1961,7 +1961,8 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
 ## XII.F2 — Export the derivation, not just the verdict
 
 - [ ] **XII.F2.1. Proof recording on for every accepted theorem.** Export the trace.
-  Not started. `ProofTrace/`/`Proofrecording/` are rejected for this purpose: the
+  Not started. `ProofTrace/`/`Proofrecording/` are rejected for this purpose (see
+  F2.2, which measures the axiom footprint without them): the
   ProofTrace README records 41 GB of theorems / 8 GB of proofs for a fresh
   `hol.ml` context, which does not fit this volume.
 - [x] **XII.F2.2. Per-theorem axiom dependencies (foundation stamp O17), measured.**
@@ -1978,6 +1979,20 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
   identical to the frozen run (wall time 1386 s vs 1398 s).
   Remaining under F2.2: the stamp is axioms only — definitional dependencies are
   not tracked, and the mask is a summary, not a replayable object.
+  **Localised (IX.57 §10).** The uniform `{ETA_AX, SELECT_AX, INFINITY_AX}` is
+  inherited from the substrate, not earned by the proof: `ARITH_RULE \`2 + 2 = 4\``
+  already carries all three, `MESON \`!P. P ==> P\`` carries `{ETA, SELECT}` without
+  infinity, and `define_trimmed` carries all three three lines after the ELF decode.
+  The mask therefore does **not** settle whether choice is essential to a given
+  theorem. Positive datum: `define_assert_from_elf` (bytes → semantics) is
+  **axiom-free**, and so are `new_definition` and `REFL \`x:int64\``. Probe source
+  `research/receipts/ix57/probe_stamps.ml`.
+- [ ] **XII.F2.6. Definitional / choice-essentiality footprint.** New, from IX.57 §10.
+  Decide *whether* a theorem needs `SELECT_AX` (not merely whether it inherits it) by
+  re-deriving the statement in a context where choice-bearing lemmas are unavailable,
+  and by tracking definitional dependencies (`new_definition` /
+  `new_basic_type_definition` contribute mask `0` today). This is the analysis that
+  turns the stamp from a dependency record into a foundation claim.
 - [ ] **XII.F2.3. Re-check outside the OCaml process** (HOLTrace-style replay).
   Open. The IX.57 stamp cannot be replayed by a third party; it is measured by the
   same kernel that produced the theorem.
@@ -2146,8 +2161,12 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
 ## XII.U — Order of execution (supersedes XI.N)
 
 1. XII.F1 grammar gate + firing controls (P0/P1 blocker; do first).
-2. XII.F7.3/F7.4 finish the ARM drop-in and publish the 27-task upstream table.
-3. XII.F2 proof recording + per-theorem axiom stamp on the nine.
+2. ~~XII.F7.3/F7.4 finish the ARM drop-in and publish the 27-task upstream table.~~
+   **Done** — `ix56-upstream-coverage.md`, 27/27 forced pass.
+3. ~~XII.F2 proof recording + per-theorem axiom stamp on the nine.~~ **Done as the
+   axiom stamp** (`ix57-axiom-stamp.md`, 27/27) with the §10 localisation; the rest of
+   F2 (exported derivation F2.1/F2.3/F2.4, definitional footprint F2.6) stays open.
 4. XII.F3 parametric lemmas (check-time reduction), then XII.F8.1 linear families.
+   Note `p521/add_p521` at 122 s exceeds the 120 s budget — F9.2 defect, fix first.
 5. P1 (G1) and P2 (multi-limb native arithmetic).
 6. XII.F4 nightly regeneration, then XII.F5 sealed agent extension.

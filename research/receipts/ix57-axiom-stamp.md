@@ -591,3 +591,76 @@ from *its* tree. That script is upstream's, in the git-ignored `.bench/dropin`
 copy, and it is not used to produce, parse or summarise any Tekmerion number in
 this receipt (log parsing and the table are Rust: `parse_stamp` / `stamp-table`).
 `git ls-files '*.py'` is empty.
+
+---
+
+## 10. Diagnostic: where the taint enters (appended 2026-11-24 by the orchestrator)
+
+§4 reports that **all 27** theorems carry **all three** basic axioms. On its own that
+number is easy to misread as "this proof needed choice". It is not: the stamp measures
+the theorem's *derivation*, and the derivation of every machine-code theorem includes
+the lemmas that build its statement. This section localises the taint so the number is
+interpreted correctly.
+
+**Probe source** (tracked): `research/receipts/ix57/probe_stamps.ml`, sha256
+`302e77d127c18eb818f1acbf0c14a578b4aa52119f2b41c5d107833f4dffb793`. It is not a proof
+and carries no claim; it loads `x86/proofs/base.ml` and prints `stamp_of` for a ladder of
+theorems from the base context and from one real routine's decode.
+
+**Command** (from `.bench/dropin/x86`, with the IX.57 environment of §7):
+
+```
+../tools/build-proof.sh "proofs/probe_stamps.ml" \
+  "/mnt/1tb_kingston/Tekmerion/.bench/hol-light-stamp/hol.sh" \
+  "curve25519/probe_stamps.native"
+../tools/run-proof.sh "curve25519/probe_stamps.native" "curve25519/probe_stamps.diag"
+grep -E "^PROBE" curve25519/probe_stamps.diag
+```
+
+**Output** (verbatim; `run-proof.sh` reported no `error:`/`exception:` line, and the
+program reached `PROBE_DONE`):
+
+```
+PROBE BIGNUM_FROM_MEMORY_BYTES     ids=[1,2,3]
+PROBE C_ARGUMENTS                  ids=[1,2,3]
+PROBE NONOVERLAPPING_CLAUSES       ids=[1,2,3]
+PROBE SOME_FLAGS                   ids=[]
+PROBE define_assert_from_elf       ids=[]
+PROBE define_trimmed               ids=[1,2,3]
+PROBE X86_MK_CORE_EXEC_RULE        ids=[1,2,3]
+PROBE new_definition p_25519       ids=[]
+PROBE REFL_int64                   ids=[]
+PROBE ARITH_RULE 2+2=4             ids=[1,2,3]
+PROBE MESON P==>P                  ids=[1,2]
+PROBE_DONE
+```
+
+Registry (`§4`): `1 = ETA_AX`, `2 = SELECT_AX`, `3 = INFINITY_AX`.
+
+A second probe in the core context (before any s2n-bignum material is loaded) gives the
+same shape: `F_DEF`, `AND_DEF`, `REFL`, `CONJ (REFL,REFL)`, `TAUT \`T\`` are `[]`;
+`EXISTS_THM` and `NOT_FORALL_THM` are `[1,2]`.
+
+### What the ladder shows
+
+1. **The instrument discriminates; it is not blanket over-tainting.**
+   `new_definition`, `SOME_FLAGS`, `REFL \`x:int64\`` and the ELF decode are all
+   axiom-free, while `ARITH_RULE \`2 + 2 = 4\`` already carries `{ETA, SELECT,
+   INFINITY}` and `MESON [] \`!P. P ==> P\`` carries `{ETA, SELECT}` without infinity.
+   The mask tracks the actual derivation.
+2. **The taint is inherited from the substrate, not earned by the proof search.**
+   `define_trimmed`, applied three lines after the ELF decode, already carries all
+   three, and so does every library lemma the statement is phrased with. In this
+   context *any* arithmetic statement carries all three — including `2 + 2 = 4`. The
+   uniform `{ETA_AX, SELECT_AX, INFINITY_AX}` in §4 therefore says something true but
+   weaker than it looks: the proofs live on top of HOL Light's arithmetic and choice
+   substrate, and they add no axiom of their own.
+3. **The conjecture that a fixed-width add might avoid choice is neither confirmed nor
+   refuted here.** Settling it requires re-deriving the statement in a choice-free
+   context (a definitional-footprint analysis), which the mask cannot answer because
+   definitional rules contribute `0`. Recorded as open in `TODO.md` XII.F2.6.
+4. **One positive datum for O17.** `define_assert_from_elf` — the step that turns the
+   shipped bytes into a formal semantics for the routine — is **axiom-free**. The part
+   of the trusted base that matters most for machine-code assurance (bytes to
+   semantics) is a definitional extension, on this evidence, and not an axiomatic
+   assumption. The axioms are inherited from the arithmetic library above it.
