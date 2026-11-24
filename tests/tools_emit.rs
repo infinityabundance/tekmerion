@@ -282,3 +282,44 @@ fn sealed_freeze_verification_end_to_end() {
     let want = fs::read(answers_x86().join("bignum_add_p25519.answer.txt")).unwrap();
     assert_identical(task, text.as_bytes(), &want);
 }
+
+// ---------------------------------------------------------------------------
+// The certificate-size probe's template reader (XIII.A step 1).
+// ---------------------------------------------------------------------------
+
+/// A synthetic repository with only the two files `template_prefix` reads.
+fn template_repo(tag: &str, problems: &str, template: &str) -> Tmp {
+    let tmp = Tmp::new(tag);
+    fs::create_dir_all(tmp.path().join(".bench")).unwrap();
+    fs::write(tmp.path().join(".bench/problems.json"), problems).unwrap();
+    fs::write(tmp.path().join(".bench/t.ml"), template).unwrap();
+    tmp
+}
+
+#[test]
+fn template_prefix_takes_exactly_the_harness_line_count() {
+    let repo = template_repo(
+        "tpl",
+        r#"{"t":{"inlined_locations":[["t.ml",2]]}}"#,
+        "a\nb\nc\n",
+    );
+    let got = emit::template_prefix(repo.path(), "t").expect("prefix");
+    assert_eq!(got, "a\nb\n");
+}
+
+#[test]
+fn template_prefix_keeps_everything_when_linenum_exceeds_the_file() {
+    let repo = template_repo(
+        "tpl-long",
+        r#"{"t":{"inlined_locations":[["t.ml",9]]}}"#,
+        "a\nb\nc",
+    );
+    let got = emit::template_prefix(repo.path(), "t").expect("prefix");
+    assert_eq!(got, "a\nb\nc\n");
+}
+
+#[test]
+fn template_prefix_refuses_a_task_without_locations() {
+    let repo = template_repo("tpl-missing", r#"{"t":{}}"#, "");
+    assert!(emit::template_prefix(repo.path(), "t").is_err());
+}

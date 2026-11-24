@@ -2283,6 +2283,16 @@ The F1 gate measures **0/26**: every emitted answer spawns `cadical` and does fi
 while being checked. The kernel still replays the LRAT, so this is not a soundness hole —
 it is a trust-surface and reproducibility hole, and it blocks Candle.
 
+> **Measured 2026-11-24 for `arm/curve25519/add_p25519`
+> (`research/receipts/ix61-certificates-as-data.md`).** The proof performs **4** SAT
+> closes (inside the 8-close budget) but their LRAT texts total **65,657,625 bytes**
+> (14.5 MB, 10.0 MB, 26.5 MB, 14.7 MB), an answer of ~66 MB where the current answer is
+> 104 KB. Binary caDiCaL LRAT is 29,057,164 bytes; a backward-closure trim that keeps
+> only the lemmas the empty clause uses is 22,765,098 bytes. All are ≥2.8× the declared
+> 8 MB in-answer budget, so the in-memory `CSAT_REFUTE_CERT` design for `A1–A3` was
+> **stopped after the measurement**. No certified answer exists; no control was run; no
+> box below is ticked. `A7` is now the selected route (`A8`).
+
 - [ ] **XIII.A1.** Emit a **closed tactic term**: allow-listed combinators, term
   literals, named lemmas. No `Unix`, `Sys`, process spawn, file I/O, references,
   `external`.
@@ -2299,6 +2309,16 @@ it is a trust-surface and reproducibility hole, and it blocks Candle.
   clone. That is the named milestone that takes OCaml out of the trust base.
 - [ ] **XIII.A7.** Certificates become content-addressed stored artefacts (needed by
   XIII.F and the Millennium layer).
+- [ ] **XIII.A8.** Certificate transport selected by IX.61: the answer carries the
+  **digest** and the judge reads one content-addressed certificate file (read-only,
+  no writes, no solver), rather than the 65.7 MB LRAT in the answer. Before building
+  it, measure a real `lrat-trim` pass at emission; if a trimmed certificate lands
+  under ~1–2 MB the in-answer no-I/O design becomes viable again and should win.
+  Declare the K2 change explicitly. Blocked on a decision record, not on code.
+- [ ] **XIII.A9.** The judge cannot supply a support library to a *compiled* script
+  (a runtime `loadt` gives the type-checker no names). Any no-inline route needs the
+  sealed-court builder to inject the library text into the template prefix and raise
+  `inlined_locations[0][1]` by its line count. Mechanism only; not implemented.
 
 ## XIII.E — Proof work reduction (F3: optimisation has become a blocker)
 

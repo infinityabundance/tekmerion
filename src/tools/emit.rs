@@ -1438,6 +1438,158 @@ pub fn dev_script_x86(info: &X86Info, policy: &GuardPolicy, repo: &Path) -> Resu
 }
 
 // ---------------------------------------------------------------------------
+// Measurement: the certificate-size probe (XIII.A, step 1)
+// ---------------------------------------------------------------------------
+//
+// This route measures one thing: how many SAT closes a proof performs and how
+// large the LRAT texts are. It runs the ordinary tactic against an instrumented
+// *copy* of `tools/csat_lib.ml` (the copy defines `csat_refute_hook` and calls
+// it while the temporary files exist) and copies each `(CNF, LRAT)` pair out
+// before they are deleted, checking that the clause list derived from the CNF
+// term is the list `read_dimacs` reads back. The tracked library is untouched.
+//
+// The certified check path was **not** built. The measurement (4 closes,
+// 65,657,625 bytes of LRAT; 22,765,098 bytes even lemma-trimmed) exceeds the
+// declared 8 MB design gate, so in-answer certificates are not the design.
+// See `research/receipts/ix61-certificates-as-data.md`.
+
+/// The first `linenum` lines (newlines kept) of a task's inlined template.
+pub fn template_prefix(repo: &Path, task: &str) -> Result<String> {
+    let problems = load_problems(repo)?;
+    let first = problem(&problems, task)?
+        .get("inlined_locations")
+        .and_then(Json::as_array)
+        .and_then(|a| a.first())
+        .and_then(Json::as_array)
+        .ok_or_else(|| EmitError::Other(format!("{task:?} has no inlined_locations[0]")))?;
+    let rel = first
+        .first()
+        .and_then(Json::as_str)
+        .ok_or_else(|| EmitError::Other(format!("{task:?} inlined_locations[0][0]")))?;
+    let linenum = match first.get(1) {
+        Some(Json::Num(n)) if *n >= 0.0 && n.fract() == 0.0 => *n as usize,
+        _ => {
+            return other(format!(
+                "{task:?} inlined_locations[0][1] is not an integer"
+            ))
+        }
+    };
+    let path = bench(repo).join(rel);
+    let src = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut out = String::new();
+    for (count, line) in src.split_inclusive('\n').enumerate() {
+        if count >= linenum {
+            break;
+        }
+        out.push_str(line);
+    }
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// Instrument a *copy* of `tools/csat_lib.ml` for the measurement run: define a
+/// hook and call it from `CSAT_REFUTE_GEN` while the temporary CNF/LRAT files
+/// still exist. The tracked library is left untouched, because adding the hook
+/// to it would change every emitted answer and break the byte-identity
+/// regression baseline for the reference answers.
+fn instrument_csat_lib(src: &str) -> Result<String> {
+    let anchor_hook = "let csat_debug = ref false;;";
+    let anchor_call = "let res = LRAT_REFUTE_GEN amap cnfname lratname in";
+    let with_hook = format!(
+        "{anchor_hook}\n\
+         let csat_refute_hook : (term -> string -> string -> unit) ref =\n\
+           ref (fun _ _ _ -> ());;"
+    );
+    let with_call = format!(
+        "let _ = !csat_refute_hook tm cnfname lratname in\n\
+         {anchor_call}"
+    );
+    if !src.contains(anchor_hook) || !src.contains(anchor_call) {
+        return other("tools/csat_lib.ml: measurement anchors not found");
+    }
+    Ok(src
+        .replacen(anchor_hook, &with_hook, 1)
+        .replacen(anchor_call, &with_call, 1))
+}
+
+/// The measurement script: template prefix, the CSAT/bridge sources inlined as
+/// one nested `let ... in` chain (the harness compiles a script as a single
+/// unit, so a runtime `loadt` would not supply names), the unchanged tactic,
+/// and the hook that dumps each certificate.
+pub fn cert_producer_source(info: &ArmInfo, repo: &Path, work: &Path) -> Result<String> {
+    let work = fs::canonicalize(work).map_err(|e| format!("{}: {e}", work.display()))?;
+    let sources = [
+        ".bench/hol-light/Cadical/dimacs.ml",
+        ".bench/hol-light/Cadical/cnf.ml",
+        ".bench/hol-light/Cadical/ldrup.ml",
+        "tools/csat_lib.ml",
+        "tools/bridge.ml",
+    ];
+    let mut parts: Vec<String> = Vec::new();
+    for rel in sources {
+        let path = repo.join(rel);
+        let src = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let src = if rel == "tools/csat_lib.ml" {
+            instrument_csat_lib(&src)?
+        } else {
+            src
+        };
+        parts.extend(crate::tools::inline_answer::phrases_from(&src));
+    }
+    let mut s = template_prefix(repo, &info.task)?;
+    s.push_str("\n(* ==== C61 measurement run: untrusted, solver and I/O allowed ==== *)\n(\n");
+    for phrase in parts {
+        s.push_str(&phrase);
+        s.push_str("\nin\n");
+    }
+    s.push_str(&format!(
+        r#"let tek_cert_dir = "{}" in
+let tek_slurp f =
+  let ic = open_in_bin f in
+  let n = in_channel_length ic in
+  let s = really_input_string ic n in
+  close_in ic; s in
+let tek_closes = ref 0 in
+let tek_dump tm cnffile lratfile =
+  incr tek_closes;
+  let cnf = tek_slurp cnffile and lrat = tek_slurp lratfile in
+  let key = Digest.to_hex (Digest.string (string_of_term tm)) in
+  let prb = read_dimacs cnffile in
+  let ats = atoms tm in
+  let _,vmap =
+    rev_itlist (fun a (n,f) -> (n+1,(a |-> n) f)) ats (1,undefined) in
+  let derived = clauses_of_term (apply vmap) tm in
+  Printf.printf
+    "CERTCLOSE n=%d key=%s cnf_bytes=%d lrat_bytes=%d nvars=%d nclauses=%d clauses_equal=%b\n%!"
+    !tek_closes key (String.length cnf) (String.length lrat)
+    (rev_itlist (rev_itlist (max o abs)) prb 0) (List.length prb)
+    (derived = prb);
+  let oc = open_out_bin (Filename.concat tek_cert_dir (key ^ ".cnf")) in
+  output_string oc cnf; close_out oc;
+  let oc = open_out_bin (Filename.concat tek_cert_dir (key ^ ".lrat")) in
+  output_string oc lrat; close_out oc in
+let _ = csat_refute_hook := tek_dump in
+let tek_t0 = Unix.gettimeofday () in
+let tek_th = prove({}, ({})) in
+Printf.printf "PRODUCER task={} ok=%b hyps=%d closes=%d seconds=%.3f\n%!"
+  (concl tek_th = {}) (List.length (hyp tek_th)) !tek_closes
+  (Unix.gettimeofday () -. tek_t0);
+ tek_th
+)
+;;
+"#,
+        work.display(),
+        info.query,
+        info.tactic,
+        info.task,
+        info.query,
+    ));
+    Ok(s)
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
@@ -1446,6 +1598,7 @@ struct EmitArgs {
     mode: String,
     out: String,
     accumulate_out: Option<String>,
+    work: Option<String>,
     guard: guard::ModeArgs,
 }
 
@@ -1454,6 +1607,7 @@ fn parse_emit_args(argv: &[String]) -> std::result::Result<EmitArgs, String> {
     let mut mode = "answer".to_string();
     let mut out = None;
     let mut accumulate_out = None;
+    let mut work = None;
     let mut guard_args = guard::ModeArgs::default();
     let mut i = 0;
     while i < argv.len() {
@@ -1465,6 +1619,8 @@ fn parse_emit_args(argv: &[String]) -> std::result::Result<EmitArgs, String> {
             out = Some(v);
         } else if let Some(v) = guard::take_value(argv, &mut i, "--accumulate-out") {
             accumulate_out = Some(v);
+        } else if let Some(v) = guard::take_value(argv, &mut i, "--work") {
+            work = Some(v);
         } else if let Some(v) = guard::take_value(argv, &mut i, "--sealed-manifest") {
             guard_args.sealed_manifest = Some(v);
         } else if let Some(v) = guard::take_value(argv, &mut i, "--freeze-tag") {
@@ -1483,7 +1639,7 @@ fn parse_emit_args(argv: &[String]) -> std::result::Result<EmitArgs, String> {
         }
         i += 1;
     }
-    if !matches!(mode.as_str(), "answer" | "dev") {
+    if !matches!(mode.as_str(), "answer" | "dev" | "cert-producer") {
         return Err(format!("invalid --mode {mode:?}"));
     }
     Ok(EmitArgs {
@@ -1491,6 +1647,7 @@ fn parse_emit_args(argv: &[String]) -> std::result::Result<EmitArgs, String> {
         mode,
         out: out.ok_or("--out is required")?,
         accumulate_out,
+        work,
         guard: guard_args,
     })
 }
@@ -1554,6 +1711,30 @@ fn emit_arm(args: &EmitArgs, repo: &Path) -> Result<()> {
     let policy = guard::policy_from_args(&args.guard, repo)?;
     let op = op_of(&args.task).map_err(EmitError::Other)?;
     let info = build_arm(&op, &args.task, &policy, repo)?;
+    if args.mode == "cert-producer" {
+        let work = args
+            .work
+            .as_deref()
+            .ok_or_else(|| EmitError::Other("--work is required".into()))?;
+        let work_path = Path::new(work);
+        fs::create_dir_all(work_path).map_err(|e| format!("{work}: {e}"))?;
+        let text = cert_producer_source(&info, repo, work_path)?;
+        let path = Path::new(&args.out);
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+            }
+        }
+        fs::write(path, &text).map_err(|e| format!("{}: {e}", args.out))?;
+        println!(
+            "wrote {} mode=cert-producer task={} work={} bytes={}",
+            args.out,
+            args.task,
+            work,
+            text.len()
+        );
+        return Ok(());
+    }
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
     } else {
