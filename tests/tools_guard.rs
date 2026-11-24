@@ -1088,3 +1088,73 @@ fn policy_from_args_refusals() {
         "requires --freeze-tag",
     );
 }
+
+// ---------------------------------------------------------------------------
+// 5b. Freeze closure (XIII.C) — the Rust producer, not just tools/
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sealed_manifest_accepts_only_a_clean_freeze_closure_path() {
+    let tmp = Tmp::new("closure-path");
+    let for_path = |rel: &str| {
+        let path = tmp.path().join("c.json");
+        fs::write(
+            &path,
+            format!(
+                "{{\"freeze_commit\":\"{COMMIT}\",\"sealed_ids\":[\"{SEALED_ID}\"],\
+                 \"freeze_closure\":\"{rel}\"}}"
+            ),
+        )
+        .unwrap();
+        guard::load_sealed_manifest(&path)
+    };
+    for bad in ["../outside.json", "/abs.json", "./x.json", "a//b.json"] {
+        refused_contains(
+            for_path(bad),
+            "freeze_closure is not a clean repo-relative path",
+        );
+    }
+
+    let ok = for_path("research/receipts/freeze-closure-v5.json").expect("clean path");
+    assert_eq!(
+        ok.freeze_closure.as_deref(),
+        Some("research/receipts/freeze-closure-v5.json")
+    );
+}
+
+#[test]
+fn freeze_closure_tag_must_match_the_freeze_tag() {
+    use tekmerion::tools::freeze::{self, Closure, Entry};
+
+    let tmp = Tmp::new("closure-tag");
+    let (repo, commit) = init_repo(&tmp);
+    let digest = tekmerion::tools::sha256::hex(&fs::read(repo.join("tools/tracked.py")).unwrap());
+    let mut closure = Closure {
+        tag: "another-tag".to_string(),
+        repo_commit: commit.clone(),
+        created_at: 0,
+        source: vec![Entry {
+            path: "tools/tracked.py".to_string(),
+            sha256: digest,
+        }],
+        source_digest: String::new(),
+        runtime: None,
+    };
+    closure.source_digest = freeze::digest_of(&closure.source);
+    fs::write(repo.join("closure.json"), freeze::render(&closure)).unwrap();
+
+    let path = tmp.path().join("sealed-closure.json");
+    fs::write(
+        &path,
+        format!(
+            "{{\"freeze_commit\":\"{commit}\",\"sealed_ids\":[\"{SEALED_ID}\"],\
+             \"freeze_tag\":\"{FREEZE_TAG}\",\"freeze_closure\":\"closure.json\"}}"
+        ),
+    )
+    .unwrap();
+    let manifest = guard::load_sealed_manifest(&path).unwrap();
+    refused_contains(
+        guard::verify_freeze(&manifest, FREEZE_TAG, &repo),
+        "freeze closure names tag",
+    );
+}

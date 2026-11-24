@@ -13,6 +13,7 @@ pub mod disasm;
 pub mod dropin;
 pub mod emit;
 pub mod fcdist;
+pub mod freeze;
 pub mod guard;
 pub mod inline_answer;
 pub mod instrument;

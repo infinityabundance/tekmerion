@@ -1,31 +1,52 @@
-//! Refusal-site mutation harness for the Rust held-out guard (Ordeal O9.3).
+//! Refusal-site mutation harness for the Rust held-out guard and freeze
+//! closure (Ordeals O9.3 and XIII.C).
 //!
 //! AST-free by design: it finds every `Err(Refused::new(..))` refusal expression
-//! in `src/tools/guard.rs` with a balanced-paren scanner that skips string
-//! literals and line comments, replaces the expression with `Ok(todo!())` (a
-//! well-typed "never refuse" mutant), runs `cargo test --offline --test
-//! tools_guard`, and restores the file. A mutant that fails to compile is not a
-//! valid mutant and is excluded from the score rather than counted as killed.
+//! in a target file with a balanced-paren scanner that skips string literals
+//! and line comments, replaces the expression with `Ok(todo!())` (a well-typed
+//! "never refuse" mutant), runs the integration test target that exercises that
+//! module, and restores the file. A mutant that fails to compile is not a valid
+//! mutant and is excluded from the score rather than counted as killed.
 //! **Not on the verdict path.**
 //!
 //! Exit 0 only when every surviving mutant is a recorded equivalent (`?`-site
-//! refusals live in closures, which this scanner does not mutate) or when no
-//! site survives.
+//! refusals live in closures and `map_err` plumbing, which this scanner does not
+//! mutate) or when no site survives.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const TARGET_FILE: &str = "src/tools/guard.rs";
 const TARGET: &str = "Err(Refused::new(";
 const MUTANT: &str = "Ok(todo!())";
 const BACKUP_SUFFIX: &str = ".rs.orig";
 
-// Equivalent mutants, keyed by (line, normalised source line). A refusal that
-// is unreachable in the ported public surface is listed here with its reason.
-// An edit that shifts these must be re-reviewed; the tool then fails rather
-// than inheriting the exemption. Empty today: every site is reached and killed.
-const EQUIVALENT: &[(usize, &str)] = &[];
+struct Job {
+    file: String,
+    /// The integration test target that exercises this file's refusal sites.
+    test: &'static str,
+}
+
+/// Every module whose refusal sites this harness mutates.
+fn jobs() -> Vec<Job> {
+    vec![
+        Job {
+            file: "src/tools/guard.rs".to_string(),
+            test: "tools_guard",
+        },
+        Job {
+            file: "src/tools/freeze.rs".to_string(),
+            test: "tools_freeze",
+        },
+    ]
+}
+
+// Equivalent mutants, keyed by (file, line, normalised source line). A refusal
+// that is unreachable in the ported public surface is listed here with its
+// reason. An edit that shifts these must be re-reviewed; the tool then fails
+// rather than inheriting the exemption. Empty today: every site is reached and
+// killed.
+const EQUIVALENT: &[(&str, usize, &str)] = &[];
 
 struct Restore {
     path: PathBuf,
@@ -129,9 +150,9 @@ fn span_text(src: &[u8], start: usize, end: usize) -> String {
         .join(" ")
 }
 
-fn run_tests(root: &Path) -> (bool, String) {
+fn run_tests(root: &Path, test: &str) -> (bool, String) {
     let out = Command::new("cargo")
-        .args(["test", "--offline", "--test", "tools_guard", "--quiet"])
+        .args(["test", "--offline", "--test", test, "--quiet"])
         .current_dir(root)
         .output();
     match out {
@@ -144,34 +165,34 @@ fn run_tests(root: &Path) -> (bool, String) {
     }
 }
 
-pub fn run(args: &[String]) -> i32 {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let target = args
-        .iter()
-        .position(|a| a == "--file")
-        .and_then(|i| args.get(i + 1))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| root.join(TARGET_FILE));
+struct Tally {
+    sites: usize,
+    killed: usize,
+    invalid: usize,
+    survivors: Vec<(usize, String)>,
+}
 
+fn mutate_file(root: &Path, job: &Job) -> Option<Tally> {
+    let target = root.join(&job.file);
     let backup = PathBuf::from(format!("{}{BACKUP_SUFFIX}", target.display()));
     if backup.exists() {
         eprintln!(
             "REFUSING: stale backup {} from an interrupted run; move it back first",
             backup.display()
         );
-        return 2;
+        return None;
     }
     let original = match fs::read(&target) {
-        Ok(b) => b,
+        Ok(bytes) => bytes,
         Err(e) => {
             eprintln!("ERROR cannot read {}: {e}", target.display());
-            return 3;
+            return None;
         }
     };
     let sites = find_sites(&original);
     if sites.is_empty() {
-        eprintln!("no {TARGET} sites found");
-        return 2;
+        eprintln!("no {TARGET} sites found in {}", job.file);
+        return None;
     }
     fs::write(&backup, &original).ok();
     let _restore = Restore {
@@ -179,53 +200,124 @@ pub fn run(args: &[String]) -> i32 {
         original: original.clone(),
     };
 
-    let mut killed = 0usize;
-    let mut invalid = 0usize;
-    let mut survivors: Vec<(usize, String)> = Vec::new();
+    let mut tally = Tally {
+        sites: sites.len(),
+        killed: 0,
+        invalid: 0,
+        survivors: Vec::new(),
+    };
     for (start, end, line) in &sites {
         let mut mutant = original.clone();
         mutant.splice(*start..*end, MUTANT.bytes());
         if fs::write(&target, &mutant).is_err() {
             eprintln!("ERROR cannot write {}", target.display());
-            return 3;
+            return None;
         }
-        let (passed, output) = run_tests(&root);
+        let (passed, output) = run_tests(root, job.test);
         if passed {
             let snippet = span_text(&original, *start, *end);
-            println!("SURVIVED line {line:4}  {snippet}");
-            survivors.push((*line, snippet));
+            println!("SURVIVED {} line {line:4}  {snippet}", job.file);
+            tally.survivors.push((*line, snippet));
         } else if output.contains("error[") || output.contains("could not compile") {
-            println!("INVALID  line {line:4}  mutant did not compile");
-            invalid += 1;
+            println!(
+                "INVALID  {} line {line:4}  mutant did not compile",
+                job.file
+            );
+            tally.invalid += 1;
         } else {
-            killed += 1;
+            tally.killed += 1;
         }
         let _ = fs::write(&target, &original);
     }
     let _ = fs::remove_file(&backup);
+    Some(tally)
+}
 
-    let valid = sites.len() - invalid;
-    println!("\nguard refusal sites: {} ({invalid} invalid)", sites.len());
-    println!("killed: {killed}  survived: {}", survivors.len());
+fn selected_jobs(args: &[String]) -> Option<Vec<Job>> {
+    let all = jobs();
+    if let Some(i) = args.iter().position(|a| a == "--file") {
+        let file = args.get(i + 1)?.clone();
+        let test = all
+            .iter()
+            .find(|job| job.file == file)
+            .map(|job| job.test)
+            .unwrap_or("tools_guard");
+        return Some(vec![Job { file, test }]);
+    }
+    Some(all)
+}
+
+pub fn run(args: &[String]) -> i32 {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let jobs = match selected_jobs(args) {
+        Some(jobs) if !jobs.is_empty() => jobs,
+        _ => {
+            eprintln!("usage: mutate_guard [--file src/tools/<module>.rs]");
+            return 2;
+        }
+    };
+
+    let mut total_sites = 0usize;
+    let mut total_killed = 0usize;
+    let mut total_invalid = 0usize;
+    let mut total_survivors = 0usize;
+    let mut unexplained: Vec<(String, usize, String)> = Vec::new();
+
+    for job in &jobs {
+        let tally = match mutate_file(&root, job) {
+            Some(tally) => tally,
+            None => return 3,
+        };
+        let valid = tally.sites - tally.invalid;
+        println!(
+            "\n{} refusal sites: {} ({} invalid)",
+            job.file, tally.sites, tally.invalid
+        );
+        println!(
+            "killed: {}  survived: {}",
+            tally.killed,
+            tally.survivors.len()
+        );
+        if valid > 0 {
+            println!(
+                "mutation score: {}/{valid} = {:.3}",
+                tally.killed,
+                tally.killed as f64 / valid as f64
+            );
+        }
+        total_sites += tally.sites;
+        total_killed += tally.killed;
+        total_invalid += tally.invalid;
+        total_survivors += tally.survivors.len();
+        for (line, snippet) in tally.survivors {
+            let file = job.file.clone();
+            if EQUIVALENT
+                .iter()
+                .any(|(f, l, s)| *f == job.file.as_str() && *l == line && *s == snippet)
+            {
+                println!("EQUIVALENT {file} line {line}: {snippet}");
+            } else {
+                unexplained.push((file, line, snippet));
+            }
+        }
+    }
+
+    let valid = total_sites - total_invalid;
+    println!(
+        "\nall targets: {total_sites} refusal sites ({total_invalid} invalid), \
+         killed {total_killed}, survived {total_survivors}"
+    );
     if valid > 0 {
         println!(
-            "mutation score: {killed}/{valid} = {:.3}",
-            killed as f64 / valid as f64
+            "mutation score: {total_killed}/{valid} = {:.3}",
+            total_killed as f64 / valid as f64
         );
     }
 
-    let mut unexplained = Vec::new();
-    for (line, snippet) in &survivors {
-        if EQUIVALENT.iter().any(|(l, s)| l == line && s == snippet) {
-            println!("EQUIVALENT line {line}: {snippet}");
-        } else {
-            unexplained.push((line, snippet));
-        }
-    }
     if !unexplained.is_empty() {
         println!("\nUNEXPLAINED SURVIVORS (add a test, or record an equivalence):");
-        for (line, snippet) in unexplained {
-            println!("  line {line}: {snippet}");
+        for (file, line, snippet) in unexplained {
+            println!("  {file} line {line}: {snippet}");
         }
         return 1;
     }

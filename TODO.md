@@ -2222,17 +2222,24 @@ cited again.
 migration the producer lives in `src/tools/` and `src/bin/`, so the freeze does not bind
 the emitter at all.
 
-- [ ] **XIII.C1.** Bind the whole relevant closure: `src/tools/**`, `src/bin/**`,
+- [x] **XIII.C1.** Bind the whole relevant closure: `src/tools/**`, `src/bin/**`,
   `src/native/**`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, the built executable
   digest, the OCaml bridge (`tools/csat_lib.ml`, `tools/bridge.ml`), the benchmark
   inputs, and runtime dependencies (`cadical` path + digest, HOL Light pin).
-- [ ] **XIII.C2.** Record that closure in the freeze record; `verify_freeze` must refuse
-  on any difference — including a clean checkout whose contents differ.
-- [ ] **XIII.C3.** Firing controls, each must refuse: modified emitter source; swapped
+  — closed by `src/tools/freeze.rs` (source layer walks all of `src/**`, so
+  `src/bin/**` and `src/native/**` are covered) plus the runtime layer; no
+  `rust-toolchain*` file exists on this tree. Receipt: `research/receipts/ix59-freeze-closure.md`.
+- [x] **XIII.C2.** Record that closure in the freeze record; `verify_freeze` must refuse
+  on any difference — including a clean checkout whose contents differ. —
+  `freeze verify` recomputes every digest; `verify_freeze` enforces the closure when a
+  sealed manifest carries `freeze_closure`, and keeps the legacy `tools/` scope (with a
+  stderr warning) when it does not.
+- [x] **XIII.C3.** Firing controls, each must refuse: modified emitter source; swapped
   binary under the same name; changed `Cargo.lock`; different HOL Light build; a
-  different `cadical`.
-- [ ] **XIII.C4.** New freeze tag after C1–C3. Freeze v4 stays valid for its own scope;
-  it does not cover the Rust producer.
+  different `cadical`. — all six controls refused; verbatim output in IX.59.
+- [x] **XIII.C4.** New freeze tag after C1–C3. Freeze v4 stays valid for its own scope;
+  it does not cover the Rust producer. — annotated unsigned tag `freeze-rust-closure-v5`;
+  IX.53–IX.57 manifests still verify under the legacy scope.
 
 ## XIII.D — Small honesty defects
 

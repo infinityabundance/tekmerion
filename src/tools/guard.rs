@@ -46,7 +46,13 @@ pub const EXIT_ALLOWED: i32 = 0;
 pub const EXIT_REFUSED: i32 = 2;
 
 const DECISION_CITATION: &str = "research/receipts/";
-const MANIFEST_KEYS: &[&str] = &["freeze_commit", "freeze_tag", "sealed_ids", "note"];
+const MANIFEST_KEYS: &[&str] = &[
+    "freeze_closure",
+    "freeze_commit",
+    "freeze_tag",
+    "sealed_ids",
+    "note",
+];
 const SPENT_MANIFEST_KEYS: &[&str] = &["decision", "spent", "note"];
 
 /// Raised instead of opening a held-out or otherwise unsafe path.
@@ -62,7 +68,7 @@ impl std::fmt::Display for Refused {
 impl std::error::Error for Refused {}
 
 impl Refused {
-    fn new(msg: impl Into<String>) -> Refused {
+    pub(crate) fn new(msg: impl Into<String>) -> Refused {
         Refused(msg.into())
     }
 }
@@ -370,6 +376,10 @@ pub struct SealedManifest {
     pub freeze_commit: String,
     pub sealed_ids: BTreeSet<String>,
     pub freeze_tag: Option<String>,
+    /// Repo-relative path of a freeze-closure manifest (XIII.C). When present,
+    /// `verify_freeze` enforces the Rust producer's closure instead of the
+    /// legacy `tools/` scope.
+    pub freeze_closure: Option<String>,
     pub note: String,
 }
 
@@ -440,13 +450,21 @@ fn unknown_keys(payload: &BTreeMap<String, Json>, allowed: &[&str]) -> Vec<Strin
         .collect()
 }
 
-fn is_hex40(s: &str) -> bool {
+pub(crate) fn is_hex40(s: &str) -> bool {
     s.len() == 40
         && s.bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-fn valid_tag(tag: &str) -> bool {
+fn is_clean_relative(s: &str) -> bool {
+    !s.is_empty()
+        && !s.starts_with('/')
+        && !s
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+}
+
+pub(crate) fn valid_tag(tag: &str) -> bool {
     !tag.is_empty() && !tag.chars().any(char::is_whitespace)
 }
 
@@ -511,6 +529,17 @@ pub fn load_sealed_manifest(path: &Path) -> Result<SealedManifest> {
         }
     };
 
+    let freeze_closure = match obj.get("freeze_closure") {
+        None | Some(Json::Null) => None,
+        Some(Json::Str(rel)) if is_clean_relative(rel) => Some(rel.clone()),
+        other => {
+            return Err(Refused::new(format!(
+                "freeze_closure is not a clean repo-relative path: {}",
+                other.map(json_value_label).unwrap_or_default()
+            )))
+        }
+    };
+
     let note = match obj.get("note") {
         None => String::new(),
         Some(Json::Str(s)) => s.clone(),
@@ -522,6 +551,7 @@ pub fn load_sealed_manifest(path: &Path) -> Result<SealedManifest> {
         freeze_commit: commit,
         sealed_ids: seen,
         freeze_tag,
+        freeze_closure,
         note,
     })
 }
@@ -660,48 +690,75 @@ pub fn verify_freeze(manifest: &SealedManifest, freeze_tag: &str, repo: &Path) -
         )));
     }
 
-    let dirty = git(
-        repo,
-        &[
-            "status",
-            "--porcelain",
-            "--untracked-files=no",
-            "--",
-            "tools",
-        ],
-    )?
-    .trim()
-    .to_string();
-    if !dirty.is_empty() {
-        let first = dirty.lines().next().unwrap_or("");
-        return Err(Refused::new(format!(
-            "working tree has changes to tracked files under tools/: {first}"
-        )));
-    }
+    // A closure-carrying manifest binds the Rust producer: the sealed executable
+    // is compiled from these sources. A manifest without one is a freeze v4
+    // record, whose scope was `tools/` only; it is verified under that scope and
+    // never silently upgraded.
+    match &manifest.freeze_closure {
+        Some(rel) => {
+            let closure = crate::tools::freeze::load(&repo.join(rel))?;
+            if closure.tag != freeze_tag {
+                return Err(Refused::new(format!(
+                    "freeze closure names tag {:?}, but --freeze-tag is {freeze_tag:?}",
+                    closure.tag
+                )));
+            }
+            crate::tools::freeze::check_tag(repo, &closure, rel)?;
+            crate::tools::freeze::verify_source(repo, &closure)?;
+            crate::tools::freeze::verify_runtime(repo, &closure)?;
+            Ok(())
+        }
+        None => {
+            eprintln!(
+                "warning: freeze manifest has no freeze_closure; the legacy scope (tools/) \
+                 does not bind the Rust producer in src/tools, src/bin or target/release. \
+                 See research/receipts/ix59-freeze-closure.md."
+            );
 
-    // Cleanliness is not enough: the tree must *be* the frozen code. Without
-    // this, a later commit could change the emitters and still be accepted
-    // under an older freeze tag.
-    let changed = git(
-        repo,
-        &[
-            "diff",
-            "--name-only",
-            &manifest.freeze_commit,
-            "--",
-            "tools",
-        ],
-    )?
-    .trim()
-    .to_string();
-    if !changed.is_empty() {
-        let first = changed.lines().next().unwrap_or("");
-        let short: String = manifest.freeze_commit.chars().take(12).collect();
-        return Err(Refused::new(format!(
-            "tools/ differs from the freezer commit {short}: {first}"
-        )));
+            let dirty = git(
+                repo,
+                &[
+                    "status",
+                    "--porcelain",
+                    "--untracked-files=no",
+                    "--",
+                    "tools",
+                ],
+            )?
+            .trim()
+            .to_string();
+            if !dirty.is_empty() {
+                let first = dirty.lines().next().unwrap_or("");
+                return Err(Refused::new(format!(
+                    "working tree has changes to tracked files under tools/: {first}"
+                )));
+            }
+
+            // Cleanliness is not enough: the tree must *be* the frozen code. Without
+            // this, a later commit could change the emitters and still be accepted
+            // under an older freeze tag.
+            let changed = git(
+                repo,
+                &[
+                    "diff",
+                    "--name-only",
+                    &manifest.freeze_commit,
+                    "--",
+                    "tools",
+                ],
+            )?
+            .trim()
+            .to_string();
+            if !changed.is_empty() {
+                let first = changed.lines().next().unwrap_or("");
+                let short: String = manifest.freeze_commit.chars().take(12).collect();
+                return Err(Refused::new(format!(
+                    "tools/ differs from the freezer commit {short}: {first}"
+                )));
+            }
+            Ok(())
+        }
     }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
