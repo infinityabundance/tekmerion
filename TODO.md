@@ -1456,8 +1456,10 @@ else is `SCOPED_ACCEPTED [failed: …]`. No partial credit, no rounding up.
   appears in Annex A with an Ordeal clause at least as strong; every clause has a planted defect
   its check must catch, run on every build. A control that stops firing fails the build.
 
-**O1 — statement fidelity.** [ ] O1.1 challenge file written before search, frozen by digest;
-[ ] O1.2 independent comparator: term-identical statement + axiom subset; [ ] O1.3 Pollack
+**O1 — statement fidelity.** [~] O1.1 challenge file written before search, frozen by digest
+  (**post-hoc for the nine, `ix-o1-challenges.md`**); [~] O1.2 independent comparator:
+  term-identical statement + axiom subset (**statement/object/judge-program binding done; kernel
+  terms + axiom whitelist open**); [ ] O1.3 Pollack
 consistency/faithfulness with an adversarial corpus (Unicode lookalikes, shadowed constants,
 printer that swaps `T`/`F`); [ ] O1.4 two independent formalisations proved equivalent;
 [ ] O1.5 non-vacuity: kernel-checked satisfying witness for preconditions, kernel-refuted
@@ -1809,7 +1811,13 @@ carefully justified authority.
 - [ ] **XI.L.8. Divergent hardware.** Re-run the nine on AArch64 and compare transcripts (O8).
 - [ ] **XI.L.9. Signed tags.** Sign `freeze-*` tags; record the public key and verification
   command in the receipt.
-- [ ] **XI.L.10. Challenge files + comparator** for the nine statements (O1.1/O1.2).
+- [x] **XI.L.10. Challenge files + comparator** for the nine statements (O1.1/O1.2). Done
+  2026-11-24, `research/receipts/ix-o1-challenges.md`. `tools/challenge.py` freezes the exact
+  statement bytes + corpus/object digests and verifies them against the judge program that ran.
+  **Honest limit:** the nine were frozen *after* the run (`pre-search false`, `POST_HOC`), so O1.1
+  is not met for them; `verify --require-pre-search` refuses them. Future runs must freeze before
+  `emit`. Kernel-term identity is by construction via `prove(query, …)`; the axiom whitelist is
+  still O4. Seven negative controls pass.
 
 ## XI.M — Deep research queue (novel / inverted combinations)
 

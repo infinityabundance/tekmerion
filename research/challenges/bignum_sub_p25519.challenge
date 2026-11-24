@@ -1,0 +1,28 @@
+tnps-challenge v1
+task x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT
+category functional_correctness_x86
+standard tnps/1
+frozen-at POST_HOC: judged at eval-20261124_003911; challenge recorded after the run
+pre-search false
+problems-json-sha256 74f314445fa5f579d18b03e73c167ea0ca56e0581e26add8a11d8d077f7ea8d4
+statement-sha256 4bcb13ae9104de64f87813f2470319f346f95bed1a8f050931d5b08e1f77aff7
+statement-bytes 693
+object x86/curve25519/bignum_sub_p25519.o
+object-sha256 7c0aeb54fc461130cec4bd97084f99765ffbc51683249ab8d9d5db0e39373eb0
+s2n-bignum-commit 5e0fc782ae6d587c2ae40faf2c2c4d0b637e6240
+--- statement begin ---
+`!z x y m n pc.
+        nonoverlapping (word pc,0x48) (z,8 * 4)
+        ==> ensures x86
+             (\s. bytes_loaded s (word pc) (BUTLAST bignum_sub_p25519_tmc) /\
+                  read RIP s = word pc /\
+                  C_ARGUMENTS [z; x; y] s /\
+                  bignum_from_memory (x,4) s = m /\
+                  bignum_from_memory (y,4) s = n)
+             (\s. read RIP s = word (pc + 0x47) /\
+                  (m < p_25519 /\ n < p_25519
+                   ==> &(bignum_from_memory (z,4) s) = (&m - &n) rem &p_25519))
+          (MAYCHANGE [RIP; RAX; RCX; R8; R9; R10; R11] ,,
+           MAYCHANGE SOME_FLAGS ,, MAYCHANGE [events] ,,
+           MAYCHANGE [memory :> bignum(z,4)])`
+--- statement end ---

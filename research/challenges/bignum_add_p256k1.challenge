@@ -1,0 +1,28 @@
+tnps-challenge v1
+task x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT
+category functional_correctness_x86
+standard tnps/1
+frozen-at POST_HOC: judged at eval-20261124_003911; challenge recorded after the run
+pre-search false
+problems-json-sha256 74f314445fa5f579d18b03e73c167ea0ca56e0581e26add8a11d8d077f7ea8d4
+statement-sha256 7f42a0386f3b1e7f75b41e32026ebc62471c402784a004e8e9a8f93a4faaebbf
+statement-bytes 692
+object x86/secp256k1/bignum_add_p256k1.o
+object-sha256 9df9d83fb1fb306f1601e2417241dd272082255ee49b8422b0c1e995ab8ff417
+s2n-bignum-commit 5e0fc782ae6d587c2ae40faf2c2c4d0b637e6240
+--- statement begin ---
+`!z x y m n pc.
+        nonoverlapping (word pc,0x65) (z,8 * 4)
+        ==> ensures x86
+             (\s. bytes_loaded s (word pc) (BUTLAST bignum_add_p256k1_tmc) /\
+                  read RIP s = word pc /\
+                  C_ARGUMENTS [z; x; y] s /\
+                  bignum_from_memory (x,4) s = m /\
+                  bignum_from_memory (y,4) s = n)
+             (\s. read RIP s = word (pc + 0x64) /\
+                  (m < p_256k1 /\ n < p_256k1
+                   ==> bignum_from_memory (z,4) s = (m + n) MOD p_256k1))
+          (MAYCHANGE [RIP; RSI; RDX; RAX; RCX; R8; R9; R10] ,,
+           MAYCHANGE SOME_FLAGS ,, MAYCHANGE [events] ,,
+           MAYCHANGE [memory :> bignum(z,4)])`
+--- statement end ---
