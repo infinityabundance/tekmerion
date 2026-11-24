@@ -1,0 +1,29 @@
+# IX.51 freeze manifest — sealed x86 evaluation
+
+Base commit: 3234614bb2ea7bb18d82fc542a0c80b564abca32
+UTC: 2026-11-24T00:26:10Z
+
+## Declared sealed set (9 tasks, never evaluated)
+
+- x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT
+- x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT
+- x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT
+- x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT
+- x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT
+- x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT
+- x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT
+- x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT
+- x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT
+
+## Pipeline hashes
+
+5cd54f0e8ecab5d7f37ae58e052b9364f2db40afc7f30c85b3b9b6673ecad04b  tools/bridge.ml
+70439c92d58046a065312fc4faad9e06d53ddd64f89f8e93f676b815cc83e5a8  tools/csat_lib.ml
+8c1dc799f508d3e4f2df5e0b549ec2cd9f36bbda6e85f723464596ee31e2e726  tools/csat_bridge.ml
+153330c86d808dde67631a3603fe5578421900f5e03e2d190b2235f9012b67d5  tools/derive_steps.py
+b03214328eba1ae12d8f11355a3f881883da2c666c61508d1f1fde82c2a6218b  tools/disasm_steps.py
+92c4f8964bc1477ecb4cec54e863e4205a092a679769223bf0d3f0b27eabfd65  tools/emit_proof.py
+969ad0cf7f2c6c939fb6e59580a184aded56df121299d026f2ab11caa29f2938  tools/emit_ref_proof_x86.py
+4b1e9c605fe1d79a16fc283d2398f8c7db32f37059e578987bd755a659413d03  tools/w2_witnesses.py
+71eeaa353452345cf1a56f973bf66d6edea58e64bfa71b64c1c9eba2d54d9cc6  tools/w4_close.py
+156ac91e615f133237a56a080d6f4c7e281fefd15bac6000e9a1bf8b2b5f6f8b  tools/witness.py
