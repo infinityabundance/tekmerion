@@ -2441,8 +2441,10 @@ already exists in deterministic form.
   — **Done (IX.60):** all 27 human tasks measured at `-j1 --force` under
   `.bench/hol-light-stamp2`; proof-body counts are in
   `research/receipts/ix60-matched-inference.json`.
-- [x] **XIV.B2.** Publish per-task human vs generated primitive-inference counts and the
-  total ratio, as the F3 result. Deterministic, machine-independent, and it needs no
+- [~] **XIV.B2.** Publish per-task human vs generated primitive-inference counts and the
+  total ratio. **Counts published, ratio refused** — `ix60-matched-inference.md` reports
+  `n = 0 matched pairs` because the 27 obligations differ (`XIV.G1`). Human bodies total
+  176,369,762; generated 3,697,462,655. Deterministic, machine-independent, and it needs no
   wall-clock comparison to be publishable. It still requires `XIII.E3`'s goal comparison
   before it is called a comparison of *the same obligation*. — **Done (IX.60):** per-task
   counts and side totals are published. **No ratio is published**: `XIII.E3` decided the
@@ -2509,3 +2511,48 @@ separate weak checker (`XIII.F3`).
   libsignal scale; 27 theorems is small. The differentiators to defend are functional
   correctness of *optimised* crypto bignum code, drop-in acceptance by upstream, and the
   measurement discipline — not scale.
+
+## XIV.G — Prove the obligation upstream actually states (new, from IX.60)
+
+IX.60 measured that our drop-in proves `BIGNUM_*_CORRECT` while upstream's human file proves
+`BIGNUM_*_SUBROUTINE_CORRECT`, and that all 27 contracts are **incomparable** (stronger
+postcondition, weaker precondition, broader ABI frame on the human side). So "27/27 upstream
+acceptance" is a per-file build result, not "the theorems upstream states are now proved".
+
+- [ ] **XIV.G1.** Extend the emitter to the **`_SUBROUTINE_CORRECT`** obligation: the
+  return-address precondition, the `PC = returnaddress` postcondition and the
+  `MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI` frame. Do it for one task first
+  (`arm/curve25519/add_p25519`), with the upstream goal quotation as the statement source, and
+  land it in the upstream tree under a pre-search freeze.
+- [ ] **XIV.G2.** Only then may a same-obligation check-time or inference-count comparison be
+  formed. `XIV.B2`'s ratio is blocked on this.
+- [ ] **XIV.G3.** Whole-tree `make` in the upstream copy must pass, not just per-file targets.
+  This is the difference between "drop-in file" and "upstream-compatible proof".
+- [ ] **XIV.G4.** Record the honest current position wherever 27/27 is cited: the same
+  obligations upstream states are **0 of 27** today.
+
+## XIV.H — Where the inference work actually goes (hypothesis, to test)
+
+IX.60 measured, over incomparable obligations: human proof bodies 2.7M–17.6M primitive
+inferences per theorem (total 176,369,762), generated 18.2M–681.7M (total 3,697,462,655).
+Generated is larger on every row, by 2.4M to 672.9M. Wall clock differs only ~1.2–5×, so the
+generated path performs far more primitive work per second — consistent with the extra work
+being cheap, uniform, mechanical steps.
+
+- [ ] **XIV.H1.** Test the hypothesis that the excess is **certified-SAT replay** (each resolved
+  CNF clause becoming a primitive kernel inference) rather than simulation or rewriting. Split
+  the counter by phase (simulation / conversion / LRAT replay / arithmetic) and report the
+  share. If the hypothesis holds, the target is the replay, not the kernel.
+- [ ] **XIV.H2.** The x86 `neg` rows break the pattern (human 17.6M / 8.6M / 8.8M vs generated
+  20.0M / 23.4M / 18.2M — nearly equal). Explain that row before generalising anything from
+  the other 24.
+
+## XIV.I — Freeze consequence of XIV.A/B (immediate)
+
+`freeze verify` now **REFUSES** on `src/tools/dropin.rs` because IX.60 changed the producer
+after `freeze-rust-closure-v5` was sealed. That is the closure working as designed.
+
+- [ ] **XIV.I1.** Re-seal (`freeze-rust-closure-v6`) before the next sealed run, and state in
+  the run record that v5 covers only its own commit.
+- [ ] **XIV.I2.** A sealed run must refuse to start when the closure does not verify — check
+  that this is enforced in the sealed path, not just available.

@@ -146,3 +146,37 @@ It does **not** make the theorems true relative to those axioms, does not cover
 definitional dependencies, and does not export a derivation: proof-object export,
 HOLTrace-style external re-checking and Dedukti export remain open. The three
 sections above are untouched.
+
+---
+
+## Correction of record (2026-11-24, IX.60): the theorem is not upstream's theorem
+
+This receipt says the generated proof was installed in a copy of upstream s2n-bignum and passed
+the native build and `check_axioms()`. That remains literally true. What it must not be read as
+is "the theorem upstream states is now proved by Tekmerion".
+
+Measured in `research/receipts/ix60-matched-inference.md` §1, per task, by extracting both
+conclusions and comparing them:
+
+- upstream's human file proves `BIGNUM_<OP>_<FAM>_SUBROUTINE_CORRECT`;
+- our drop-in file proves `BIGNUM_<OP>_<FAM>_CORRECT`, the obligation from the benchmark query;
+- all **27 of 27** pairs differ. The human contract adds `read X30 s = returnaddress` (ARM) or
+  the `RSP`/saved-return-address precondition (x86), asserts `PC/RIP = returnaddress` in the
+  postcondition instead of `PC/RIP = word (pc + N)`, and permits
+  `MAYCHANGE_REGS_AND_FLAGS_PERMITTED_BY_ABI` instead of a narrower explicit frame. Verified
+  directly: `grep -c returnaddress` is 6 on the human `.correct` and 0 on ours, while ours
+  contains `word (pc + 76)`.
+
+Consequences that must travel with any citation of this receipt:
+
+1. The two contracts are **incomparable**: the human one has a stronger postcondition, a
+   weaker precondition and a broader frame. Neither implies the other.
+2. Because the replacement file defines `_CORRECT` and no longer defines
+   `_SUBROUTINE_CORRECT`, a **whole-tree** upstream `make` would fail on any file that depends
+   on the subroutine theorem. The 27/27 result is a per-file build result, not whole-library
+   compatibility (TODO `XIII.G3`).
+3. "Upstream coverage" in the sense that matters to upstream — the same obligations upstream
+   states — is therefore **0 of 27 today**, not 27 of 27. Proving the `_SUBROUTINE_CORRECT`
+   obligation itself is TODO `XIV.G`.
+4. No check-time and no inference-count *ratio* may be formed between the two, which is why
+   IX.60 reports `n = 0 matched pairs`.
