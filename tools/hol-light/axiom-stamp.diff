@@ -1,19 +1,21 @@
 --- a/fusion.ml
 +++ b/fusion.ml
-@@ -85,6 +85,12 @@
+@@ -85,6 +85,14 @@
        val new_basic_definition : term -> thm
        val new_basic_type_definition :
                string -> string * string -> thm -> thm * thm
 +
 +      (* Axiom-stamp instrumentation (measurement build only). *)
-+      val axiom_registry : unit -> (int * string) list
++      val axiom_registry : unit -> (int * string * string) list
++      val axiom_capacity : unit -> int
 +      val stamp_of : thm -> int list
 +      val stamp_string : thm -> string
++      val footprint_of : thm -> (string * string) list
 +      val inference_count : unit -> int
  end;;
  
  (* ------------------------------------------------------------------------- *)
-@@ -101,7 +107,86 @@
+@@ -101,7 +109,157 @@
              | Comb of term * term
              | Abs of term * term
  
@@ -37,48 +39,81 @@
 +
 +  let bump_inferences () = incr the_inference_count
 +
-+  let axiom_registry_data = ref ([] : (int * string) list)
++  (* The mask is an OCaml [int].  On a 64-bit runtime that is 63 bits, and    *)
++  (* [1 lsl 61] is the highest bit that stays non-negative; ids therefore     *)
++  (* range over 1..Sys.word_size-2.  Exceeding that is a hard failure, never  *)
++  (* a wrapped mask.                                                          *)
++  let axiom_capacity () = Sys.word_size - 2
++
++  (* (id, digest of the canonical text, canonical text) *)
++  let axiom_registry_data = ref ([] : (int * string * string) list)
 +
 +  let next_axiom_id = ref 0
 +
 +  let axiom_registry () = List.rev (!axiom_registry_data)
 +
-+  let mask_bit id = 1 lsl (id - 1)
-+
 +  let mask_union a b = a lor b
 +
-+  (* Structural rendering of a term.  No printer is available this early, so *)
-+  (* this is a self-contained, fully parenthesised shape string.  It is       *)
-+  (* deterministic and enough to identify an axiom's conclusion.             *)
-+  let rec raw_term_string tm =
-+    match tm with
-+      Var(s,_) -> s
-+    | Const(s,_) -> s
-+    | Comb(f,x) -> "(" ^ raw_term_string f ^ " " ^ raw_term_string x ^ ")"
-+    | Abs(Var(s,_),b) -> "(\\" ^ s ^ ". " ^ raw_term_string b ^ ")"
-+    | Abs(_,b) -> "(\\_. " ^ raw_term_string b ^ ")"
++  (* Complete, fully typed, deterministic serialisation of a type.  No       *)
++  (* printer exists this early, so this is self-contained.                   *)
++  let rec canonical_type_string ty =
++    match ty with
++      Tyvar v -> "'" ^ v
++    | Tyapp(f,[]) -> f
++    | Tyapp(f,args) ->
++        "(" ^ f ^ " " ^
++        String.concat " " (List.map canonical_type_string args) ^ ")"
 +
-+  (* Collapse runs of whitespace to single spaces, trimming both ends. *)
-+  let collapse_ws s =
-+    let n = String.length s in
-+    let b = Buffer.create n in
-+    let pending = ref false in
++  (* The same type, with no spaces: a one-token key for footprints. *)
++  let rec compact_type_string ty =
++    match ty with
++      Tyvar v -> "'" ^ v
++    | Tyapp(f,[]) -> f
++    | Tyapp(f,args) ->
++        f ^ "(" ^ String.concat "," (List.map compact_type_string args) ^ ")"
++
++  (* Complete, fully typed, deterministic serialisation of a term.  Nothing  *)
++  (* is truncated; every variable and constant carries its type.            *)
++  let rec canonical_term_string tm =
++    match tm with
++      Var(s,ty) -> s ^ ":" ^ canonical_type_string ty
++    | Const(s,ty) -> s ^ ":" ^ canonical_type_string ty
++    | Comb(f,x) ->
++        "(" ^ canonical_term_string f ^ " " ^
++        canonical_term_string x ^ ")"
++    | Abs(Var(s,ty),b) ->
++        "(\\" ^ s ^ ":" ^ canonical_type_string ty ^ ". " ^
++        canonical_term_string b ^ ")"
++    | Abs(_,b) -> "(\\_." ^ canonical_term_string b ^ ")"
++
++  (* Stable per-entry identity: FNV-1a (32-bit) over the canonical text.    *)
++  let digest_of_string s =
++    let h = ref 0x811c9dc5 in
 +    String.iter
 +      (fun c ->
-+         match c with
-+           ' ' | '\t' | '\n' | '\r' -> pending := true
-+         | _ -> if !pending && Buffer.length b > 0 then Buffer.add_char b ' ';
-+                pending := false;
-+                Buffer.add_char b c)
++         h := (!h lxor Char.code c) land 0xffffffff;
++         h := (!h * 16777619) land 0xffffffff)
 +      s;
-+    Buffer.contents b
++    Printf.sprintf "%08x" !h
++
++  let mask_bit id = 1 lsl (id - 1)
 +
 +  let register_axiom tm =
-+    incr next_axiom_id;
-+    let id = !next_axiom_id in
-+    let text = collapse_ws (raw_term_string tm) in
-+    axiom_registry_data := (id,text) :: !axiom_registry_data;
-+    id
++    let cap = axiom_capacity () in
++    if !next_axiom_id >= cap then
++      failwith
++        ("axiom_stamp: capacity exhausted: the axiom mask holds at most " ^
++         string_of_int cap ^ " axiom ids on this platform (Sys.word_size=" ^
++         string_of_int Sys.word_size ^ "); refusing to allocate axiom id " ^
++         string_of_int (!next_axiom_id + 1))
++    else begin
++      incr next_axiom_id;
++      let id = !next_axiom_id in
++      let text = canonical_term_string tm in
++      axiom_registry_data :=
++        (id, digest_of_string text, text) :: !axiom_registry_data;
++      id
++    end
 +
 +  let mask_ids mask =
 +    let rec scan i m acc =
@@ -87,21 +122,59 @@
 +      else scan (i + 1) (m lsr 1) acc in
 +    List.rev (scan 1 mask [])
 +
-+  let truncate_80 s =
-+    if String.length s > 80 then String.sub s 0 80 else s
-+
 +  let stamp_of (Sequent(_,mask)) = mask_ids mask
 +
 +  let stamp_string th =
 +    let reg = axiom_registry () in
 +    let entry id =
-+      let c = try List.assoc id reg with Not_found -> "<unregistered>" in
-+      "id:" ^ string_of_int id ^ "=|- " ^ truncate_80 c in
++      match List.find_opt (fun (i,_,_) -> i = id) reg with
++        Some(_,dg,c) ->
++          "id:" ^ string_of_int id ^ "#" ^ dg ^ "=|- " ^ c
++      | None ->
++          "id:" ^ string_of_int id ^ "#<unregistered>=|- <unregistered>" in
 +    String.concat "|" (List.map entry (stamp_of th))
++
++  (* Which definitional act introduced a constant or type constructor, when *)
++  (* that is known.  Used only for the statement-level footprint; it is not  *)
++  (* a dependency record.                                                    *)
++  let definition_registry_data = ref ([] : (string * string) list)
++
++  let note_definition key what =
++    definition_registry_data := (key,what) :: !definition_registry_data
++
++  (* Statement-level symbol footprint of a conclusion: the constants and    *)
++  (* type constructors that occur in it, each mapped to its introducer when  *)
++  (* the registry knows one.  This is NOT the transitive derivation closure. *)
++  let footprint_of (Sequent((_,c),_)) =
++    let reg = !definition_registry_data in
++    let syms = ref [] in
++    let add key display =
++      let what =
++        try List.assoc key reg with Not_found -> "primitive or unregistered" in
++      if not (List.mem (display,what) !syms) then
++        syms := (display,what) :: !syms in
++    let rec walk_ty ty =
++      match ty with
++        Tyvar _ -> ()
++      | Tyapp(f,args) ->
++          let d = "tycon:" ^ f ^ "/" ^ string_of_int (List.length args) in
++          add d d;
++          List.iter walk_ty args in
++    let rec walk tm =
++      match tm with
++        Var(_,ty) -> walk_ty ty
++      | Const(s,ty) ->
++          add ("const:" ^ s)
++              ("const:" ^ s ^ ":" ^ compact_type_string ty);
++          walk_ty ty
++      | Comb(f,x) -> walk f; walk x
++      | Abs(v,b) -> walk v; walk b in
++    walk c;
++    List.sort compare !syms
  
  (* ------------------------------------------------------------------------- *)
  (* List of current type constants with their arities.                        *)
-@@ -485,43 +570,48 @@
+@@ -485,43 +643,48 @@
  (* Basic theorem destructors.                                                *)
  (* ------------------------------------------------------------------------- *)
  
@@ -162,7 +235,7 @@
      | _ -> failwith "ABS";;
  
  (* ------------------------------------------------------------------------- *)
-@@ -529,9 +619,10 @@
+@@ -529,9 +692,10 @@
  (* ------------------------------------------------------------------------- *)
  
    let BETA tm =
@@ -174,7 +247,7 @@
      | _ -> failwith "BETA: not a trivial beta-redex"
  
  (* ------------------------------------------------------------------------- *)
-@@ -539,30 +630,35 @@
+@@ -539,30 +703,35 @@
  (* ------------------------------------------------------------------------- *)
  
    let ASSUME tm =
@@ -219,7 +292,7 @@
  
  (* ------------------------------------------------------------------------- *)
  (* Handling of axioms.                                                       *)
-@@ -573,8 +669,10 @@
+@@ -573,8 +742,10 @@
    let axioms() = !the_axioms
  
    let new_axiom tm =
@@ -231,7 +304,7 @@
         (the_axioms := th::(!the_axioms); th)
      else failwith "new_axiom: Not a proposition"
  
-@@ -587,6 +685,7 @@
+@@ -587,6 +758,7 @@
    let definitions() = !the_definitions
  
    let new_basic_definition tm =
@@ -239,35 +312,48 @@
      match tm with
        Comb(Comb(Const("=",_),Var(cname,ty)),r) ->
          if not(freesin [] r) then
-@@ -595,7 +694,7 @@
+@@ -595,7 +767,9 @@
          else if not (subset (type_vars_in_term r) (tyvars ty))
          then failwith "new_definition: Type variables not reflected in constant"
          else let c = new_constant(cname,ty); Const(cname,ty) in
 -             let dth = Sequent([],safe_mk_eq c r) in
 +             let dth = Sequent(([],safe_mk_eq c r),0) in
++             note_definition ("const:" ^ cname)
++                             ("new_basic_definition(" ^ cname ^ ")");
               the_definitions := dth::(!the_definitions); dth
      | Comb(Comb(Const("=",_),Const(cname,ty)),r) ->
        failwith ("new_basic_definition: '" ^ cname ^ "' is already defined")
-@@ -614,7 +713,8 @@
+@@ -614,7 +788,8 @@
  (* Where "abs" and "rep" are new constants with the nominated names.         *)
  (* ------------------------------------------------------------------------- *)
  
 -  let new_basic_type_definition tyname (absname,repname) (Sequent(asl,c)) =
-+  let new_basic_type_definition tyname (absname,repname) (Sequent((asl,c),_)) =
++  let new_basic_type_definition tyname (absname,repname) (Sequent((asl,c),s)) =
 +    bump_inferences ();
      if exists (can get_const_type) [absname; repname] then
        failwith "new_basic_type_definition: Constant(s) already in use" else
      if not (asl = []) then
-@@ -634,9 +734,9 @@
+@@ -633,10 +808,20 @@
+     let absty = Tyapp("fun",[rty;aty]) and repty = Tyapp("fun",[aty;rty]) in
      let abs = (new_constant(absname,absty); Const(absname,absty))
      and rep = (new_constant(repname,repty); Const(repname,repty)) in
++    note_definition ("tycon:" ^ tyname ^ "/" ^
++                     string_of_int (length tyvars))
++                    ("new_basic_type_definition(" ^ tyname ^ ")");
++    note_definition ("const:" ^ absname)
++                    ("new_basic_type_definition(" ^ tyname ^ ":" ^
++                     absname ^ "/" ^ repname ^ ")");
++    note_definition ("const:" ^ repname)
++                    ("new_basic_type_definition(" ^ tyname ^ ":" ^
++                     absname ^ "/" ^ repname ^ ")");
      let a = Var("a",aty) and r = Var("r",rty) in
 -    Sequent([],safe_mk_eq (Comb(abs,mk_comb(rep,a))) a),
 -    Sequent([],safe_mk_eq (Comb(P,r))
 -                          (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r))
-+    Sequent(([],safe_mk_eq (Comb(abs,mk_comb(rep,a))) a),0),
++    (* The existence witness is a real dependency: both results carry it. *)
++    Sequent(([],safe_mk_eq (Comb(abs,mk_comb(rep,a))) a),s),
 +    Sequent(([],safe_mk_eq (Comb(P,r))
-+                          (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r)),0)
++                          (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r)),s)
  
  end;;
  

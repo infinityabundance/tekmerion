@@ -185,17 +185,21 @@ fn assemble_core(
             format!("let {before} = inference_count ();;\n"),
             format!(
                 "Printf.printf \"STAMP_BEGIN %s\\n%!\" \"{theorem}\";;\n\
-                 Printf.printf \"STAMP %s\\n%!\" (stamp_string {theorem});;\n\
+                 Printf.printf \"STAMP %s %s\\n%!\" \"{theorem}\" (stamp_string {theorem});;\n\
                  Printf.printf \"STAMP_INF_BEFORE %d\\n%!\" {before};;\n\
                  Printf.printf \"STAMP_INF_AFTER %d\\n%!\" (inference_count ());;\n\
                  Printf.printf \"STAMP_INFERENCES %d\\n%!\" (inference_count () - {before});;\n\
                  List.iter\n\
-                   (fun (id,txt) -> Printf.printf \"STAMP_REGISTRY %d %s\\n%!\" id txt)\n\
+                   (fun (id,dg,txt) -> Printf.printf \"STAMP_REGISTRY %d %s %s\\n%!\" id dg txt)\n\
                    (axiom_registry ());;\n\
                  List.iter\n\
                    (fun (nm,th) -> Printf.printf \"STAMP_NAME %s %s\\n%!\" nm\n\
                       (String.concat \",\" (List.map string_of_int (stamp_of th))))\n\
-                   [\"ETA_AX\",ETA_AX; \"SELECT_AX\",SELECT_AX; \"INFINITY_AX\",INFINITY_AX];;\n"
+                   [\"ETA_AX\",ETA_AX; \"SELECT_AX\",SELECT_AX; \"INFINITY_AX\",INFINITY_AX];;\n\
+                 Printf.printf \"STAMP_FOOTPRINT_BEGIN statement-level footprint, not the transitive derivation closure\\n%!\";;\n\
+                 List.iter\n\
+                   (fun (sym,what) -> Printf.printf \"STAMP_FOOTPRINT %s %s\\n%!\" sym what)\n\
+                   (footprint_of {theorem});;\n"
             ),
         )
     } else {
@@ -532,10 +536,28 @@ pub struct TaskResult {
 
 impl TaskResult {
     fn green(&self) -> bool {
-        self.exit == Some(0)
-            && self.check_axioms
-            && self.theorem.is_some()
-            && (!self.stamp_required || self.stamp_report.as_ref().is_some_and(|r| r.reported))
+        if self.exit != Some(0) || !self.check_axioms || self.theorem.is_none() {
+            return false;
+        }
+        if !self.stamp_required {
+            return true;
+        }
+        match &self.stamp_report {
+            Some(r) => r.validate(self.theorem.as_deref()).is_ok(),
+            None => false,
+        }
+    }
+
+    /// Why a stamped task is red, for the run log. `None` when the stamp is
+    /// not required or the record validates.
+    fn stamp_error(&self) -> Option<String> {
+        if !self.stamp_required {
+            return None;
+        }
+        match &self.stamp_report {
+            Some(r) => r.validate(self.theorem.as_deref()).err(),
+            None => Some("no STAMP record".to_string()),
+        }
     }
 
     fn label(&self) -> String {
@@ -552,29 +574,56 @@ impl TaskResult {
 }
 
 /// What one stamped proof run printed. Everything here is taken verbatim from
-/// the program's own output; nothing is inferred.
+/// the program's own output; nothing is inferred. `validate` is the only place
+/// that decides whether the record is acceptable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StampReport {
     pub begun: bool,
+    /// The theorem name from `STAMP_BEGIN`.
+    pub begin_theorem: Option<String>,
     /// `STAMP` was present (possibly empty).
     pub reported: bool,
+    /// The theorem name the `STAMP` line itself names.
+    pub stamp_theorem: Option<String>,
     pub axioms: Vec<String>,
     pub inference_before: Option<i64>,
     pub inference_after: Option<i64>,
     pub inference_delta: Option<i64>,
-    /// `(id, conclusion)` from `STAMP_REGISTRY`.
-    pub registry: Vec<(i64, String)>,
+    /// `(id, digest, conclusion)` from `STAMP_REGISTRY`.
+    pub registry: Vec<(i64, String, String)>,
     /// `(name, ids)` from `STAMP_NAME` for the three basic axioms.
     pub names: Vec<(String, Vec<i64>)>,
+    /// `(symbol, introducer)` from `STAMP_FOOTPRINT`.
+    pub footprint: Vec<(String, String)>,
+    /// The `STAMP_FOOTPRINT_BEGIN` label was present.
+    pub footprint_label: bool,
+    /// Lines that looked like stamp records but did not parse.
+    pub malformed: Vec<String>,
+}
+
+/// One `STAMP` entry: `id:<n>#<digest>=|- <canonical conclusion>`.
+/// Returns `None` unless the entry has the id, the digest marker and the
+/// turnstile, so a loosely-shaped record cannot pass as a resolved entry.
+fn stamp_entry_parts(entry: &str) -> Option<(i64, String, String)> {
+    let rest = entry.trim().strip_prefix("id:")?;
+    let (num, rest) = rest.split_once('#')?;
+    let id: i64 = num.trim().parse().ok()?;
+    let (digest, concl) = rest.split_once("=|-")?;
+    let digest = digest.trim();
+    if digest.is_empty() {
+        return None;
+    }
+    Some((id, digest.to_string(), concl.trim().to_string()))
 }
 
 fn parse_i64(s: &str) -> Option<i64> {
     s.trim().parse::<i64>().ok()
 }
 
-/// Split a `STAMP` payload into entries. Entries are `id:<n>=|- <term>` joined
-/// by `|`, and each entry itself contains `|-`, so a plain split on `|` is not
-/// enough: start a new entry only at a part that begins with `id:`.
+/// Split a `STAMP` payload into entries. Entries are
+/// `id:<n>#<dg>=|- <term>` joined by `|`, and each entry itself contains
+/// `|-`, so a plain split on `|` is not enough: start a new entry only at a
+/// part that begins with `id:`.
 fn split_stamp_entries(s: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for part in s.split('|') {
@@ -598,10 +647,14 @@ fn parse_stamp(text: &str) -> Option<StampReport> {
         let line = line.trim_end_matches('\r');
         if let Some(rest) = line.strip_prefix("STAMP_BEGIN ") {
             r.begun = !rest.trim().is_empty();
+            r.begin_theorem = Some(rest.trim().to_string());
             seen = true;
         } else if let Some(rest) = line.strip_prefix("STAMP ") {
+            // `STAMP <theorem> <payload>`; the payload may be empty.
+            let (thm, payload) = rest.split_once(' ').unwrap_or((rest, ""));
             r.reported = true;
-            r.axioms = split_stamp_entries(rest);
+            r.stamp_theorem = Some(thm.trim().to_string());
+            r.axioms = split_stamp_entries(payload);
             seen = true;
         } else if let Some(rest) = line.strip_prefix("STAMP_INF_BEFORE ") {
             r.inference_before = parse_i64(rest);
@@ -610,10 +663,16 @@ fn parse_stamp(text: &str) -> Option<StampReport> {
         } else if let Some(rest) = line.strip_prefix("STAMP_INFERENCES ") {
             r.inference_delta = parse_i64(rest);
         } else if let Some(rest) = line.strip_prefix("STAMP_REGISTRY ") {
-            if let Some((id, txt)) = rest.split_once(' ') {
-                if let Some(id) = parse_i64(id) {
-                    r.registry.push((id, txt.trim().to_string()));
+            let mut it = rest.splitn(3, ' ');
+            match (it.next(), it.next(), it.next()) {
+                (Some(id), Some(digest), Some(txt)) if parse_i64(id).is_some() => {
+                    r.registry.push((
+                        parse_i64(id).unwrap(),
+                        digest.trim().to_string(),
+                        txt.trim().to_string(),
+                    ));
                 }
+                _ => r.malformed.push(format!("STAMP_REGISTRY {rest}")),
             }
         } else if let Some(rest) = line.strip_prefix("STAMP_NAME ") {
             let mut parts = rest.split_whitespace();
@@ -623,6 +682,22 @@ fn parse_stamp(text: &str) -> Option<StampReport> {
                     .filter_map(|s| s.trim().parse::<i64>().ok())
                     .collect();
                 r.names.push((name.to_string(), ids));
+            } else {
+                r.malformed.push(format!("STAMP_NAME {rest}"));
+            }
+        } else if let Some(rest) = line.strip_prefix("STAMP_FOOTPRINT_BEGIN ") {
+            if rest.trim() == "statement-level footprint, not the transitive derivation closure" {
+                r.footprint_label = true;
+            } else {
+                r.malformed.push(format!("STAMP_FOOTPRINT_BEGIN {rest}"));
+            }
+        } else if let Some(rest) = line.strip_prefix("STAMP_FOOTPRINT ") {
+            match rest.split_once(' ') {
+                Some((sym, what)) if !sym.trim().is_empty() && !what.trim().is_empty() => {
+                    r.footprint
+                        .push((sym.trim().to_string(), what.trim().to_string()));
+                }
+                _ => r.malformed.push(format!("STAMP_FOOTPRINT {rest}")),
             }
         }
     }
@@ -633,18 +708,127 @@ fn parse_stamp(text: &str) -> Option<StampReport> {
     }
 }
 
+impl StampReport {
+    /// The single acceptance test for a stamp record. Every clause is required
+    /// by XIII.B6: the record names its theorem, the registry is unique, every
+    /// id resolves to exactly one registry entry with the same digest, and the
+    /// inference triad is arithmetically consistent.
+    pub fn validate(&self, theorem: Option<&str>) -> Result<(), String> {
+        let thm = theorem.ok_or("no `val <THEOREM> : thm` marker to resolve the stamp against")?;
+        if !self.begun {
+            return Err("STAMP_BEGIN missing or empty".to_string());
+        }
+        match self.begin_theorem.as_deref() {
+            Some(t) if t == thm => {}
+            Some(t) => return Err(format!("STAMP_BEGIN names {t}, theorem is {thm}")),
+            None => return Err("STAMP_BEGIN does not name a theorem".to_string()),
+        }
+        if !self.reported {
+            return Err("STAMP line missing".to_string());
+        }
+        match self.stamp_theorem.as_deref() {
+            Some(t) if t == thm => {}
+            Some(t) => return Err(format!("STAMP names {t}, theorem is {thm}")),
+            None => return Err("STAMP does not name a theorem".to_string()),
+        }
+        if !self.footprint_label {
+            return Err("STAMP_FOOTPRINT_BEGIN (statement-level footprint, not the \
+                 transitive derivation closure) missing"
+                .to_string());
+        }
+        if !self.malformed.is_empty() {
+            return Err(format!(
+                "malformed stamp record(s): {}",
+                self.malformed.join("; ")
+            ));
+        }
+
+        // Registry ids are positive and unique.
+        for (i, (id, _, _)) in self.registry.iter().enumerate() {
+            if *id < 1 {
+                return Err(format!("registry id {id} is not positive"));
+            }
+            if self.registry[..i].iter().any(|(j, _, _)| j == id) {
+                return Err(format!("registry id {id} is not unique"));
+            }
+        }
+
+        // Every stamped id resolves to exactly one registry entry.
+        for entry in &self.axioms {
+            let (id, digest, concl) = stamp_entry_parts(entry)
+                .ok_or_else(|| format!("malformed STAMP entry {entry:?}"))?;
+            let hit = self
+                .registry
+                .iter()
+                .find(|(i, _, _)| *i == id)
+                .ok_or_else(|| format!("STAMP id {id} does not resolve in the registry"))?;
+            if hit.1.is_empty() || digest != hit.1 {
+                return Err(format!(
+                    "STAMP id {id} digest {digest} does not match the registry entry"
+                ));
+            }
+            if concl != hit.2 {
+                return Err(format!(
+                    "STAMP id {id} conclusion does not match the registry entry"
+                ));
+            }
+        }
+
+        // before/after/delta must agree arithmetically.
+        let (before, after, delta) = match (
+            self.inference_before,
+            self.inference_after,
+            self.inference_delta,
+        ) {
+            (Some(b), Some(a), Some(d)) => (b, a, d),
+            _ => {
+                return Err(
+                    "inference before/after/delta triad is incomplete (negative counts are \
+                     recorded as null)"
+                        .to_string(),
+                )
+            }
+        };
+        if after < before {
+            return Err(format!(
+                "inference counter went backwards: before {before}, after {after}"
+            ));
+        }
+        if after - before != delta {
+            return Err(format!(
+                "inference delta {delta} != after {after} - before {before} (= {})",
+                after - before
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Registry and basic-axiom naming, unioned across every task that reported it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct StampSummary {
-    registry: Vec<(i64, String)>,
+    /// `(id, digest, conclusion)`, unioned across tasks.
+    registry: Vec<(i64, String, String)>,
     names: Vec<(String, Vec<i64>)>,
+    /// The union of every task's statement-level footprint.
+    footprint: Vec<(String, String)>,
+    /// Set when two tasks disagree about the same registry id.
+    registry_conflict: Option<String>,
 }
 
 impl StampSummary {
     fn absorb(&mut self, report: &StampReport) {
-        for (id, txt) in &report.registry {
-            if !self.registry.iter().any(|(i, _)| i == id) {
-                self.registry.push((*id, txt.clone()));
+        for (id, digest, txt) in &report.registry {
+            match self.registry.iter().find(|(i, _, _)| i == id) {
+                Some((_, old_digest, old_txt)) => {
+                    if old_digest != digest || old_txt != txt {
+                        self.registry_conflict = Some(format!(
+                            "registry id {id} has two different entries: {old_digest} {old_txt} / \
+                             {digest} {txt}"
+                        ));
+                    }
+                }
+                None => self.registry.push((*id, digest.clone(), txt.clone())),
             }
         }
         for (name, ids) in &report.names {
@@ -652,8 +836,15 @@ impl StampSummary {
                 self.names.push((name.clone(), ids.clone()));
             }
         }
-        self.registry.sort_by_key(|(id, _)| *id);
+        for (sym, what) in &report.footprint {
+            if !self.footprint.iter().any(|(s, _)| s == sym) {
+                self.footprint.push((sym.clone(), what.clone()));
+            }
+        }
+        self.registry.sort_by_key(|(id, _, _)| *id);
         self.names.sort_by(|a, b| a.0.cmp(&b.0));
+        self.footprint.sort();
+        self.footprint.dedup();
     }
 
     /// `{ETA_AX, SELECT_AX}` for the ids a theorem's stamp carries.
@@ -881,8 +1072,24 @@ fn json_opt_str_array(items: Option<&Vec<String>>) -> String {
 
 /// One task object, exactly as both the sweep and measure receipts write it.
 fn task_json_line(r: &TaskResult) -> String {
+    let footprint: Vec<String> = r
+        .stamp_report
+        .as_ref()
+        .map(|s| {
+            s.footprint
+                .iter()
+                .map(|(sym, what)| {
+                    format!(
+                        "{{\"symbol\": {}, \"introducer\": {}}}",
+                        json_str(sym),
+                        json_str(what)
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     format!(
-        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"axioms\": {}, \"inference_delta\": {}, \"log\": {}}}",
+        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"footprint\": [{}], \"log\": {}}}",
         json_str(&r.arch),
         json_str(&r.dir),
         json_str(&r.op),
@@ -893,8 +1100,11 @@ fn task_json_line(r: &TaskResult) -> String {
         json_opt_num(r.seconds),
         r.timeout,
         r.stamp_required,
+        r.stamp_required && r.stamp_error().is_none(),
+        json_opt_str(r.stamp_report.as_ref().and_then(|s| s.stamp_theorem.as_deref())),
         json_opt_str_array(r.axioms()),
         json_opt_i64(r.inference_delta()),
+        footprint.join(", "),
         json_str(&r.log),
     )
 }
@@ -924,19 +1134,27 @@ fn results_json(
     out.push_str(&format!("  \"stamp\": {stamp},\n"));
     out.push_str(&format!("  \"timeout_seconds\": {timeout},\n"));
     out.push_str("  \"axiom_registry\": [");
-    for (i, (id, txt)) in summary.registry.iter().enumerate() {
+    for (i, (id, digest, txt)) in summary.registry.iter().enumerate() {
         let comma = if i + 1 == summary.registry.len() {
             ""
         } else {
             ","
         };
         out.push_str(&format!(
-            "{}{{\"id\": {id}, \"conclusion\": {}}}{comma}",
+            "{}{{\"id\": {id}, \"digest\": {}, \"conclusion\": {}}}{comma}",
             if i == 0 { "" } else { " " },
+            json_str(digest),
             json_str(txt)
         ));
     }
     out.push_str("],\n");
+    out.push_str(&format!(
+        "  \"axiom_registry_conflict\": {},\n",
+        summary.registry_conflict.is_some()
+    ));
+    out.push_str(
+        "  \"footprint_label\": \"statement-level footprint, not the transitive derivation closure\",\n",
+    );
     out.push_str("  \"basic_axioms\": {");
     for (i, (name, ids)) in summary.names.iter().enumerate() {
         out.push_str(&format!(
@@ -1032,15 +1250,25 @@ fn print_stamp_table(results: &[TaskResult], summary: &StampSummary) {
     }
 
     if !summary.registry.is_empty() {
-        println!("\nAXIOM REGISTRY (raw conclusions)");
-        for (id, txt) in &summary.registry {
+        println!("\nAXIOM REGISTRY (canonical typed conclusions)");
+        for (id, digest, txt) in &summary.registry {
             let name = summary
                 .names
                 .iter()
                 .find(|(_, ids)| ids.contains(id))
                 .map(|(n, _)| n.as_str())
                 .unwrap_or("(not a basic axiom)");
-            println!("  id:{id} = {name}: {txt}");
+            println!("  id:{id} = {name} [{digest}]: {txt}");
+        }
+    }
+
+    if !summary.footprint.is_empty() {
+        println!(
+            "\nSTATEMENT-LEVEL FOOTPRINT (not the transitive derivation closure): {} symbols",
+            summary.footprint.len()
+        );
+        for (sym, what) in &summary.footprint {
+            println!("  {sym} <- {what}");
         }
     }
 }
@@ -1117,6 +1345,9 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
             py_bool(result.theorem.is_some()),
             py_bool(result.exception)
         );
+        if let Some(e) = result.stamp_error() {
+            println!("  {}: stamp invalid: {e}", result.label());
+        }
         results.push(result);
 
         // Rewrite the JSON after every task so a wall-clock stop still leaves
@@ -1231,7 +1462,12 @@ pub fn stamp_table(args: &[String]) -> Result<i32, String> {
                 e.get("id").and_then(json_i64),
                 e.get("conclusion").and_then(|v| v.as_str()),
             ) {
-                summary.registry.push((id, txt.to_string()));
+                let digest = e
+                    .get("digest")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                summary.registry.push((id, digest, txt.to_string()));
             }
         }
     }
@@ -1244,7 +1480,7 @@ pub fn stamp_table(args: &[String]) -> Result<i32, String> {
             summary.names.push((name.clone(), ids));
         }
     }
-    summary.registry.sort_by_key(|(id, _)| *id);
+    summary.registry.sort_by_key(|(id, _, _)| *id);
     summary.names.sort_by(|a, b| a.0.cmp(&b.0));
 
     let empty = Vec::new();
@@ -1299,20 +1535,50 @@ pub fn stamp_table(args: &[String]) -> Result<i32, String> {
             Some(json::Json::Num(n)) => format!("{n:.3}"),
             _ => "n/a".to_string(),
         };
+        // Footprint rows are only printed in the aggregate section below; the
+        // per-theorem table stays the same shape as IX.57.
+        if let Some(fp) = t.get("footprint").and_then(|v| v.as_array()) {
+            for e in fp {
+                if let (Some(sym), Some(what)) = (
+                    e.get("symbol").and_then(|v| v.as_str()),
+                    e.get("introducer").and_then(|v| v.as_str()),
+                ) {
+                    if !summary.footprint.iter().any(|(s, _)| s == sym) {
+                        summary.footprint.push((sym.to_string(), what.to_string()));
+                    }
+                }
+            }
+        }
         println!("| {arch} | {task} | {axi} | {inf} | {secs} |");
     }
 
-    println!("\n## Axiom registry (raw conclusions)\n");
-    println!("| id | name | conclusion |");
-    println!("|---|---|---|");
-    for (id, txt) in &summary.registry {
+    println!("\n## Axiom registry (canonical typed conclusions)\n");
+    println!("| id | name | digest | conclusion |");
+    println!("|---|---|---|---|");
+    for (id, digest, txt) in &summary.registry {
         let name = summary
             .names
             .iter()
             .find(|(_, ids)| ids.contains(id))
             .map(|(n, _)| n.as_str())
             .unwrap_or("*(not a basic axiom)*");
-        println!("| {id} | {name} | `{txt}` |");
+        println!("| {id} | {name} | `{digest}` | `{txt}` |");
+    }
+
+    summary.footprint.sort();
+    summary.footprint.dedup();
+    println!("\n## Statement-level footprint (not the transitive derivation closure)\n");
+    println!(
+        "Constants and type constructors occurring in the 27 conclusions, each\n\
+             mapped to the definition or type definition that introduced it when the\n\
+             kernel registry knows it. This is **statement-level footprint, not the\n\
+             transitive derivation closure**: it does not follow the proof DAG and it\n\
+             says nothing about which definitions a derivation *used*.\n"
+    );
+    println!("| symbol | introducer |");
+    println!("|---|---|");
+    for (sym, what) in &summary.footprint {
+        println!("| `{sym}` | {what} |");
     }
 
     println!(
@@ -2208,24 +2474,56 @@ mod tests {
         assert_eq!(run(&args(&["sweep", "--help"])), 2);
     }
 
+    fn valid_stamp(theorem: &str) -> StampReport {
+        StampReport {
+            begun: true,
+            begin_theorem: Some(theorem.to_string()),
+            reported: true,
+            stamp_theorem: Some(theorem.to_string()),
+            axioms: vec![
+                "id:1#aaaa=|- (eta : bool)".to_string(),
+                "id:2#bbbb=|- (select : bool)".to_string(),
+            ],
+            inference_before: Some(100),
+            inference_after: Some(250),
+            inference_delta: Some(150),
+            registry: vec![
+                (1, "aaaa".to_string(), "(eta : bool)".to_string()),
+                (2, "bbbb".to_string(), "(select : bool)".to_string()),
+            ],
+            names: vec![
+                ("ETA_AX".to_string(), vec![1]),
+                ("SELECT_AX".to_string(), vec![2]),
+            ],
+            footprint: vec![(
+                "const:=".to_string(),
+                "primitive or unregistered".to_string(),
+            )],
+            footprint_label: true,
+            malformed: Vec::new(),
+        }
+    }
+
     #[test]
     fn json_writer_emits_a_parseable_stamp_record() {
         let summary = StampSummary {
-            registry: vec![(1, "eta-concl".into()), (2, "select-concl".into())],
+            registry: vec![
+                (1, "aaaa".into(), "(eta : bool)".into()),
+                (2, "bbbb".into(), "(select : bool)".into()),
+            ],
             names: vec![("ETA_AX".into(), vec![1]), ("SELECT_AX".into(), vec![2])],
+            ..StampSummary::default()
         };
         let mut r = fixture("arm", "curve25519", "add", "p25519", 0);
         r.stamp_required = true;
-        r.stamp_report = Some(StampReport {
-            begun: true,
-            reported: true,
-            axioms: vec!["id:1=|- eta".into(), "id:2=|- select".into()],
-            inference_before: Some(10),
-            inference_after: Some(42),
-            inference_delta: Some(32),
-            registry: summary.registry.clone(),
-            names: summary.names.clone(),
-        });
+        let mut stamp = valid_stamp("BIGNUM_ADD_P25519_CORRECT");
+        stamp.inference_before = Some(10);
+        stamp.inference_after = Some(42);
+        stamp.inference_delta = Some(32);
+        stamp.registry = summary.registry.clone();
+        stamp.names = summary.names.clone();
+        r.stamp_report = Some(stamp);
+        assert!(r.green(), "{:?}", r.stamp_error());
         let text = results_json(
             "arm",
             true,
@@ -2239,12 +2537,17 @@ mod tests {
         );
         let j = json::parse(text.as_bytes()).expect("stamp record must parse");
         assert_eq!(j.get("stamp").unwrap(), &json::Json::Bool(true));
+        assert_eq!(
+            j.get("axiom_registry_conflict").unwrap(),
+            &json::Json::Bool(false)
+        );
         let reg = j.get("axiom_registry").unwrap().as_array().unwrap();
         assert_eq!(reg.len(), 2);
         assert_eq!(reg[0].get("id").unwrap(), &json::Json::Num(1.0));
+        assert_eq!(reg[0].get("digest").unwrap().as_str(), Some("aaaa"));
         assert_eq!(
             reg[0].get("conclusion").unwrap().as_str(),
-            Some("eta-concl")
+            Some("(eta : bool)")
         );
         let basic = j.get("basic_axioms").unwrap().as_obj().unwrap();
         assert_eq!(basic.len(), 2);
@@ -2255,6 +2558,9 @@ mod tests {
         let task = &j.get("tasks").unwrap().as_array().unwrap()[0];
         assert_eq!(task.get("axioms").unwrap().as_array().unwrap().len(), 2);
         assert_eq!(task.get("inference_delta").unwrap(), &json::Json::Num(32.0));
+        assert_eq!(task.get("stamp_ok").unwrap(), &json::Json::Bool(true));
+        let fp = task.get("footprint").unwrap().as_array().unwrap();
+        assert_eq!(fp[0].get("symbol").unwrap().as_str(), Some("const:="));
     }
 
     #[test]
@@ -2286,41 +2592,68 @@ mod tests {
     fn stamp_lines_are_parsed_verbatim() {
         let text = "noise\n\
                     STAMP_BEGIN BIGNUM_ADD_P25519_CORRECT\n\
-                    STAMP id:1=|- ETA|id:2=|- SELECT\n\
+                    STAMP BIGNUM_ADD_P25519_CORRECT id:1#aaaa=|- (eta : bool)|id:2#bbbb=|- (select : bool)\n\
                     STAMP_INF_BEFORE 100\n\
                     STAMP_INF_AFTER 250\n\
                     STAMP_INFERENCES 150\n\
-                    STAMP_REGISTRY 1 (eta)\n\
-                    STAMP_REGISTRY 3 (infinity)\n\
+                    STAMP_REGISTRY 1 aaaa (eta : bool)\n\
+                    STAMP_REGISTRY 2 bbbb (select : bool)\n\
                     STAMP_NAME ETA_AX 1\n\
-                    STAMP_NAME INFINITY_AX 3\n\
+                    STAMP_NAME SELECT_AX 2\n\
+                    STAMP_FOOTPRINT_BEGIN statement-level footprint, not the transitive derivation closure\n\
+                    STAMP_FOOTPRINT const:= primitive or unregistered\n\
                     val BIGNUM_ADD_P25519_CORRECT : thm = |- T\n";
         let r = parse_stamp(text).expect("stamp lines present");
         assert!(r.begun);
         assert!(r.reported);
-        assert_eq!(r.axioms, vec!["id:1=|- ETA", "id:2=|- SELECT"]);
+        assert_eq!(
+            r.begin_theorem.as_deref(),
+            Some("BIGNUM_ADD_P25519_CORRECT")
+        );
+        assert_eq!(
+            r.stamp_theorem.as_deref(),
+            Some("BIGNUM_ADD_P25519_CORRECT")
+        );
+        assert_eq!(
+            r.axioms,
+            vec!["id:1#aaaa=|- (eta : bool)", "id:2#bbbb=|- (select : bool)"]
+        );
         assert_eq!(r.inference_before, Some(100));
         assert_eq!(r.inference_after, Some(250));
         assert_eq!(r.inference_delta, Some(150));
         assert_eq!(
             r.registry,
-            vec![(1, "(eta)".to_string()), (3, "(infinity)".to_string())]
+            vec![
+                (1, "aaaa".to_string(), "(eta : bool)".to_string()),
+                (2, "bbbb".to_string(), "(select : bool)".to_string())
+            ]
         );
         assert_eq!(
             r.names,
             vec![
                 ("ETA_AX".to_string(), vec![1]),
-                ("INFINITY_AX".to_string(), vec![3])
+                ("SELECT_AX".to_string(), vec![2])
             ]
         );
+        assert!(r.footprint_label);
+        assert_eq!(
+            r.footprint,
+            vec![(
+                "const:=".to_string(),
+                "primitive or unregistered".to_string()
+            )]
+        );
+        assert!(r.malformed.is_empty());
+        assert!(r.validate(Some("BIGNUM_ADD_P25519_CORRECT")).is_ok());
     }
 
     #[test]
     fn empty_stamp_is_reported_not_missing() {
-        // `REFL` prints `STAMP ` with no ids: still a report, with no axioms.
-        let r = parse_stamp("STAMP_BEGIN X\nSTAMP \n").expect("present");
+        // `REFL` prints `STAMP <name> ` with no ids: still a report, no axioms.
+        let r = parse_stamp("STAMP_BEGIN X\nSTAMP X \n").expect("present");
         assert!(r.reported);
         assert!(r.axioms.is_empty());
+        assert_eq!(r.stamp_theorem.as_deref(), Some("X"));
     }
 
     #[test]
@@ -2334,23 +2667,93 @@ mod tests {
         assert!(r.green());
         r.stamp_required = true;
         assert!(!r.green());
-        r.stamp_report = Some(StampReport {
-            begun: true,
-            reported: true,
-            ..StampReport::default()
-        });
-        assert!(r.green());
+        r.stamp_report = Some(valid_stamp("BIGNUM_ADD_P256_CORRECT"));
+        assert!(r.green(), "{:?}", r.stamp_error());
+    }
+
+    #[test]
+    fn a_stamp_from_another_theorem_is_red() {
+        let mut r = fixture("arm", "p256", "add", "p256", 0);
+        r.stamp_required = true;
+        r.stamp_report = Some(valid_stamp("BIGNUM_ADD_P521_CORRECT"));
+        assert!(!r.green());
+        let err = r.stamp_error().unwrap();
+        assert!(err.contains("STAMP_BEGIN names"), "{err}");
+    }
+
+    #[test]
+    fn a_dangling_axiom_id_is_red() {
+        let mut r = fixture("arm", "p256", "add", "p256", 0);
+        r.stamp_required = true;
+        let mut s = valid_stamp("BIGNUM_ADD_P256_CORRECT");
+        s.axioms.push("id:9#ffff=|- OTHER".to_string());
+        r.stamp_report = Some(s);
+        assert!(!r.green());
+        let err = r.stamp_error().unwrap();
+        assert!(err.contains("does not resolve"), "{err}");
+    }
+
+    #[test]
+    fn a_non_unique_registry_is_red() {
+        let mut r = fixture("arm", "p256", "add", "p256", 0);
+        r.stamp_required = true;
+        let mut s = valid_stamp("BIGNUM_ADD_P256_CORRECT");
+        s.registry
+            .push((1, "cccc".to_string(), "OTHER".to_string()));
+        r.stamp_report = Some(s);
+        assert!(!r.green());
+        let err = r.stamp_error().unwrap();
+        assert!(err.contains("not unique"), "{err}");
+    }
+
+    #[test]
+    fn an_inconsistent_inference_delta_is_red() {
+        let mut r = fixture("arm", "p256", "add", "p256", 0);
+        r.stamp_required = true;
+        let mut s = valid_stamp("BIGNUM_ADD_P256_CORRECT");
+        s.inference_delta = Some(151);
+        r.stamp_report = Some(s);
+        assert!(!r.green());
+        let err = r.stamp_error().unwrap();
+        assert!(err.contains("inference delta"), "{err}");
+    }
+
+    #[test]
+    fn a_digest_that_does_not_match_the_registry_is_red() {
+        let mut r = fixture("arm", "p256", "add", "p256", 0);
+        r.stamp_required = true;
+        let mut s = valid_stamp("BIGNUM_ADD_P256_CORRECT");
+        s.axioms[0] = "id:1#dead=|- (eta : bool)".to_string();
+        r.stamp_report = Some(s);
+        assert!(!r.green());
+        let err = r.stamp_error().unwrap();
+        assert!(err.contains("digest"), "{err}");
+    }
+
+    #[test]
+    fn a_registry_conflict_across_tasks_is_recorded() {
+        let mut summary = StampSummary::default();
+        summary.absorb(&valid_stamp("A"));
+        let mut other = valid_stamp("B");
+        other.registry[0] = (1, "zzzz".to_string(), "ETA".to_string());
+        summary.absorb(&other);
+        assert!(summary.registry_conflict.is_some());
     }
 
     #[test]
     fn ids_are_named_through_the_basic_axiom_map() {
         let summary = StampSummary {
-            registry: vec![(1, "eta".into()), (2, "select".into()), (3, "inf".into())],
+            registry: vec![
+                (1, "a".into(), "eta".into()),
+                (2, "b".into(), "select".into()),
+                (3, "c".into(), "inf".into()),
+            ],
             names: vec![
                 ("ETA_AX".into(), vec![1]),
                 ("INFINITY_AX".into(), vec![3]),
                 ("SELECT_AX".into(), vec![2]),
             ],
+            ..StampSummary::default()
         };
         assert_eq!(
             summary.name_ids(&["1".into(), "3".into()]),
@@ -2360,10 +2763,10 @@ mod tests {
         assert_eq!(summary.name_ids(&["7".into()]), "{id:7}");
         // Real entries carry their conclusion; the id is still recovered.
         assert_eq!(
-            summary.name_ids(&["id:2=|- SELECT".into(), "id:9=|- OTHER".into()]),
-            "{SELECT_AX, id:9=|- OTHER}"
+            summary.name_ids(&["id:2#b=|- SELECT".into(), "id:9#f=|- OTHER".into()]),
+            "{SELECT_AX, id:9#f=|- OTHER}"
         );
-        assert_eq!(stamp_entry_id("id:12=|- x"), Some(12));
+        assert_eq!(stamp_entry_id("id:12#dead=|- x"), Some(12));
         assert_eq!(stamp_entry_id("nope"), None);
     }
 

@@ -2183,30 +2183,38 @@ Every item is written so it can be dispatched as one self-contained brief.
 A reviewer read `axiom-stamp.diff` and found a real defect. Fix it before the stamp is
 cited again.
 
-- [ ] **XIII.B1.** `new_basic_type_definition` discards the witness theorem's mask
-  (`Sequent((asl,c),_)`) and gives both results mask `0`. Propagate the witness mask
-  into both results. A type definition is a conservative extension *given* its
-  existence witness, but the justification of that witness is still a dependency.
-- [ ] **XIII.B2.** Track dependencies through introduced types and constants —
-  dependency closure over the semantic environment, not only explicit theorem
-  arguments.
-- [ ] **XIII.B3.** Negative control: a type definition whose existence witness depends
-  on an injected axiom must show that dependency (today it would show `[]`).
-- [ ] **XIII.B4.** The mask is a fixed-width OCaml `int` with no capacity check. Add an
-  explicit capacity guard (fail loudly past the bound) or an unbounded set, and test at
-  the word boundary.
-- [ ] **XIII.B5.** Axiom descriptions are truncated to 80 chars and lose type
-  information. Preserve complete canonical typed terms and definition identities.
-- [ ] **XIII.B6.** The Rust stamp parser is too permissive: require the stamp to name
-  the theorem it belongs to, a consistent registry, valid axiom ids, and an inference
-  delta matching its own before/after records. `TaskResult::green()` must validate a
-  stamp's contents, not merely its presence.
-- [ ] **XIII.B7.** **Correct the receipts.** `ix57-axiom-stamp.md` calls the stamp an
-  exact lower and upper bound; with B1 open it is neither. `define_assert_from_elf`
-  must be stated as "the returned theorem carries an empty *recorded* stamp", not
-  "axiom-free". Append a correction; do not rewrite history.
-- [ ] **XIII.B8.** What survives, and is all that should be claimed meanwhile: the
-  session-level `check_axioms()` result for the 27 (IX.54/IX.56).
+- [x] **XIII.B1.** Fixed in patch v2 (`tools/hol-light/axiom-stamp.diff`).
+  `new_basic_type_definition` now returns both results with the witness theorem's
+  mask. Receipt: `research/receipts/ix57b-axiom-stamp.md` §1, §4 (N1).
+- [ ] **XIII.B2.** Half done, half explicitly open. The **statement-level**
+  symbol footprint is implemented (`footprint_of`): constants and type
+  constructors in the conclusion, each mapped to the definition or type
+  definition that introduced it when the kernel registry knows it. The
+  **transitive definitional closure** over the semantic environment is **still
+  open**: it needs a recorded proof/derivation DAG, which this patch does not
+  produce. Do not describe the footprint as derivation closure.
+- [x] **XIII.B3.** N1 in `ix57b-axiom-stamp.md` §4: the same construction prints
+  `[]` on `.bench/hol-light-stamp` (v1) and `[4]` on
+  `.bench/hol-light-stamp2` (v2), for both `abs_rep` and `rep_abs`.
+- [x] **XIII.B4.** Capacity guard: `axiom_capacity () = Sys.word_size - 2` (62
+  here). Allocating past it fails with
+  `axiom_stamp: capacity exhausted: ... refusing to allocate axiom id 63`.
+  N2 in `ix57b-axiom-stamp.md` §4 shows the guard firing and ordinary proofs
+  unaffected afterwards.
+- [x] **XIII.B5.** Registry entries are complete, fully typed canonical terms
+  with no truncation, plus a 32-bit FNV-1a digest; stamp entries are
+  `id:<n>#<digest>=|- <canonical>`. `ix57b-axiom-stamp.md` §1, §4 (C1/C2).
+- [x] **XIII.B6.** `StampReport::validate` and `TaskResult::green()` require the
+  `STAMP` line to name the theorem, unique positive registry ids, every stamp id
+  to resolve with a matching digest and conclusion, and `after - before ==
+  delta`. Negative tests cover a foreign theorem, a dangling id, a duplicate
+  registry id, a bad digest and an inconsistent delta (`src/tools/dropin.rs`).
+- [x] **XIII.B7.** Corrections appended to `ix57-axiom-stamp.md` (§10 item 4 and
+  a new §11); no historical text rewritten. The upper-bound claim is withdrawn
+  for v1, and `define_assert_from_elf` reads "empty *recorded* stamp".
+- [x] **XIII.B8.** The surviving claim is unchanged: the session-level
+  `check_axioms()` result for the 27 (IX.54/IX.56), plus the corrected
+  per-theorem stamps in `ix57b-axiom-stamp.md`.
 
 ## XIII.C — The freeze boundary must follow the code into Rust (Critical)
 

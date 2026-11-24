@@ -664,3 +664,76 @@ same shape: `F_DEF`, `AND_DEF`, `REFL`, `CONJ (REFL,REFL)`, `TAUT \`T\`` are `[]
    of the trusted base that matters most for machine-code assurance (bytes to
    semantics) is a definitional extension, on this evidence, and not an axiomatic
    assumption. The axioms are inherited from the arithmetic library above it.
+
+---
+
+### Correction to item 4 (appended 2026-11-24, after the XIII.B review)
+
+Item 4 above must be read with one correction. It says
+`define_assert_from_elf` "is **axiom-free**". What the v1 instrument actually
+showed is that the returned theorem carried an **empty *recorded* stamp**. Those
+are not the same claim: v1's `new_basic_type_definition` discarded its witness
+theorem's mask, so a type definition whose existence witness depended on an
+axiom still printed `[]`. The corrected instrument (patch v2; see
+`ix57b-axiom-stamp.md` §9 for its exact sha256) propagates the
+witness mask into both results, and N1 in that receipt demonstrates the old
+build printing `[]` and the new build printing the injected id. The ELF decode
+in this probe does still report `[]` under v2, but the honest reading of that
+line is "this particular decode's *recorded* stamp is empty", not "the
+bytes-to-semantics step is axiom-free". The O17 datum is therefore weaker than
+item 4 states and is not, on this evidence, a positive datum that the step is
+definitional rather than axiomatic. `ix57b-axiom-stamp.md` is the corrected
+measurement.
+
+---
+
+## 11. Correction (appended 2026-11-24): the type-definition defect
+
+A review of `tools/hol-light/axiom-stamp.diff` v1 found a real defect, and this
+section records it without rewriting the text above.
+
+**The defect.** v1 built `new_basic_type_definition` with
+
+```ocaml
+let new_basic_type_definition tyname (absname,repname) (Sequent(asl,c)) = ...
+  Sequent([], ...), Sequent([], ...)
+```
+
+so it discarded the witness theorem's mask and gave both results mask `0`. §1
+above justified this by saying "the definition rules' argument is discarded
+because the result is definitional". That is wrong for the type-definition
+rule: a type definition is a conservative extension **given its existence
+witness**, and the justification of that witness is a genuine dependency. If
+the witness is derived from an injected axiom, the two definitional theorems
+inherit that axiom.
+
+**Consequences for the claims above.**
+
+- §1's "Two facts make it a *lower* bound that is also an upper bound", and the
+  same claim in §5, are **too strong**. The lower-bound direction survived v1:
+  every rule that consumes theorems copies their masks, and `new_axiom` is the
+  only source of bits. The **upper-bound** direction did not: a theorem produced
+  by `new_basic_type_definition` could under-report, because a real parent's
+  mask was dropped. The corrected kernel restores the upper bound for that rule
+  (v2 returns both results with the witness mask `s`), but the general statement
+  should be read as "for the rules as patched in v2", not as a property of v1.
+- The three basic axioms are created by `new_axiom`, not by a type definition,
+  and the 27 theorems' `{ETA_AX, SELECT_AX, INFINITY_AX}` stamps are identical
+  under v1 and v2 (`ix57b-axiom-stamp.md` §6, `INFERENCES_IDENTICAL` and set
+  equality). So the empirical result of §4 is unchanged; what changes is the
+  mechanism claim and the reading of the `[]` lines in §10.
+- §10's item 1 calls `define_assert_from_elf` axiom-free. It must read "the
+  returned theorem carries an empty *recorded* stamp". See the correction
+  appended to item 4 above.
+
+**What v1 got right, and what must not be deleted.** The per-theorem
+`id:*` entries, the registry, the inference counter and the demonstration that
+the 27 proofs add no axiom of their own are unaffected; they are re-measured in
+`ix57b-axiom-stamp.md` against the corrected kernel. The session-level
+`check_axioms ()` result for the 27 (IX.54/IX.56) remains the claim that does not
+depend on this patch at all.
+
+**Patch identities.** v1 `sha256 =
+f1b8a6db45bb053f76b4b51c5731519345bc8d778826bf0ef14df620fde0a6ac`; v2
+`sha256 = a9808c99a0c8222fc256cad9d869b96722ba4a75912a23808076d5008da1285c`.
+The corrected receipt is `research/receipts/ix57b-axiom-stamp.md`.
