@@ -1823,13 +1823,16 @@ carefully justified authority.
   preserved, the collector independently re-run (`OK,9`) and the nine challenges re-verified
   (9/9). Evidence: `research/receipts/ix55/` + `eval.sha256` binding the 282 MB directory.
   Residual limit: host userland is borrowed read-only (glibc).
-- [ ] **XI.L.11. [NEW] Statement provenance from upstream.** The comparator reads the same
-  `problems.json` the producer used, so it cannot catch an error in the corpus. Extract each
-  statement from the pinned upstream `s2n-bignum` `.ml` using `problems.json["json"]`'s
-  `goal_linenum_start/end` and `goal_colnum_start/end`, and compare it to the bench query.
-  Decision needed: this reads the *goal lines* of a sealed proof. The statement is not secret
-  (it is already known and the upstream repo is public); only the goal range is read, and the
-  sealed evaluation is complete and frozen. Record the exception in a decision record.
+- [x] **XI.L.11. [NEW] Statement provenance from upstream.** Done 2026-11-24:
+  `challenge.py verify --upstream` extracts the goal quotation from the pinned `.ml` and
+  compares it to the bench statement. **27/27 PASS**. Decision record
+  `research/receipts/ix-o1-upstream-audit.md` states the exception (goal range only, public
+  statement, sealed run already frozen). Extractor handles the `let <NAME> = …` shape; a
+  corpus-wide audit for other proof shapes is not claimed.
+- [ ] **XI.L.12. [NEW] Corpus-wide statement audit.** The `--upstream` extractor handles the
+  `let <NAME> = …` shape (the 27 arithmetic proofs). Other entries use `= prove`,
+  `= prove_by_refinement`, etc. Extend per shape and audit the full 2,622-task corpus; report
+  the shapes that cannot be extracted rather than skipping them silently.
 - [ ] **XI.L.5. Full-898 sealed pass.** Freeze arm Z, one pass over all 898 FC tasks at the pin;
   unsupported shapes refused fast and counted as FAIL; report `OK/898`, zero `CHEATING`, split
   development-seen vs sealed. Then **submit the CSV to the leaderboard** so adjudication moves

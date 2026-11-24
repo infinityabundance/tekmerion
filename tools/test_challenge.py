@@ -145,6 +145,25 @@ def test_no_verdict_evidence_is_incomplete_not_pass(tmp_path, capsys):
     assert "RESULT INCOMPLETE" in out and "RESULT PASS" not in out
 
 
+def test_upstream_goal_provenance(tmp_path, capsys):
+    p = _tree(tmp_path)
+    proof = tmp_path / "proof.ml"
+    proof.write_text("let THM = time prove\n (`!z x y m n pc. foo ==> bar`,\n TAC);;\n")
+    corpus = json.loads(p["problems"].read_text())
+    corpus[TASK]["json"] = {"filename": str(proof), "theorem_name": "THM"}
+    p["problems"].write_text(json.dumps(corpus))
+    chal = _freeze(tmp_path, p)
+    evaldir = _judged(tmp_path)
+    capsys.readouterr()
+    assert _verify(p, chal, evaldir, extra=("--upstream",)) == 0
+    assert "PASS statement==upstream-goal" in capsys.readouterr().out
+
+    proof.write_text("let THM = time prove\n (`!z. something else`,\n TAC);;\n")
+    capsys.readouterr()
+    assert _verify(p, chal, evaldir, extra=("--upstream",)) == 1
+    assert "FAIL statement==upstream-goal" in capsys.readouterr().out
+
+
 def test_post_hoc_is_refused_when_pre_search_required(tmp_path, capsys):
     p = _tree(tmp_path)
     chal = tmp_path / "c.challenge"

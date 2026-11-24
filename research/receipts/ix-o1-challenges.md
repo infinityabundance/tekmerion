@@ -49,9 +49,13 @@ exactly one to embed the statement. Regression test:
   theorem's conclusion *is* the query. What was missing was an independent record
   of the intended statement; that is what this adds. Comparing exported proof
   objects is the stronger form and is still O2 work.
-* **The axiom whitelist is not checked.** The harness compares axiom *counts*
-  (`axioms_before = axioms_after`), which detects cheating but permits inherited
-  context. The whitelist belongs to O4 (empty-kernel re-check).
+* **The axiom whitelist is not checked** by this comparator. The harness compares axiom
+  *counts* (`axioms_before = axioms_after`), which detects cheating but permits inherited
+  context. The whitelist is now covered separately for all nine by the upstream drop-in
+  (`ix54-upstream-dropin.md`, `check_axioms`).
+* **Statement provenance is now checked** by `verify --upstream`: the statement is compared
+  with the goal quotation in the pinned upstream `.ml` (27/27). See
+  `ix-o1-upstream-audit.md`, which also records the sealed-goal-reading exception.
 * **O1.1 is not met for these twenty-seven.** The challenge files were written *after* the
   judged run, so each carries `pre-search false` and
   `frozen-at POST_HOC: judged at eval-20261124_003911`. `verify
@@ -71,6 +75,11 @@ a defect and requires rejection:
 | challenge frozen post hoc, `--require-pre-search` | `FAIL pre-search` |
 | duplicated header key | refusal (exit 2) |
 | task moved out of the corpus | `FAIL task-present` |
+| a byte changed in the corpus | `FAIL problems-json-sha256` |
+| verdict file missing | `FAIL judge-verdict-ok` (`missing verdict file`) |
+| no `--evaldir` at all | `RESULT INCOMPLETE` (exit 3), never PASS |
+| judge program named for a shared template | `PASS` when it embeds the statement |
+| upstream goal differs | `FAIL statement==upstream-goal` |
 | clean round trip | `RESULT PASS` |
 
 ## 5. Commands

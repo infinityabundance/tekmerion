@@ -164,6 +164,36 @@ def contains_wrapper(judge_ml: bytes, task: str, statement: str) -> bool:
     return needle in judge_ml
 
 
+def upstream_goal(proof_path: Path, theorem_name: str) -> str | None:
+    """The HOL quotation in `let <theorem_name> = …` in the pinned .ml.
+
+    This reads the *goal* only. The statement is not secret (it is already in
+    the corpus and the upstream repository is public); the proof body that
+    follows the quotation is not read.
+    """
+    try:
+        text = proof_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    i = text.find(f"let {theorem_name} =")
+    if i < 0:
+        return None
+    seg = text[i:]
+    s = seg.find("`")
+    if s < 0:
+        return None
+    t = seg.find("`", s + 1)
+    if t < 0:
+        return None
+    return seg[s + 1:t]
+
+
+def normalise_goal(text: str) -> str:
+    if text.startswith("`") and text.endswith("`") and len(text) > 1:
+        text = text[1:-1]
+    return " ".join(text.split())
+
+
 def verify(args) -> int:
     path = Path(args.challenge)
     f = parse_challenge(path)
@@ -227,6 +257,18 @@ def verify(args) -> int:
     else:
         notes.append("no --evaldir: verdict evidence missing, result is INCOMPLETE")
 
+    if args.upstream:
+        entry = corpus.get(task, {})
+        j = entry.get("json") or {}
+        proof = Path(j.get("filename", ""))
+        goal = (upstream_goal(proof, j.get("theorem_name", ""))
+                if j and proof.is_file() else None)
+        check("statement==upstream-goal",
+              goal is not None
+              and normalise_goal(goal) == normalise_goal(statement.decode("utf-8")),
+              "reads only the goal quotation from the pinned .ml"
+              if goal is not None else f"no goal extracted from {proof}")
+
     if args.require_pre_search:
         check("pre-search", f.get("pre-search") == "true",
               f"frozen-at={f.get('frozen-at')}")
@@ -268,6 +310,9 @@ def main(argv=None) -> int:
     ve.add_argument("--problems", default=str(REPO / ".bench" / "problems.json"))
     ve.add_argument("--s2n-bignum", default=str(REPO / ".bench" / "s2n-bignum"))
     ve.add_argument("--evaldir", default=None)
+    ve.add_argument("--upstream", action="store_true",
+                    help="also compare the statement with the goal quotation in the "
+                         "pinned upstream .ml (reads the goal range only)")
     ve.add_argument("--require-pre-search", action="store_true")
     ve.set_defaults(func=verify)
 
