@@ -516,7 +516,9 @@ pub struct TaskResult {
     /// Implied by exit 0: upstream's template runs `check_axioms ()` before it
     /// prints anything, and `run-proof.sh` exits non-zero on failure.
     pub check_axioms: bool,
-    /// Wall time of the `time prove` call, parsed from `Running time:`.
+    /// Wall time printed by upstream's `build-proof.sh` as `Running time:`.
+    /// It brackets `loadt <proof>` plus the `check_axioms ()` call that follows
+    /// it; it excludes HOL Light load and the native compile.
     pub seconds: Option<f64>,
     pub timeout: bool,
     pub log: String,
@@ -725,16 +727,23 @@ fn running_time(text: &str) -> Option<f64> {
 }
 
 /// The `val <THEOREM> : thm` line, if the `.correct` file has one.
+///
+/// Generated proofs print the plain `BIGNUM_<OP>_<FAM>_CORRECT`, while
+/// upstream's `collect-specs.sh` only emits the `*_SUBROUTINE_CORRECT` specs,
+/// so accept that as the fallback. The plain name is tried first, so a
+/// generated tree reports exactly what it did before this fallback existed.
 fn theorem_marker(text: &str, op: &str, fam: &str) -> Option<String> {
-    let name = format!(
-        "BIGNUM_{}_{}_CORRECT",
-        op.to_uppercase(),
-        fam.to_uppercase()
-    );
-    let marker = format!("val {name} : thm");
-    text.lines()
-        .any(|l| l.trim_start().starts_with(&marker))
-        .then_some(name)
+    let base = format!("BIGNUM_{}_{}", op.to_uppercase(), fam.to_uppercase());
+    for name in [
+        format!("{base}_CORRECT"),
+        format!("{base}_SUBROUTINE_CORRECT"),
+    ] {
+        let marker = format!("val {name} : thm");
+        if text.lines().any(|l| l.trim_start().starts_with(&marker)) {
+            return Some(name);
+        }
+    }
+    None
 }
 
 /// `logs-<arch>`: `logs-arm` keeps the existing ARM logs in place.
@@ -870,6 +879,26 @@ fn json_opt_str_array(items: Option<&Vec<String>>) -> String {
     }
 }
 
+/// One task object, exactly as both the sweep and measure receipts write it.
+fn task_json_line(r: &TaskResult) -> String {
+    format!(
+        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"axioms\": {}, \"inference_delta\": {}, \"log\": {}}}",
+        json_str(&r.arch),
+        json_str(&r.dir),
+        json_str(&r.op),
+        json_str(&r.fam),
+        json_opt_int(r.exit),
+        json_opt_str(r.theorem.as_deref()),
+        r.check_axioms,
+        json_opt_num(r.seconds),
+        r.timeout,
+        r.stamp_required,
+        json_opt_str_array(r.axioms()),
+        json_opt_i64(r.inference_delta()),
+        json_str(&r.log),
+    )
+}
+
 /// Hand-written serialiser for the sweep receipt. Kept dependency-free on
 /// purpose (`cargo build --offline` must keep working).
 #[allow(clippy::too_many_arguments)]
@@ -924,22 +953,7 @@ fn results_json(
     out.push_str("  \"tasks\": [\n");
     for (i, r) in results.iter().enumerate() {
         let comma = if i + 1 == results.len() { "" } else { "," };
-        out.push_str(&format!(
-            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"axioms\": {}, \"inference_delta\": {}, \"log\": {}}}{comma}\n",
-            json_str(&r.arch),
-            json_str(&r.dir),
-            json_str(&r.op),
-            json_str(&r.fam),
-            json_opt_int(r.exit),
-            json_opt_str(r.theorem.as_deref()),
-            r.check_axioms,
-            json_opt_num(r.seconds),
-            r.timeout,
-            r.stamp_required,
-            json_opt_str_array(r.axioms()),
-            json_opt_i64(r.inference_delta()),
-            json_str(&r.log),
-        ));
+        out.push_str(&format!("    {}{comma}\n", task_json_line(r)));
     }
     out.push_str("  ],\n");
     let ok = results.iter().filter(|r| r.green()).count();
@@ -1141,10 +1155,7 @@ fn write_json(
     summary: &StampSummary,
     results: &[TaskResult],
 ) -> Result<(), String> {
-    let generated_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let generated_at = now_unix();
     let text = results_json(
         &parsed.arch,
         parsed.force,
@@ -1171,15 +1182,22 @@ pub fn run(args: &[String]) -> i32 {
         "assemble" => assemble(rest).map(|()| 0),
         "build" => build(rest),
         "sweep" => sweep(rest),
+        "measure" => measure(rest),
         "stamp-table" => stamp_table(rest),
+        "checktime-table" => checktime_table(rest),
         _ => Err(
-            "usage: dropin <assemble|build|sweep|stamp-table> [options]\n\
+            "usage: dropin <assemble|build|sweep|measure|stamp-table|checktime-table> [options]\n\
              \n\
              sweep: dropin sweep --arch <x86|arm|all> [--answers <dir>] [--dir <dropin-dir>]
              \x20      [--gen <gen-dir>] [--hol <hol-dir>] [--force] [--timeout <secs>]
              \x20      [--json <path>] [--dry-run] [--stamp]
-             \x20      \n\
-             stamp-table: dropin stamp-table --json <sweep-json>"
+             \n\
+             measure: dropin measure --tree <dir> --arch <x86|arm|all> [--hol <hol-dir>]
+             \x20        [--force] [--timeout <secs>] [--json <path>] [--label <name>]
+             \n\
+             stamp-table: dropin stamp-table --json <sweep-json>
+             \n\
+             checktime-table: dropin checktime-table --human <json> --generated <json>"
                 .to_string(),
         ),
     };
@@ -1304,6 +1322,643 @@ pub fn stamp_table(args: &[String]) -> Result<i32, String> {
     Ok(if missing == 0 && outside == 0 { 0 } else { 1 })
 }
 
+// ---------------------------------------------------------------------------
+// measure: run an existing tree through the same recipe as `sweep`
+// ---------------------------------------------------------------------------
+
+/// Parsed arguments for `dropin measure`.
+///
+/// `measure` never assembles anything: the 27 proof files are already in the
+/// tree. It walks the same plan as `sweep`, runs `make -j1 [-B]` inside
+/// `<tree>/<arch>` and parses `Running time` out of each `.correct` file, so a
+/// human tree and a generated tree are measured by the same code path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeasureArgs {
+    pub tree: PathBuf,
+    pub arch: String,
+    pub hol: PathBuf,
+    pub force: bool,
+    pub timeout: u64,
+    pub json: Option<PathBuf>,
+    /// Recorded verbatim in the receipt, e.g. `human`.
+    pub label: String,
+    /// Log root: `<gen>/logs-<arch>/<dir>_<op>_<fam>.log`.
+    pub gen: PathBuf,
+}
+
+impl MeasureArgs {
+    fn arches(&self) -> &'static [&'static str] {
+        match self.arch.as_str() {
+            "arm" => &["arm"],
+            "all" => &["arm", "x86"],
+            _ => &["x86"],
+        }
+    }
+
+    /// `build_logged` already knows how to build one planned task. Reuse it
+    /// instead of writing a second build path that could drift from `sweep`.
+    fn as_sweep(&self) -> SweepArgs {
+        SweepArgs {
+            arch: self.arch.clone(),
+            answers: None,
+            dropin: self.tree.clone(),
+            gen: self.gen.clone(),
+            hol: self.hol.clone(),
+            dry_run: false,
+            force: self.force,
+            timeout: self.timeout,
+            json: self.json.clone(),
+            stamp: false,
+        }
+    }
+}
+
+/// Parse `--tree <dir> [--arch <x86|arm|all>] [--hol H] [--force]
+/// [--timeout N] [--json P] [--label L]`.
+pub fn parse_measure_args(args: &[String]) -> Result<MeasureArgs, String> {
+    let repo = repo_root();
+    let mut tree: Option<PathBuf> = None;
+    let mut arch: Option<String> = None;
+    let mut hol = repo.join(".bench/hol-light");
+    let mut force = false;
+    let mut timeout: u64 = 900;
+    let mut json: Option<PathBuf> = None;
+    let mut label = String::from("measure");
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--tree" => {
+                tree = Some(PathBuf::from(sweep_value(args, i, "--tree")?));
+                i += 2;
+            }
+            "--arch" => {
+                arch = Some(sweep_value(args, i, "--arch")?);
+                i += 2;
+            }
+            "--hol" => {
+                hol = PathBuf::from(sweep_value(args, i, "--hol")?);
+                i += 2;
+            }
+            "--json" => {
+                json = Some(PathBuf::from(sweep_value(args, i, "--json")?));
+                i += 2;
+            }
+            "--label" => {
+                label = sweep_value(args, i, "--label")?;
+                i += 2;
+            }
+            "--timeout" => {
+                let raw = sweep_value(args, i, "--timeout")?;
+                let secs = raw
+                    .parse::<u64>()
+                    .map_err(|_| format!("--timeout expects whole seconds, got {raw:?}"))?;
+                if secs == 0 {
+                    return Err("--timeout must be greater than zero".to_string());
+                }
+                timeout = secs;
+                i += 2;
+            }
+            "--force" => {
+                force = true;
+                i += 1;
+            }
+            other => return Err(format!("unknown argument {other:?}")),
+        }
+    }
+
+    let tree = tree.ok_or("--tree is required")?;
+    let arch = arch.ok_or("--arch is required (x86, arm or all)")?;
+    if arch != "x86" && arch != "arm" && arch != "all" {
+        return Err(format!(
+            "unknown architecture {arch:?} (expected x86, arm or all)"
+        ));
+    }
+    // The label names a log directory under `.bench/measure-logs`, so it must
+    // not be able to escape it.
+    if label.is_empty()
+        || label == "."
+        || label == ".."
+        || label.contains('/')
+        || label.contains('\\')
+    {
+        return Err(format!("--label must be a plain name, got {label:?}"));
+    }
+
+    let gen = repo.join(".bench/measure-logs").join(&label);
+    Ok(MeasureArgs {
+        tree: anchored(&repo, tree),
+        arch,
+        hol: anchored(&repo, hol),
+        force,
+        timeout,
+        json: json.map(|p| anchored(&repo, p)),
+        label,
+        gen,
+    })
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn ensure_parent(path: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Same shape as the sweep receipt, plus `label` and `tree` so the reader can
+/// tell which tree each `Running time` came from.
+fn measure_json(m: &MeasureArgs, generated_at: u64, results: &[TaskResult]) -> String {
+    let mut out = String::new();
+    out.push_str("{\n");
+    out.push_str(&format!("  \"generated_at\": {generated_at},\n"));
+    out.push_str(&format!("  \"label\": {},\n", json_str(&m.label)));
+    out.push_str(&format!("  \"arch\": {},\n", json_str(&m.arch)));
+    out.push_str(&format!(
+        "  \"tree\": {},\n",
+        json_str(&m.tree.display().to_string())
+    ));
+    out.push_str(&format!(
+        "  \"s2n_bignum_pin\": {},\n",
+        json_str(&git_pin(&m.tree))
+    ));
+    out.push_str(&format!(
+        "  \"hol_light_pin\": {},\n",
+        json_str(&git_pin(&m.hol))
+    ));
+    out.push_str("  \"cores\": 1,\n");
+    out.push_str(&format!("  \"force\": {},\n", m.force));
+    out.push_str("  \"stamp\": false,\n");
+    out.push_str(&format!("  \"timeout_seconds\": {},\n", m.timeout));
+    out.push_str("  \"tasks\": [\n");
+    for (i, r) in results.iter().enumerate() {
+        let comma = if i + 1 == results.len() { "" } else { "," };
+        out.push_str(&format!("    {}{comma}\n", task_json_line(r)));
+    }
+    out.push_str("  ],\n");
+    let ok = results
+        .iter()
+        .filter(|r| r.green() && r.seconds.is_some())
+        .count();
+    out.push_str(&format!(
+        "  \"ok\": {ok},\n  \"total\": {}\n}}\n",
+        results.len()
+    ));
+    out
+}
+
+fn write_measure_json(path: &Path, m: &MeasureArgs, results: &[TaskResult]) -> Result<(), String> {
+    ensure_parent(path)?;
+    let text = measure_json(m, now_unix(), results);
+    fs::write(path, text.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// `dropin measure --tree <dir> --arch <x86|arm|all> [--json P] [--force]`.
+pub fn measure(args: &[String]) -> Result<i32, String> {
+    let m = parse_measure_args(args)?;
+    if !m.tree.is_dir() {
+        return Err(format!("--tree is not a directory: {}", m.tree.display()));
+    }
+    // Fail before touching make, and never panic on a wrong tree.
+    for arch in m.arches() {
+        if !m.tree.join(arch).join("Makefile").is_file() {
+            return Err(format!(
+                "--tree {} has no {arch}/Makefile; not an s2n-bignum tree",
+                m.tree.display()
+            ));
+        }
+    }
+
+    let s = m.as_sweep();
+    let planned = plan(&s);
+    let total = planned.len();
+    let mut results: Vec<TaskResult> = Vec::new();
+
+    for p in &planned {
+        let logs = log_dir(&s.gen, &p.arch);
+        fs::create_dir_all(&logs).map_err(|e| format!("{}: {e}", logs.display()))?;
+        let result = build_logged(&s, p, &logs)?;
+        println!(
+            "  {}: exit={} theorem={} seconds={} (label {})",
+            result.label(),
+            result
+                .exit
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            py_bool(result.theorem.is_some()),
+            result
+                .seconds
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "-".to_string()),
+            m.label
+        );
+        results.push(result);
+
+        // Rewrite after every task: an interrupted run leaves exactly the
+        // tasks that really finished, nothing invented for the rest.
+        if let Some(path) = &m.json {
+            write_measure_json(path, &m, &results)?;
+        }
+    }
+
+    print_summary(&results);
+    let ok = results
+        .iter()
+        .filter(|r| r.green() && r.seconds.is_some())
+        .count();
+    println!("MEASURED {ok}/{total} (label {})", m.label);
+    Ok(if ok == total && !results.is_empty() {
+        0
+    } else {
+        1
+    })
+}
+
+// ---------------------------------------------------------------------------
+// checktime-table: matched-pair human vs generated check cost
+// ---------------------------------------------------------------------------
+
+/// The XII.F9.2 per-task budget, in seconds.
+const CHECKTIME_BUDGET_SECONDS: f64 = 120.0;
+/// The XII.F9.2 warning line: 70% of the budget.
+const CHECKTIME_WARN_FRACTION: f64 = 0.70;
+
+/// One `tasks[]` entry from a sweep/measure receipt.
+#[derive(Debug, Clone, PartialEq)]
+struct TimedTask {
+    arch: String,
+    dir: String,
+    op: String,
+    fam: String,
+    seconds: Option<f64>,
+    log: String,
+}
+
+fn read_timed_tasks(path: &Path) -> Result<(Option<String>, Vec<TimedTask>), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let j = json::parse(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    let tree = j.get("tree").and_then(|v| v.as_str()).map(str::to_string);
+    let empty = Vec::new();
+    let tasks = j.get("tasks").and_then(|v| v.as_array()).unwrap_or(&empty);
+    let mut out = Vec::with_capacity(tasks.len());
+    for t in tasks {
+        let field = |k: &str| t.get(k).and_then(|v| v.as_str()).unwrap_or("?").to_string();
+        let seconds = match t.get("seconds") {
+            Some(json::Json::Num(n)) => Some(*n),
+            _ => None,
+        };
+        out.push(TimedTask {
+            arch: field("arch"),
+            dir: field("dir"),
+            op: field("op"),
+            fam: field("family"),
+            seconds,
+            log: field("log"),
+        });
+    }
+    Ok((tree, out))
+}
+
+fn median(mut xs: Vec<f64>) -> Option<f64> {
+    if xs.is_empty() {
+        return None;
+    }
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = xs.len();
+    Some(if n % 2 == 1 {
+        xs[n / 2]
+    } else {
+        (xs[n / 2 - 1] + xs[n / 2]) / 2.0
+    })
+}
+
+fn arch_rank(a: &str) -> usize {
+    if a == "arm" {
+        0
+    } else {
+        1
+    }
+}
+
+fn op_rank(op: &str) -> usize {
+    SWEEP_OPS
+        .iter()
+        .position(|o| *o == op)
+        .unwrap_or(SWEEP_OPS.len())
+}
+
+fn fam_rank(f: &str) -> usize {
+    ARM_FAMILIES
+        .iter()
+        .position(|x| *x == f)
+        .unwrap_or(ARM_FAMILIES.len())
+}
+
+/// One joined human/generated row. Both numbers are optional so a failed or
+/// absent task is reported as `n/a` instead of being dropped.
+#[derive(Debug, Clone, PartialEq)]
+struct Pair {
+    arch: String,
+    dir: String,
+    op: String,
+    fam: String,
+    human: Option<f64>,
+    generated: Option<f64>,
+    human_log: Option<String>,
+    generated_log: Option<String>,
+}
+
+impl Pair {
+    fn label(&self) -> String {
+        format!("{}/{}_{}", self.dir, self.op, self.fam)
+    }
+
+    /// generated / human, only when both exist and human is non-zero.
+    fn ratio(&self) -> Option<f64> {
+        match (self.human, self.generated) {
+            (Some(h), Some(g)) if h > 0.0 => Some(g / h),
+            _ => None,
+        }
+    }
+}
+
+fn pair_rows(human: &[TimedTask], generated: &[TimedTask]) -> Vec<Pair> {
+    use std::collections::BTreeMap;
+    let key = |t: &TimedTask| (t.arch.clone(), t.dir.clone(), t.op.clone(), t.fam.clone());
+    let hmap: BTreeMap<_, _> = human.iter().map(|t| (key(t), t)).collect();
+    let gmap: BTreeMap<_, _> = generated.iter().map(|t| (key(t), t)).collect();
+    let mut keys: Vec<_> = hmap.keys().chain(gmap.keys()).cloned().collect();
+    keys.sort();
+    keys.dedup();
+    keys.sort_by(|a, b| {
+        arch_rank(&a.0)
+            .cmp(&arch_rank(&b.0))
+            .then(op_rank(&a.2).cmp(&op_rank(&b.2)))
+            .then(fam_rank(&a.3).cmp(&fam_rank(&b.3)))
+            .then(a.1.cmp(&b.1))
+    });
+    keys.into_iter()
+        .map(|k| {
+            let h = hmap.get(&k);
+            let g = gmap.get(&k);
+            Pair {
+                arch: k.0,
+                dir: k.1,
+                op: k.2,
+                fam: k.3,
+                human: h.and_then(|t| t.seconds),
+                generated: g.and_then(|t| t.seconds),
+                human_log: h.map(|t| t.log.clone()),
+                generated_log: g.map(|t| t.log.clone()),
+            }
+        })
+        .collect()
+}
+
+fn fmt_secs(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.3}")).unwrap_or_else(|| "n/a".into())
+}
+
+fn fmt_ratio(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.2}")).unwrap_or_else(|| "n/a".into())
+}
+
+/// Aggregate + median ratio for a group of rows. Summary numbers are computed
+/// from the same per-task values the table prints, never typed in by hand.
+#[derive(Default)]
+struct Group {
+    n: usize,
+    human: f64,
+    generated: f64,
+    ratios: Vec<f64>,
+}
+
+impl Group {
+    fn add(&mut self, p: &Pair) {
+        self.n += 1;
+        if let Some(h) = p.human {
+            self.human += h;
+        }
+        if let Some(g) = p.generated {
+            self.generated += g;
+        }
+        if let Some(r) = p.ratio() {
+            self.ratios.push(r);
+        }
+    }
+
+    fn aggregate(&self) -> Option<f64> {
+        (self.human > 0.0).then(|| self.generated / self.human)
+    }
+}
+
+/// Render the matched table and its statistics. Pure so it can be tested
+/// without the `.bench` trees.
+fn render_checktime(
+    human_tree: Option<&str>,
+    human: &[TimedTask],
+    generated: &[TimedTask],
+) -> String {
+    let rows = pair_rows(human, generated);
+    let mut out = String::new();
+
+    out.push_str("## Matched check-time table\n\n");
+    out.push_str(
+        "`human s` and `generated s` are the `Running time:` value parsed from each task's\n\
+         `.correct` file. `ratio` is `generated / human`; `% of 120 s` is the generated\n\
+         time against the `XII.F9.2` budget.\n\n",
+    );
+    out.push_str("| arch | task | human s | generated s | ratio | % of 120 s |\n");
+    out.push_str("|---|---|---:|---:|---:|---:|\n");
+    for p in &rows {
+        let pct = p
+            .generated
+            .map(|g| format!("{:.1}", g / CHECKTIME_BUDGET_SECONDS * 100.0));
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} |\n",
+            p.arch,
+            p.label(),
+            fmt_secs(p.human),
+            fmt_secs(p.generated),
+            fmt_ratio(p.ratio()),
+            pct.unwrap_or_else(|| "n/a".into()),
+        ));
+    }
+
+    let mut all = Group::default();
+    for p in &rows {
+        all.add(p);
+    }
+    let ratios: Vec<f64> = rows.iter().filter_map(|p| p.ratio()).collect();
+    let min = rows
+        .iter()
+        .filter_map(|p| p.ratio().map(|r| (r, p)))
+        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let max = rows
+        .iter()
+        .filter_map(|p| p.ratio().map(|r| (r, p)))
+        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let paired = ratios.len();
+
+    out.push_str("\n### Ratio statistics\n\n");
+    out.push_str("| metric | value |\n|---|---:|\n");
+    out.push_str(&format!("| paired tasks | {paired} of {} |\n", rows.len()));
+    out.push_str(&format!("| human total s | {:.3} |\n", all.human));
+    out.push_str(&format!("| generated total s | {:.3} |\n", all.generated));
+    out.push_str(&format!(
+        "| aggregate ratio (generated total / human total) | {} |\n",
+        fmt_ratio(all.aggregate())
+    ));
+    out.push_str(&format!(
+        "| per-task ratio median | {} |\n",
+        fmt_ratio(median(ratios.clone()))
+    ));
+    match min {
+        Some((r, p)) => out.push_str(&format!(
+            "| per-task ratio min | {r:.2} ({} {}) |\n",
+            p.arch,
+            p.label()
+        )),
+        None => out.push_str("| per-task ratio min | n/a |\n"),
+    }
+    match max {
+        Some((r, p)) => out.push_str(&format!(
+            "| per-task ratio max | {r:.2} ({} {}) |\n",
+            p.arch,
+            p.label()
+        )),
+        None => out.push_str("| per-task ratio max | n/a |\n"),
+    }
+
+    out.push_str("\n### Ratio by operation\n\n");
+    out.push_str(
+        "| op | tasks | human total s | generated total s | aggregate ratio | median ratio |\n",
+    );
+    out.push_str("|---|---:|---:|---:|---:|---:|\n");
+    for op in SWEEP_OPS {
+        let mut g = Group::default();
+        for p in rows.iter().filter(|p| p.op == op) {
+            g.add(p);
+        }
+        out.push_str(&format!(
+            "| {op} | {} | {:.3} | {:.3} | {} | {} |\n",
+            g.n,
+            g.human,
+            g.generated,
+            fmt_ratio(g.aggregate()),
+            fmt_ratio(median(g.ratios.clone())),
+        ));
+    }
+
+    out.push_str("\n### Ratio by family\n\n");
+    out.push_str(
+        "| family | tasks | human total s | generated total s | aggregate ratio | median ratio |\n",
+    );
+    out.push_str("|---|---:|---:|---:|---:|---:|\n");
+    let mut fams: Vec<String> = rows.iter().map(|p| p.fam.clone()).collect();
+    fams.sort_by_key(|f| fam_rank(f));
+    fams.dedup();
+    for fam in &fams {
+        let mut g = Group::default();
+        for p in rows.iter().filter(|p| &p.fam == fam) {
+            g.add(p);
+        }
+        out.push_str(&format!(
+            "| {fam} | {} | {:.3} | {:.3} | {} | {} |\n",
+            g.n,
+            g.human,
+            g.generated,
+            fmt_ratio(g.aggregate()),
+            fmt_ratio(median(g.ratios.clone())),
+        ));
+    }
+
+    let warn = CHECKTIME_BUDGET_SECONDS * CHECKTIME_WARN_FRACTION;
+    out.push_str(&format!(
+        "\n### XII.F9.2 budget: {:.0} s (70% = {:.0} s)\n\n",
+        CHECKTIME_BUDGET_SECONDS, warn
+    ));
+    let over: Vec<&Pair> = rows
+        .iter()
+        .filter(|p| p.generated.is_some_and(|g| g > warn))
+        .collect();
+    if over.is_empty() {
+        out.push_str(&format!("No generated task exceeds {warn:.0} s.\n"));
+    } else {
+        out.push_str("| arch | task | generated s | % of 120 s | over 70% | over 100% |\n");
+        out.push_str("|---|---|---:|---:|---|---|\n");
+        for p in over {
+            let g = p.generated.unwrap_or(0.0);
+            out.push_str(&format!(
+                "| {} | {} | {:.3} | {:.1} | {} | {} |\n",
+                p.arch,
+                p.label(),
+                g,
+                g / CHECKTIME_BUDGET_SECONDS * 100.0,
+                py_bool(g > warn),
+                py_bool(g > CHECKTIME_BUDGET_SECONDS),
+            ));
+        }
+    }
+
+    out.push_str("\n### Running time provenance\n\n");
+    out.push_str(
+        "`seconds` is the last `Running time: <x> sec, Start unixtime: ...` line of the\n\
+         task's `.correct` file. Upstream's `build-proof.sh` prints it around\n\
+         `loadt <proof>` plus `check_axioms ()`; it excludes HOL Light load and the\n\
+         native compile.\n\n",
+    );
+    out.push_str("| arch | task | human `.correct` | generated make log |\n");
+    out.push_str("|---|---|---|---|\n");
+    for p in &rows {
+        let correct = match human_tree {
+            Some(t) => format!("{t}/{}/{}/bignum_{}_{}.correct", p.arch, p.dir, p.op, p.fam),
+            None => "(tree not recorded)".to_string(),
+        };
+        out.push_str(&format!(
+            "| {} | {} | `{}` | `{}` |\n",
+            p.arch,
+            p.label(),
+            correct,
+            p.generated_log.as_deref().unwrap_or("n/a"),
+        ));
+    }
+
+    out.push_str(&format!(
+        "\nPAIRED {paired}/{} INCOMPLETE {}\n",
+        rows.len(),
+        rows.len() - paired
+    ));
+    out
+}
+
+/// `dropin checktime-table --human <json> --generated <json>`.
+pub fn checktime_table(args: &[String]) -> Result<i32, String> {
+    let human_path = arg_value(args, "--human").ok_or("--human is required")?;
+    let generated_path = arg_value(args, "--generated").ok_or("--generated is required")?;
+    let (tree, human) = read_timed_tasks(Path::new(human_path))?;
+    let (_, generated) = read_timed_tasks(Path::new(generated_path))?;
+    if human.is_empty() || generated.is_empty() {
+        return Err(format!(
+            "need both task lists: human={} generated={}",
+            human.len(),
+            generated.len()
+        ));
+    }
+    let text = render_checktime(tree.as_deref(), &human, &generated);
+    print!("{text}");
+    let paired = text.contains("INCOMPLETE 0\n");
+    Ok(if paired { 0 } else { 1 })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1415,6 +2070,23 @@ mod tests {
     fn running_time_absent_is_none() {
         let text = "val X : thm = |- T\nFatal error: exception Failure(\"boom\")\n";
         assert_eq!(running_time(text), None);
+    }
+
+    #[test]
+    fn theorem_marker_prefers_the_plain_name_and_falls_back_upstream() {
+        let generated = "val BIGNUM_ADD_P521_CORRECT : thm = |- T\n";
+        assert_eq!(
+            theorem_marker(generated, "add", "p521").as_deref(),
+            Some("BIGNUM_ADD_P521_CORRECT")
+        );
+        // Upstream's `collect-specs.sh` prints only the subroutine specs.
+        let upstream = "val BIGNUM_ADD_P521_SUBROUTINE_CORRECT : thm = |- T\n\
+                        val BIGNUM_ADD_P521_SUBROUTINE_SAFE : thm = |- T\n";
+        assert_eq!(
+            theorem_marker(upstream, "add", "p521").as_deref(),
+            Some("BIGNUM_ADD_P521_SUBROUTINE_CORRECT")
+        );
+        assert_eq!(theorem_marker("nothing here\n", "add", "p521"), None);
     }
 
     #[test]
@@ -1693,5 +2365,164 @@ mod tests {
         );
         assert_eq!(stamp_entry_id("id:12=|- x"), Some(12));
         assert_eq!(stamp_entry_id("nope"), None);
+    }
+
+    // --- measure ---------------------------------------------------------
+
+    #[test]
+    fn measure_requires_tree_and_arch() {
+        let err = parse_measure_args(&args(&["--arch", "all"])).unwrap_err();
+        assert!(err.contains("--tree is required"), "{err}");
+        let err = parse_measure_args(&args(&["--tree", "/t"])).unwrap_err();
+        assert!(err.contains("--arch is required"), "{err}");
+    }
+
+    #[test]
+    fn measure_parses_and_anchors_arguments() {
+        let m = parse_measure_args(&args(&[
+            "--tree",
+            ".bench/human-baseline",
+            "--arch",
+            "all",
+            "--force",
+            "--json",
+            "research/receipts/ix58-checktime.json",
+            "--label",
+            "human",
+        ]))
+        .unwrap();
+        assert_eq!(m.tree, repo_root().join(".bench/human-baseline"));
+        assert_eq!(m.arch, "all");
+        assert_eq!(m.arches(), &["arm", "x86"]);
+        assert!(m.force);
+        assert_eq!(m.timeout, 900);
+        assert_eq!(m.label, "human");
+        assert_eq!(m.gen, repo_root().join(".bench/measure-logs/human"));
+        assert_eq!(
+            m.json,
+            Some(repo_root().join("research/receipts/ix58-checktime.json"))
+        );
+    }
+
+    #[test]
+    fn measure_rejects_unknown_arch_label_and_flag() {
+        let err = parse_measure_args(&args(&["--tree", "/t", "--arch", "riscv"])).unwrap_err();
+        assert!(err.contains("expected x86, arm or all"), "{err}");
+        for bad in ["", ".", "..", "a/b", "a\\b"] {
+            let err = parse_measure_args(&args(&["--tree", "/t", "--arch", "arm", "--label", bad]))
+                .unwrap_err();
+            assert!(err.contains("--label"), "{bad:?}: {err}");
+        }
+        let err =
+            parse_measure_args(&args(&["--tree", "/t", "--arch", "arm", "--bogus"])).unwrap_err();
+        assert!(err.contains("unknown argument"), "{err}");
+        let err = parse_measure_args(&args(&["--tree", "/t", "--arch", "arm", "--timeout", "0"]))
+            .unwrap_err();
+        assert!(err.contains("--timeout"), "{err}");
+    }
+
+    /// A wrong `--tree` must produce an error, not a panic and not a make run.
+    #[test]
+    fn measure_on_nonexistent_tree_fails_cleanly() {
+        let missing = std::env::temp_dir().join("tekmerion-ix58-does-not-exist");
+        let _ = fs::remove_dir_all(&missing);
+        let err = measure(&args(&[
+            "--tree",
+            missing.to_str().unwrap(),
+            "--arch",
+            "all",
+        ]))
+        .unwrap_err();
+        assert!(err.contains("not a directory"), "{err}");
+        assert_eq!(run(&args(&["measure", "--tree", "", "--arch", "all"])), 2);
+    }
+
+    #[test]
+    fn measure_on_tree_without_makefile_fails_cleanly() {
+        let empty = std::env::temp_dir().join(format!("tek-ix58-empty-{}", std::process::id()));
+        fs::create_dir_all(empty.join("arm")).unwrap();
+        let err =
+            measure(&args(&["--tree", empty.to_str().unwrap(), "--arch", "arm"])).unwrap_err();
+        assert!(err.contains("no arm/Makefile"), "{err}");
+        let _ = fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn measure_json_records_label_tree_and_shares_the_task_shape() {
+        let m = parse_measure_args(&args(&[
+            "--tree", "/t", "--arch", "arm", "--label", "human",
+        ]))
+        .unwrap();
+        let results = vec![fixture("arm", "p521", "add", "p521", 0)];
+        let text = measure_json(&m, 1795501903, &results);
+        let j = json::parse(text.as_bytes()).expect("measure JSON must parse");
+        assert_eq!(j.get("label").unwrap().as_str(), Some("human"));
+        assert_eq!(j.get("tree").unwrap().as_str(), Some("/t"));
+        assert_eq!(j.get("cores").unwrap(), &json::Json::Num(1.0));
+        let tasks = j.get("tasks").unwrap().as_array().unwrap();
+        assert_eq!(tasks[0].get("family").unwrap().as_str(), Some("p521"));
+        assert_eq!(tasks[0].get("seconds").unwrap(), &json::Json::Num(46.0));
+        assert_eq!(j.get("ok").unwrap(), &json::Json::Num(1.0));
+    }
+
+    // --- checktime-table -------------------------------------------------
+
+    fn timed(arch: &str, dir: &str, op: &str, fam: &str, secs: Option<f64>) -> TimedTask {
+        TimedTask {
+            arch: arch.to_string(),
+            dir: dir.to_string(),
+            op: op.to_string(),
+            fam: fam.to_string(),
+            seconds: secs,
+            log: format!("logs-{arch}/{dir}_{op}_{fam}.log"),
+        }
+    }
+
+    #[test]
+    fn median_handles_odd_even_and_empty() {
+        assert_eq!(median(vec![]), None);
+        assert_eq!(median(vec![3.0]), Some(3.0));
+        assert_eq!(median(vec![10.0, 40.0]), Some(25.0));
+        assert_eq!(median(vec![5.0, 1.0, 3.0]), Some(3.0));
+    }
+
+    #[test]
+    fn checktime_table_pairs_rows_and_flags_the_budget() {
+        let human = vec![
+            timed("arm", "p521", "add", "p521", Some(3.0)),
+            timed("arm", "p521", "neg", "p521", Some(1.0)),
+            timed("arm", "p521", "sub", "p521", None),
+        ];
+        let generated = vec![
+            timed("arm", "p521", "add", "p521", Some(122.0)),
+            timed("arm", "p521", "neg", "p521", Some(10.0)),
+            timed("arm", "p521", "sub", "p521", Some(50.0)),
+        ];
+        let text = render_checktime(Some("/h"), &human, &generated);
+        // Paired rows print both numbers and the derived ratio.
+        assert!(text.contains("| arm | p521/add_p521 | 3.000 | 122.000 | 40.67 | 101.7 |"));
+        // The order is add, sub, neg.
+        let add = text.find("p521/add_p521 | 3.000").unwrap();
+        let sub = text.find("p521/sub_p521").unwrap();
+        let neg = text.find("p521/neg_p521").unwrap();
+        assert!(add < sub && sub < neg, "{text}");
+        // An absent human time is reported, not silently dropped.
+        assert!(text.contains("| arm | p521/sub_p521 | n/a | 50.000 | n/a | 41.7 |"));
+        // The overrun is flagged both ways.
+        assert!(text.contains("| arm | p521/add_p521 | 122.000 | 101.7 | True | True |"));
+        assert!(text.contains("INCOMPLETE 1"));
+        // Provenance names the human `.correct` file.
+        assert!(text.contains("`/h/arm/p521/bignum_add_p521.correct`"));
+    }
+
+    #[test]
+    fn checktime_table_reports_no_overrun_when_all_are_fast() {
+        let human = vec![timed("x86", "sm2", "add", "sm2", Some(2.0))];
+        let generated = vec![timed("x86", "sm2", "add", "sm2", Some(4.0))];
+        let text = render_checktime(None, &human, &generated);
+        assert!(text.contains("No generated task exceeds 84 s"), "{text}");
+        assert!(text.contains("| 2.00 |"), "{text}");
+        assert!(text.contains("PAIRED 1/1 INCOMPLETE 0"));
+        assert!(text.contains("(tree not recorded)"));
     }
 }

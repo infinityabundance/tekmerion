@@ -2170,3 +2170,165 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
    Note `p521/add_p521` at 122 s exceeds the 120 s budget — F9.2 defect, fix first.
 5. P1 (G1) and P2 (multi-limb native arithmetic).
 6. XII.F4 nightly regeneration, then XII.F5 sealed agent extension.
+
+---
+
+# XIII — Intake 2026-11-24 (after `ecde4fc`)
+
+Three reviews and two follow-ups. Nothing omitted. `XIII.I` supersedes `XII.U`.
+Every item is written so it can be dispatched as one self-contained brief.
+
+## XIII.B — The axiom instrument is not yet correct (do first: trust-critical, cheap)
+
+A reviewer read `axiom-stamp.diff` and found a real defect. Fix it before the stamp is
+cited again.
+
+- [ ] **XIII.B1.** `new_basic_type_definition` discards the witness theorem's mask
+  (`Sequent((asl,c),_)`) and gives both results mask `0`. Propagate the witness mask
+  into both results. A type definition is a conservative extension *given* its
+  existence witness, but the justification of that witness is still a dependency.
+- [ ] **XIII.B2.** Track dependencies through introduced types and constants —
+  dependency closure over the semantic environment, not only explicit theorem
+  arguments.
+- [ ] **XIII.B3.** Negative control: a type definition whose existence witness depends
+  on an injected axiom must show that dependency (today it would show `[]`).
+- [ ] **XIII.B4.** The mask is a fixed-width OCaml `int` with no capacity check. Add an
+  explicit capacity guard (fail loudly past the bound) or an unbounded set, and test at
+  the word boundary.
+- [ ] **XIII.B5.** Axiom descriptions are truncated to 80 chars and lose type
+  information. Preserve complete canonical typed terms and definition identities.
+- [ ] **XIII.B6.** The Rust stamp parser is too permissive: require the stamp to name
+  the theorem it belongs to, a consistent registry, valid axiom ids, and an inference
+  delta matching its own before/after records. `TaskResult::green()` must validate a
+  stamp's contents, not merely its presence.
+- [ ] **XIII.B7.** **Correct the receipts.** `ix57-axiom-stamp.md` calls the stamp an
+  exact lower and upper bound; with B1 open it is neither. `define_assert_from_elf`
+  must be stated as "the returned theorem carries an empty *recorded* stamp", not
+  "axiom-free". Append a correction; do not rewrite history.
+- [ ] **XIII.B8.** What survives, and is all that should be claimed meanwhile: the
+  session-level `check_axioms()` result for the 27 (IX.54/IX.56).
+
+## XIII.C — The freeze boundary must follow the code into Rust (Critical)
+
+`verify_freeze()` still runs `git diff --name-only <freeze_commit> -- tools`. Since the
+migration the producer lives in `src/tools/` and `src/bin/`, so the freeze does not bind
+the emitter at all.
+
+- [ ] **XIII.C1.** Bind the whole relevant closure: `src/tools/**`, `src/bin/**`,
+  `src/native/**`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, the built executable
+  digest, the OCaml bridge (`tools/csat_lib.ml`, `tools/bridge.ml`), the benchmark
+  inputs, and runtime dependencies (`cadical` path + digest, HOL Light pin).
+- [ ] **XIII.C2.** Record that closure in the freeze record; `verify_freeze` must refuse
+  on any difference — including a clean checkout whose contents differ.
+- [ ] **XIII.C3.** Firing controls, each must refuse: modified emitter source; swapped
+  binary under the same name; changed `Cargo.lock`; different HOL Light build; a
+  different `cadical`.
+- [ ] **XIII.C4.** New freeze tag after C1–C3. Freeze v4 stays valid for its own scope;
+  it does not cover the Rust producer.
+
+## XIII.D — Small honesty defects
+
+- [ ] **XIII.D1.** `dropin` dry-run prints the *planned* count as assembled and exits 0
+  even when assembly failed (`src/tools/dropin.rs`, dry-run branch). Report actual
+  successes; exit non-zero if a required assembly failed.
+- [ ] **XIII.D2.** `src/tools/json.rs` parses numbers through `f64`. Use exact integers
+  where integers are expected (ids, counts, seconds), validate the JSON number grammar
+  (reject leading zeros), bound recursion depth, add negative tests.
+- [ ] **XIII.D3.** Emitter parity tests return early when `.bench` is absent, so green CI
+  is not full regression coverage. Add synthetic fixtures so parity runs offline, and
+  state the limitation wherever it remains.
+
+## XIII.A — Certificates as data (the architectural step; unlocks three things)
+
+The F1 gate measures **0/26**: every emitted answer spawns `cadical` and does file I/O
+while being checked. The kernel still replays the LRAT, so this is not a soundness hole —
+it is a trust-surface and reproducibility hole, and it blocks Candle.
+
+- [ ] **XIII.A1.** Emit a **closed tactic term**: allow-listed combinators, term
+  literals, named lemmas. No `Unix`, `Sys`, process spawn, file I/O, references,
+  `external`.
+- [ ] **XIII.A2.** The SAT run becomes **proof construction**, not checking: the LRAT is
+  produced at emission and shipped as a data certificate; the judge loads and replays
+  it.
+- [ ] **XIII.A3.** The judge supplies the support library (Cadical reader / `csat_lib` /
+  `bridge`), so the answer neither inlines nor fetches it.
+- [ ] **XIII.A4.** The strict gate must then accept **27/27**, and the gate becomes
+  required in the emitter.
+- [ ] **XIII.A5.** Deterministic, solver-free re-check: a second machine with no
+  `cadical` and no network replays every accepted answer.
+- [ ] **XIII.A6.** First **Candle** attempt: one sealed proof re-checked in the verified
+  clone. That is the named milestone that takes OCaml out of the trust base.
+- [ ] **XIII.A7.** Certificates become content-addressed stored artefacts (needed by
+  XIII.F and the Millennium layer).
+
+## XIII.E — Proof work reduction (F3: optimisation has become a blocker)
+
+- [ ] **XIII.E1.** **Metric change:** primitive-inference count is the F3 metric
+  (deterministic, machine-independent). Baseline 3,697,462,655 across the 27
+  (`ix57-axiom-stamp.json`); 18.2M–681.7M per theorem.
+- [ ] **XIII.E2.** `arm/p521/add_p521`: 681,707,202 inferences, 122 s against a 120 s
+  budget. Bring it under budget with the statement unchanged, and report against the
+  900 s sweep timeout too so the two budget notions are never conflated again.
+- [ ] **XIII.E3.** Matched human baseline, but **compare the goals first**: upstream's
+  human files prove `BIGNUM_*_SUBROUTINE_CORRECT`, our drop-in files prove
+  `BIGNUM_*_CORRECT`. Partial data in `research/receipts/wip/ix58-checktime.partial.json`
+  (26 of 27: ARM 24–26 s, x86 50–53 s) is **not a receipt**; no ratio may be published
+  until the statements are compared.
+- [ ] **XIII.E4.** Parametric carry lemmas: proved once over width and modulus by
+  induction over limbs, instantiated per theorem; replaces per-theorem SAT replay.
+- [ ] **XIII.E5.** Emit proofs that do not search: separate successful derivations from
+  discarded search in the inference count, and drive the discarded part down.
+- [ ] **XIII.E6.** Cost observatory: definition dependencies, lemma dependencies,
+  successful vs discarded inference nodes, repeated subderivations (sharing),
+  inference cost per tactic, certificate size, cost per theory.
+
+## XIII.F — Foundational minimization (new research objective)
+
+- [ ] **XIII.F1.** Separate four objects currently conflated: direct derivational
+  dependencies; transitive definition/type dependencies; semantic model assumptions;
+  the checker's own foundations. Each gets its own evidence.
+- [ ] **XIII.F2.** Do **not** attempt a choice-free context inside HOL Light: `?` is
+  defined through `@`, so nothing survives. The honest HOL-level stamp is "HOL, all
+  three axioms, inherited from the substrate".
+- [ ] **XIII.F3.** Answer sufficiency elsewhere: re-check the certified-SAT core
+  (propositional) and the bridge lemmas (arithmetic) in a separate weak-arithmetic
+  checker, fed by XIII.A certificates.
+- [ ] **XIII.F4.** State the triad at the right strength: dependency (measured),
+  sufficiency (constructive — exhibit a weaker derivation), necessity (usually
+  undecidable; only ever specific independence results).
+- [ ] **XIII.F5.** The decisive experiment: two proofs of one property — the HOL route
+  and a native weak-foundation route — compared on foundations, primitive inference
+  work, certificate size, check time and generality, with **identical conclusions**.
+
+## XIII.G — Coverage (the frontier claim still rests here)
+
+- [ ] **XIII.G1.** First **new family** (`double` or `half`) under a pre-search freeze,
+  landing in the upstream tree with gate + provenance + check time. Every later theorem
+  then arrives already gated, provenance-checked and upstream-built.
+- [ ] **XIII.G2.** Then `triple`, `optneg`, `cmul` by small constants.
+- [ ] **XIII.G3.** Whole-family drop-in needs the name mismatch reconciled: upstream
+  proves `_SUBROUTINE_CORRECT`, our replacement files prove `_CORRECT`; a whole-tree
+  `make` fails on dependants until this is settled.
+
+## XIII.H — Native checker (unchanged gaps; coverage must not hide them)
+
+- [ ] **XIII.H1.** G1 bit-blaster soundness — the central hypothesis of the abstract
+  soundness theorem.
+- [ ] **XIII.H2.** G2 parser refinement (canonical rendering is checked; refinement is
+  not proved).
+- [ ] **XIII.H3.** G3 executable refinement (deployed Rust vs the justified relation).
+- [ ] **XIII.H4.** P4: one complete native machine-code theorem — solver-free replay,
+  faithful HOL representation. The union of both halves.
+- [ ] **XIII.H5.** P2: native multi-limb arithmetic beyond the 64-bit fragment.
+
+## XIII.I — Order of execution
+
+1. **XIII.B** — correct the instrument, then correct the receipts. Cheap, and a wrong
+   instrument poisons everything downstream.
+2. **XIII.C** — freeze the Rust closure. Nothing sealed is honest until this holds.
+3. **XIII.D** — the three small defects.
+4. **XIII.A** — certificates as data; strict gate 27/27; then Candle.
+5. **XIII.E2/E3** — `add_p521` under budget; equal-goal comparison.
+6. **XIII.G1** — first new family under freeze.
+7. **XIII.E4/E5** — parametric lemmas; stop searching.
+8. **XIII.H** — native foundations, then XIII.F.
