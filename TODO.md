@@ -2238,7 +2238,22 @@ the emitter at all.
   binary under the same name; changed `Cargo.lock`; different HOL Light build; a
   different `cadical`. — all six controls refused; verbatim output in IX.59.
 - [x] **XIII.C4.** New freeze tag after C1–C3. Freeze v4 stays valid for its own scope;
-  it does not cover the Rust producer. — annotated unsigned tag `freeze-rust-closure-v5`;
+  it does not cover the Rust producer. — **Done:** `freeze-rust-closure-v5`
+  (`51e24fd`, annotated, unsigned), manifest `research/receipts/freeze-closure-v5.json`,
+  `source_digest 8a0d2439…b88d` over 65 files; receipt `ix59-freeze-closure.md`.
+  Guard mutation 98/98 sites killed (was 58/58). Legacy manifests still verify with a
+  warning; IX.53–IX.57 are not retroactively upgraded.
+- [ ] **XIII.C5. Verify the sealed state, not the working directory.** `freeze verify`
+  hashes the mutable working tree. Observed once by the orchestrator: a verify run on
+  the tagged tree refused with `actual 4c409ad6…` for `src/tools/guard.rs`, a digest
+  matching no committed file; a rerun passed and `check-tag` and a fresh clone both
+  pass. Best explanation is a race with a concurrent writer (the compile emitted an
+  `unreachable_code` note that the committed tree does not produce). Not reproduced.
+  Fix: hash the closure from the **git object store at `repo_commit`** (and compare the
+  working tree against it as a separate, clearly-labelled check), so verification is a
+  statement about the sealed commit and cannot be perturbed by concurrent edits. Test:
+  dirty the tree and show the committed-state check still passes while the
+  working-tree check refuses, naming the path. — annotated unsigned tag `freeze-rust-closure-v5`;
   IX.53–IX.57 manifests still verify under the legacy scope.
 
 ## XIII.D — Small honesty defects
