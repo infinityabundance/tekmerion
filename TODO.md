@@ -1961,12 +1961,33 @@ risks: `Obj.magic`, `Marshal`, mutable strings/state.
 ## XII.F2 — Export the derivation, not just the verdict
 
 - [ ] **XII.F2.1. Proof recording on for every accepted theorem.** Export the trace.
-- [ ] **XII.F2.2. Per-theorem axiom dependencies (foundation stamp O17), measured.**
-  `axioms()` lists the *session's* axioms, not the theorem's; the trace shows whether
-  `SELECT_AX`/`INFINITY_AX` are actually used. Do this for the nine x86 and 18 ARM theorems.
+  Not started. `ProofTrace/`/`Proofrecording/` are rejected for this purpose: the
+  ProofTrace README records 41 GB of theorems / 8 GB of proofs for a fresh
+  `hol.ml` context, which does not fit this volume.
+- [x] **XII.F2.2. Per-theorem axiom dependencies (foundation stamp O17), measured.**
+  Done for all 27 generated theorems (18 ARM + 9 x86) — not just the nine x86.
+  Mechanism: an axiom-taint bitset carried in `thm` in a *copy* of the kernel
+  (`tools/hol-light/axiom-stamp.diff`, sha256 `f1b8a6db…a6ac`, applied to
+  `.bench/hol-light-stamp`); every `new_axiom` allocates an id and every primitive
+  rule unions its theorem arguments' masks. Receipt:
+  `research/receipts/ix57-axiom-stamp.md` + `ix57-axiom-stamp.json`.
+  Result: 27/27 pass `check_axioms`, and each theorem's stamp is exactly
+  `{ETA_AX, SELECT_AX, INFINITY_AX}` — no axiom outside the three. Controls: empty
+  stamp for `REFL`; an injected `new_axiom` shows up in the stamp and makes
+  `check_axioms` fail; false statements still raise; the 27-theorem set is
+  identical to the frozen run (wall time 1386 s vs 1398 s).
+  Remaining under F2.2: the stamp is axioms only — definitional dependencies are
+  not tracked, and the mask is a summary, not a replayable object.
 - [ ] **XII.F2.3. Re-check outside the OCaml process** (HOLTrace-style replay).
+  Open. The IX.57 stamp cannot be replayed by a third party; it is measured by the
+  same kernel that produced the theorem.
 - [ ] **XII.F2.4. Export to a second logic** (Dedukti via hol2dk) on the small fragment needed.
+  Open.
 - [ ] **XII.F2.5. Inference-level size/shape baseline** generated vs human proofs.
+  Generated side measured: 18,230,539–681,707,202 primitive-rule invocations per
+  theorem (`inference_delta` in `ix57-axiom-stamp.json`). Caveat: this counts all
+  primitive-rule invocations made during `prove`, including failed tactic search,
+  so it is work, not proof-tree size. Human side not measured.
 
 ## XII.F3 — Check time is a first-class metric
 

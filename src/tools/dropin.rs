@@ -151,6 +151,7 @@ fn assemble_core(
     answer_path: &Path,
     dropin: &Path,
     problems: &Path,
+    stamp: bool,
 ) -> Result<Assembled, String> {
     let (arch, op, fam, f) = parse_task(task)?;
     let base = format!("bignum_{op}_{fam}");
@@ -175,6 +176,32 @@ fn assemble_core(
     let bytes = copy_text(&obj, &arch)?;
     let mc = mclist(&bytes, &arch)?;
 
+    // `--stamp` wraps the proof with the axiom-stamp instrument. The
+    // `before` value is taken outside the proof so the reported number is a
+    // delta for this derivation, not a session total.
+    let (stamp_pre, stamp_post) = if stamp {
+        let before = format!("stamp_before_{theorem}");
+        (
+            format!("let {before} = inference_count ();;\n"),
+            format!(
+                "Printf.printf \"STAMP_BEGIN %s\\n%!\" \"{theorem}\";;\n\
+                 Printf.printf \"STAMP %s\\n%!\" (stamp_string {theorem});;\n\
+                 Printf.printf \"STAMP_INF_BEFORE %d\\n%!\" {before};;\n\
+                 Printf.printf \"STAMP_INF_AFTER %d\\n%!\" (inference_count ());;\n\
+                 Printf.printf \"STAMP_INFERENCES %d\\n%!\" (inference_count () - {before});;\n\
+                 List.iter\n\
+                   (fun (id,txt) -> Printf.printf \"STAMP_REGISTRY %d %s\\n%!\" id txt)\n\
+                   (axiom_registry ());;\n\
+                 List.iter\n\
+                   (fun (nm,th) -> Printf.printf \"STAMP_NAME %s %s\\n%!\" nm\n\
+                      (String.concat \",\" (List.map string_of_int (stamp_of th))))\n\
+                   [\"ETA_AX\",ETA_AX; \"SELECT_AX\",SELECT_AX; \"INFINITY_AX\",INFINITY_AX];;\n"
+            ),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+
     let body = if arch == "arm" {
         format!(
             "(* DROP-IN experiment: generated Tekmerion ARM proof in upstream shape. *)\n\
@@ -182,8 +209,8 @@ fn assemble_core(
              let {base}_mc = define_assert_from_elf \"{base}_mc\" \"arm/{dir}/{base}.o\"\n[\n{mc}];;\n\n\
              let {exec_name} = ARM_MK_EXEC_RULE {base}_mc;;\n\n\
              let {mod_name} = new_definition `{mod_name} = {modulus}`;;\n\n\
-             let {theorem} = time prove\n ({query},\n{answer});;\n\n\
-             Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n",
+             {stamp_pre}let {theorem} = time prove\n ({query},\n{answer});;\n\n\
+             {stamp_post}Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n",
             dir = f.dir, mod_name = f.modulus_name, modulus = f.modulus,
         )
     } else {
@@ -194,8 +221,8 @@ fn assemble_core(
              let {base}_tmc = define_trimmed \"{base}_tmc\" {base}_mc;;\n\
              let {exec_name} = X86_MK_CORE_EXEC_RULE {base}_tmc;;\n\n\
              let {mod_name} = new_definition `{mod_name} = {modulus}`;;\n\n\
-             let {theorem} = time prove\n ({query},\n{answer});;\n\n\
-             Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n",
+             {stamp_pre}let {theorem} = time prove\n ({query},\n{answer});;\n\n\
+             {stamp_post}Printf.printf \"val {theorem} : thm = %s\\n%!\" (string_of_thm {theorem});;\n",
             dir = f.dir, mod_name = f.modulus_name, modulus = f.modulus,
         )
     };
@@ -213,8 +240,9 @@ pub fn assemble(args: &[String]) -> Result<(), String> {
     let problems = arg_value(args, "--problems")
         .map(PathBuf::from)
         .unwrap_or_else(|| repo_root().join(".bench/problems.json"));
+    let stamp = args.iter().any(|a| a == "--stamp");
 
-    let assembled = assemble_core(task, Path::new(answer_path), &dropin, &problems)?;
+    let assembled = assemble_core(task, Path::new(answer_path), &dropin, &problems, stamp)?;
     if let Some(parent) = assembled.out.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -288,6 +316,8 @@ pub struct SweepArgs {
     /// Per-task wall-clock limit in seconds; 0 is rejected.
     pub timeout: u64,
     pub json: Option<PathBuf>,
+    /// Assemble with the axiom-stamp instrument and require a `STAMP` line.
+    pub stamp: bool,
 }
 
 impl SweepArgs {
@@ -371,8 +401,19 @@ fn sweep_value(args: &[String], i: usize, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("{key} requires a value"))
 }
 
+/// `make` runs with `current_dir(<dropin>/<arch>)`, so a relative `HOLDIR`
+/// would be resolved against the wrong directory. Every path argument is
+/// therefore anchored at the repository root when it is not already absolute.
+fn anchored(repo: &Path, p: PathBuf) -> PathBuf {
+    if p.is_absolute() {
+        p
+    } else {
+        repo.join(p)
+    }
+}
+
 /// Parse `--arch <x86|arm|all> [--answers D] [--dir D] [--gen G] [--hol H]
-/// [--force] [--timeout N] [--json P] [--dry-run]`.
+/// [--force] [--timeout N] [--json P] [--dry-run] [--stamp]`.
 pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
     let repo = repo_root();
     let mut arch: Option<String> = None;
@@ -384,6 +425,7 @@ pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
     let mut force = false;
     let mut timeout: u64 = 900;
     let mut json: Option<PathBuf> = None;
+    let mut stamp = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -431,6 +473,10 @@ pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
                 dry_run = true;
                 i += 1;
             }
+            "--stamp" => {
+                stamp = true;
+                i += 1;
+            }
             other => return Err(format!("unknown argument {other:?}")),
         }
     }
@@ -443,14 +489,15 @@ pub fn parse_sweep_args(args: &[String]) -> Result<SweepArgs, String> {
     }
     Ok(SweepArgs {
         arch,
-        answers,
-        dropin,
-        gen,
-        hol,
+        answers: answers.map(|p| anchored(&repo, p)),
+        dropin: anchored(&repo, dropin),
+        gen: anchored(&repo, gen),
+        hol: anchored(&repo, hol),
         dry_run,
         force,
         timeout,
-        json,
+        json: json.map(|p| anchored(&repo, p)),
+        stamp,
     })
 }
 
@@ -475,15 +522,175 @@ pub struct TaskResult {
     pub log: String,
     /// The `.correct` or log text carries an exception; display only.
     pub exception: bool,
+    /// A `STAMP` line was required for this task (`--stamp`).
+    pub stamp_required: bool,
+    /// Everything the stamped proof printed, `None` when it printed no stamp.
+    pub stamp_report: Option<StampReport>,
 }
 
 impl TaskResult {
     fn green(&self) -> bool {
-        self.exit == Some(0) && self.check_axioms && self.theorem.is_some()
+        self.exit == Some(0)
+            && self.check_axioms
+            && self.theorem.is_some()
+            && (!self.stamp_required || self.stamp_report.as_ref().is_some_and(|r| r.reported))
     }
 
     fn label(&self) -> String {
         format!("{}/{}_{}", self.dir, self.op, self.fam)
+    }
+
+    fn axioms(&self) -> Option<&Vec<String>> {
+        self.stamp_report.as_ref().map(|r| &r.axioms)
+    }
+
+    fn inference_delta(&self) -> Option<i64> {
+        self.stamp_report.as_ref().and_then(|r| r.inference_delta)
+    }
+}
+
+/// What one stamped proof run printed. Everything here is taken verbatim from
+/// the program's own output; nothing is inferred.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StampReport {
+    pub begun: bool,
+    /// `STAMP` was present (possibly empty).
+    pub reported: bool,
+    pub axioms: Vec<String>,
+    pub inference_before: Option<i64>,
+    pub inference_after: Option<i64>,
+    pub inference_delta: Option<i64>,
+    /// `(id, conclusion)` from `STAMP_REGISTRY`.
+    pub registry: Vec<(i64, String)>,
+    /// `(name, ids)` from `STAMP_NAME` for the three basic axioms.
+    pub names: Vec<(String, Vec<i64>)>,
+}
+
+fn parse_i64(s: &str) -> Option<i64> {
+    s.trim().parse::<i64>().ok()
+}
+
+/// Split a `STAMP` payload into entries. Entries are `id:<n>=|- <term>` joined
+/// by `|`, and each entry itself contains `|-`, so a plain split on `|` is not
+/// enough: start a new entry only at a part that begins with `id:`.
+fn split_stamp_entries(s: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in s.split('|') {
+        if out.is_empty() || part.trim_start().starts_with("id:") {
+            out.push(part.trim().to_string());
+        } else if let Some(last) = out.last_mut() {
+            last.push('|');
+            last.push_str(part.trim());
+        }
+    }
+    out.retain(|e| !e.is_empty());
+    out
+}
+
+/// Read the `STAMP*` lines a stamped proof prints. `None` when the run printed
+/// no stamp at all (the un-stamped template, or a run that died early).
+fn parse_stamp(text: &str) -> Option<StampReport> {
+    let mut r = StampReport::default();
+    let mut seen = false;
+    for line in text.lines() {
+        let line = line.trim_end_matches('\r');
+        if let Some(rest) = line.strip_prefix("STAMP_BEGIN ") {
+            r.begun = !rest.trim().is_empty();
+            seen = true;
+        } else if let Some(rest) = line.strip_prefix("STAMP ") {
+            r.reported = true;
+            r.axioms = split_stamp_entries(rest);
+            seen = true;
+        } else if let Some(rest) = line.strip_prefix("STAMP_INF_BEFORE ") {
+            r.inference_before = parse_i64(rest);
+        } else if let Some(rest) = line.strip_prefix("STAMP_INF_AFTER ") {
+            r.inference_after = parse_i64(rest);
+        } else if let Some(rest) = line.strip_prefix("STAMP_INFERENCES ") {
+            r.inference_delta = parse_i64(rest);
+        } else if let Some(rest) = line.strip_prefix("STAMP_REGISTRY ") {
+            if let Some((id, txt)) = rest.split_once(' ') {
+                if let Some(id) = parse_i64(id) {
+                    r.registry.push((id, txt.trim().to_string()));
+                }
+            }
+        } else if let Some(rest) = line.strip_prefix("STAMP_NAME ") {
+            let mut parts = rest.split_whitespace();
+            if let (Some(name), Some(ids)) = (parts.next(), parts.next()) {
+                let ids: Vec<i64> = ids
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<i64>().ok())
+                    .collect();
+                r.names.push((name.to_string(), ids));
+            }
+        }
+    }
+    if seen {
+        Some(r)
+    } else {
+        None
+    }
+}
+
+/// Registry and basic-axiom naming, unioned across every task that reported it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct StampSummary {
+    registry: Vec<(i64, String)>,
+    names: Vec<(String, Vec<i64>)>,
+}
+
+impl StampSummary {
+    fn absorb(&mut self, report: &StampReport) {
+        for (id, txt) in &report.registry {
+            if !self.registry.iter().any(|(i, _)| i == id) {
+                self.registry.push((*id, txt.clone()));
+            }
+        }
+        for (name, ids) in &report.names {
+            if !self.names.iter().any(|(n, _)| n == name) {
+                self.names.push((name.clone(), ids.clone()));
+            }
+        }
+        self.registry.sort_by_key(|(id, _)| *id);
+        self.names.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    /// `{ETA_AX, SELECT_AX}` for the ids a theorem's stamp carries.
+    fn name_ids(&self, ids: &[String]) -> String {
+        if ids.is_empty() {
+            return "{}".to_string();
+        }
+        let named: Vec<String> = ids
+            .iter()
+            .map(|entry| {
+                let hit = stamp_entry_id(entry).and_then(|n| {
+                    self.names
+                        .iter()
+                        .find(|(_, vs)| vs.contains(&n))
+                        .map(|(name, _)| name.clone())
+                });
+                hit.unwrap_or_else(|| {
+                    if entry.starts_with("id:") {
+                        entry.to_string()
+                    } else {
+                        format!("id:{entry}")
+                    }
+                })
+            })
+            .collect();
+        format!("{{{}}}", named.join(", "))
+    }
+}
+
+/// The numeric id of one `STAMP` entry (`id:3=|- ...` -> 3). A bare integer
+/// is accepted too, so the name map is robust to either spelling.
+fn stamp_entry_id(entry: &str) -> Option<i64> {
+    let t = entry.trim();
+    let rest = t.strip_prefix("id:").unwrap_or(t);
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        None
+    } else {
+        digits.parse().ok()
     }
 }
 
@@ -589,6 +796,14 @@ fn build_logged(s: &SweepArgs, p: &Planned, logs: &Path) -> Result<TaskResult, S
             .map(|t| t.contains("ANSWER_EXCEPTION") || t.contains("Fatal error"))
             .unwrap_or(false);
 
+    // Stamped output goes to the program's own stdout, i.e. the `.correct`
+    // file; fall back to the make log only if that file is missing.
+    let stamp_report = correct_text
+        .as_deref()
+        .and_then(parse_stamp)
+        .or_else(|| parse_stamp(&log_text));
+    let stamp_required = s.stamp;
+
     Ok(TaskResult {
         arch: p.arch.clone(),
         dir: p.dir.clone(),
@@ -601,6 +816,8 @@ fn build_logged(s: &SweepArgs, p: &Planned, logs: &Path) -> Result<TaskResult, S
         timeout: hit_timeout,
         log: log.display().to_string(),
         exception,
+        stamp_required,
+        stamp_report,
     })
 }
 
@@ -636,6 +853,23 @@ fn json_opt_str(v: Option<&str>) -> String {
     v.map(json_str).unwrap_or_else(|| "null".to_string())
 }
 
+fn json_opt_i64(v: Option<i64>) -> String {
+    v.map(|n| n.to_string())
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_str_array(items: &[String]) -> String {
+    let body: Vec<String> = items.iter().map(|s| json_str(s)).collect();
+    format!("[{}]", body.join(", "))
+}
+
+fn json_opt_str_array(items: Option<&Vec<String>>) -> String {
+    match items {
+        Some(v) => json_str_array(v),
+        None => "null".to_string(),
+    }
+}
+
 /// Hand-written serialiser for the sweep receipt. Kept dependency-free on
 /// purpose (`cargo build --offline` must keep working).
 #[allow(clippy::too_many_arguments)]
@@ -646,6 +880,8 @@ fn results_json(
     s2n_pin: &str,
     hol_pin: &str,
     generated_at: u64,
+    stamp: bool,
+    summary: &StampSummary,
     results: &[TaskResult],
 ) -> String {
     let mut out = String::new();
@@ -656,12 +892,40 @@ fn results_json(
     out.push_str(&format!("  \"hol_light_pin\": {},\n", json_str(hol_pin)));
     out.push_str("  \"cores\": 1,\n");
     out.push_str(&format!("  \"force\": {force},\n"));
+    out.push_str(&format!("  \"stamp\": {stamp},\n"));
     out.push_str(&format!("  \"timeout_seconds\": {timeout},\n"));
+    out.push_str("  \"axiom_registry\": [");
+    for (i, (id, txt)) in summary.registry.iter().enumerate() {
+        let comma = if i + 1 == summary.registry.len() {
+            ""
+        } else {
+            ","
+        };
+        out.push_str(&format!(
+            "{}{{\"id\": {id}, \"conclusion\": {}}}{comma}",
+            if i == 0 { "" } else { " " },
+            json_str(txt)
+        ));
+    }
+    out.push_str("],\n");
+    out.push_str("  \"basic_axioms\": {");
+    for (i, (name, ids)) in summary.names.iter().enumerate() {
+        out.push_str(&format!(
+            "{} {}: [{}]",
+            if i == 0 { "" } else { "," },
+            json_str(name),
+            ids.iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+    }
+    out.push_str("},\n");
     out.push_str("  \"tasks\": [\n");
     for (i, r) in results.iter().enumerate() {
         let comma = if i + 1 == results.len() { "" } else { "," };
         out.push_str(&format!(
-            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"log\": {}}}{comma}\n",
+            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"axioms\": {}, \"inference_delta\": {}, \"log\": {}}}{comma}\n",
             json_str(&r.arch),
             json_str(&r.dir),
             json_str(&r.op),
@@ -671,6 +935,9 @@ fn results_json(
             r.check_axioms,
             json_opt_num(r.seconds),
             r.timeout,
+            r.stamp_required,
+            json_opt_str_array(r.axioms()),
+            json_opt_i64(r.inference_delta()),
             json_str(&r.log),
         ));
     }
@@ -723,6 +990,47 @@ fn print_summary(results: &[TaskResult]) {
     }
 }
 
+/// Per-theorem stamp table: arch, task, axioms actually used, inference delta,
+/// check seconds. Nothing here is computed from anything but the parsed logs.
+fn print_stamp_table(results: &[TaskResult], summary: &StampSummary) {
+    println!("\nSTAMP TABLE");
+    println!(
+        "{:<4} {:<24} {:<38} {:>13} {:>9}",
+        "ARCH", "TASK", "AXIOMS USED", "INFERENCES", "SECONDS"
+    );
+    for r in results {
+        let ax = match r.axioms() {
+            Some(ids) => summary.name_ids(ids),
+            None => "n/a".to_string(),
+        };
+        println!(
+            "{:<4} {:<24} {:<38} {:>13} {:>9}",
+            r.arch,
+            r.label(),
+            ax,
+            r.inference_delta()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "null".to_string()),
+            r.seconds
+                .map(|s| format!("{s:.3}"))
+                .unwrap_or_else(|| "null".to_string())
+        );
+    }
+
+    if !summary.registry.is_empty() {
+        println!("\nAXIOM REGISTRY (raw conclusions)");
+        for (id, txt) in &summary.registry {
+            let name = summary
+                .names
+                .iter()
+                .find(|(_, ids)| ids.contains(id))
+                .map(|(n, _)| n.as_str())
+                .unwrap_or("(not a basic axiom)");
+            println!("  id:{id} = {name}: {txt}");
+        }
+    }
+}
+
 /// Assemble then build the requested tasks (x86 nine, ARM eighteen, or both).
 pub fn sweep(args: &[String]) -> Result<i32, String> {
     let parsed = parse_sweep_args(args)?;
@@ -730,31 +1038,35 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
     let planned = plan(&parsed);
     let total = planned.len();
     let mut results: Vec<TaskResult> = Vec::new();
+    let mut summary = StampSummary::default();
 
     for p in &planned {
         let answer = parsed.answer_path(&p.arch, &p.base);
-        let assembled = match assemble_core(&p.task, &answer, &parsed.dropin, &problems) {
-            Ok(a) => a,
-            Err(e) => {
-                // Assembly failed: no make, no exit code. Record it honestly.
-                println!("wrote {}.ml (FAILED to assemble)", p.base);
-                println!("  {}: assemble error: {e}", p.label());
-                results.push(TaskResult {
-                    arch: p.arch.clone(),
-                    dir: p.dir.clone(),
-                    op: p.op.clone(),
-                    fam: p.fam.clone(),
-                    exit: None,
-                    theorem: None,
-                    check_axioms: false,
-                    seconds: None,
-                    timeout: false,
-                    log: answer.display().to_string(),
-                    exception: true,
-                });
-                continue;
-            }
-        };
+        let assembled =
+            match assemble_core(&p.task, &answer, &parsed.dropin, &problems, parsed.stamp) {
+                Ok(a) => a,
+                Err(e) => {
+                    // Assembly failed: no make, no exit code. Record it honestly.
+                    println!("wrote {}.ml (FAILED to assemble)", p.base);
+                    println!("  {}: assemble error: {e}", p.label());
+                    results.push(TaskResult {
+                        arch: p.arch.clone(),
+                        dir: p.dir.clone(),
+                        op: p.op.clone(),
+                        fam: p.fam.clone(),
+                        exit: None,
+                        theorem: None,
+                        check_axioms: false,
+                        seconds: None,
+                        timeout: false,
+                        log: answer.display().to_string(),
+                        exception: true,
+                        stamp_required: parsed.stamp,
+                        stamp_report: None,
+                    });
+                    continue;
+                }
+            };
 
         if parsed.dry_run {
             println!("wrote {}.ml (dry run)", p.base);
@@ -778,6 +1090,9 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
         let logs = log_dir(&parsed.gen, &p.arch);
         fs::create_dir_all(&logs).map_err(|e| format!("{}: {e}", logs.display()))?;
         let result = build_logged(&parsed, p, &logs)?;
+        if let Some(report) = &result.stamp_report {
+            summary.absorb(report);
+        }
         println!(
             "  {}: exit={} theorem={} exception={}",
             result.label(),
@@ -789,6 +1104,12 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
             py_bool(result.exception)
         );
         results.push(result);
+
+        // Rewrite the JSON after every task so a wall-clock stop still leaves
+        // exactly the tasks that really ran, and nothing invented for the rest.
+        if let Some(path) = &parsed.json {
+            write_json(path, &parsed, &summary, &results)?;
+        }
     }
 
     if parsed.dry_run {
@@ -797,29 +1118,14 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
     }
 
     if let Some(path) = &parsed.json {
-        let generated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let json = results_json(
-            &parsed.arch,
-            parsed.force,
-            parsed.timeout,
-            &git_pin(&parsed.dropin),
-            &git_pin(&parsed.hol),
-            generated_at,
-            &results,
-        );
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-            }
-        }
-        fs::write(path, json.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+        write_json(path, &parsed, &summary, &results)?;
         println!("wrote JSON {}", path.display());
     }
 
     print_summary(&results);
+    if parsed.stamp {
+        print_stamp_table(&results, &summary);
+    }
     let ok = results.iter().filter(|r| r.green()).count();
     println!("OK {ok}/{total}");
     Ok(if ok == total && !results.is_empty() {
@@ -829,6 +1135,35 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
     })
 }
 
+fn write_json(
+    path: &Path,
+    parsed: &SweepArgs,
+    summary: &StampSummary,
+    results: &[TaskResult],
+) -> Result<(), String> {
+    let generated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let text = results_json(
+        &parsed.arch,
+        parsed.force,
+        parsed.timeout,
+        &git_pin(&parsed.dropin),
+        &git_pin(&parsed.hol),
+        generated_at,
+        parsed.stamp,
+        summary,
+        results,
+    );
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+    }
+    fs::write(path, text.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 pub fn run(args: &[String]) -> i32 {
     let cmd = args.first().map(String::as_str).unwrap_or("");
     let rest = if args.is_empty() { args } else { &args[1..] };
@@ -836,12 +1171,17 @@ pub fn run(args: &[String]) -> i32 {
         "assemble" => assemble(rest).map(|()| 0),
         "build" => build(rest),
         "sweep" => sweep(rest),
-        _ => Err("usage: dropin <assemble|build|sweep> [options]\n\
+        "stamp-table" => stamp_table(rest),
+        _ => Err(
+            "usage: dropin <assemble|build|sweep|stamp-table> [options]\n\
              \n\
              sweep: dropin sweep --arch <x86|arm|all> [--answers <dir>] [--dir <dropin-dir>]
              \x20      [--gen <gen-dir>] [--hol <hol-dir>] [--force] [--timeout <secs>]
-             \x20      [--json <path>] [--dry-run]"
-            .to_string()),
+             \x20      [--json <path>] [--dry-run] [--stamp]
+             \x20      \n\
+             stamp-table: dropin stamp-table --json <sweep-json>"
+                .to_string(),
+        ),
     };
     match result {
         Ok(code) => code,
@@ -850,6 +1190,118 @@ pub fn run(args: &[String]) -> i32 {
             2
         }
     }
+}
+
+fn json_i64(v: &json::Json) -> Option<i64> {
+    match v {
+        json::Json::Num(n) => Some(*n as i64),
+        _ => None,
+    }
+}
+
+/// Render the receipt's tables from a sweep JSON file. Every number, axiom id
+/// and conclusion comes from that file; nothing is retyped.
+pub fn stamp_table(args: &[String]) -> Result<i32, String> {
+    let path = arg_value(args, "--json").ok_or("--json is required")?;
+    let bytes = fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    let j = json::parse(&bytes).map_err(|e| format!("{path}: {e}"))?;
+
+    let mut summary = StampSummary::default();
+    if let Some(reg) = j.get("axiom_registry").and_then(|v| v.as_array()) {
+        for e in reg {
+            if let (Some(id), Some(txt)) = (
+                e.get("id").and_then(json_i64),
+                e.get("conclusion").and_then(|v| v.as_str()),
+            ) {
+                summary.registry.push((id, txt.to_string()));
+            }
+        }
+    }
+    if let Some(obj) = j.get("basic_axioms").and_then(|v| v.as_obj()) {
+        for (name, ids) in obj {
+            let ids: Vec<i64> = ids
+                .as_array()
+                .map(|a| a.iter().filter_map(json_i64).collect())
+                .unwrap_or_default();
+            summary.names.push((name.clone(), ids));
+        }
+    }
+    summary.registry.sort_by_key(|(id, _)| *id);
+    summary.names.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let empty = Vec::new();
+    let tasks = j.get("tasks").and_then(|v| v.as_array()).unwrap_or(&empty);
+
+    let basic: Vec<i64> = summary
+        .names
+        .iter()
+        .flat_map(|(_, ids)| ids.iter().copied())
+        .collect();
+
+    println!("## Per-theorem axiom stamp\n");
+    println!("| arch | task | axioms used | inferences | seconds |");
+    println!("|---|---|---|---:|---:|");
+    let mut stamped = 0usize;
+    let mut outside = 0usize;
+    let mut missing = 0usize;
+    for t in tasks {
+        let arch = t.get("arch").and_then(|v| v.as_str()).unwrap_or("?");
+        let dir = t.get("dir").and_then(|v| v.as_str()).unwrap_or("?");
+        let op = t.get("op").and_then(|v| v.as_str()).unwrap_or("?");
+        let fam = t.get("family").and_then(|v| v.as_str()).unwrap_or("?");
+        let task = format!("{dir}/{op}_{fam}");
+        let axi = match t.get("axioms") {
+            Some(json::Json::Arr(ids)) => {
+                stamped += 1;
+                let ids: Vec<String> = ids
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(str::to_string)
+                    .collect();
+                if ids
+                    .iter()
+                    .filter_map(|s| stamp_entry_id(s))
+                    .any(|id| !basic.contains(&id))
+                {
+                    outside += 1;
+                }
+                summary.name_ids(&ids)
+            }
+            _ => {
+                missing += 1;
+                "n/a".to_string()
+            }
+        };
+        let inf = t
+            .get("inference_delta")
+            .and_then(json_i64)
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "n/a".to_string());
+        let secs = match t.get("seconds") {
+            Some(json::Json::Num(n)) => format!("{n:.3}"),
+            _ => "n/a".to_string(),
+        };
+        println!("| {arch} | {task} | {axi} | {inf} | {secs} |");
+    }
+
+    println!("\n## Axiom registry (raw conclusions)\n");
+    println!("| id | name | conclusion |");
+    println!("|---|---|---|");
+    for (id, txt) in &summary.registry {
+        let name = summary
+            .names
+            .iter()
+            .find(|(_, ids)| ids.contains(id))
+            .map(|(n, _)| n.as_str())
+            .unwrap_or("*(not a basic axiom)*");
+        println!("| {id} | {name} | `{txt}` |");
+    }
+
+    println!(
+        "\nstamped={stamped} missing_stamp={missing} outside_basic_axioms={outside} total={}",
+        tasks.len()
+    );
+    Ok(if missing == 0 && outside == 0 { 0 } else { 1 })
 }
 
 #[cfg(test)]
@@ -994,6 +1446,8 @@ mod tests {
             timeout: false,
             log: format!("logs-{arch}/{dir}_{op}_{fam}.log"),
             exception: exit != 0,
+            stamp_required: false,
+            stamp_report: None,
         }
     }
 
@@ -1004,7 +1458,15 @@ mod tests {
             fixture("x86", "sm2", "neg", "sm2", 2),
         ];
         let text = results_json(
-            "all", true, 900, "5e0fc782", "d30e823", 1795501903, &results,
+            "all",
+            true,
+            900,
+            "5e0fc782",
+            "d30e823",
+            1795501903,
+            false,
+            &StampSummary::default(),
+            &results,
         );
         let j = json::parse(text.as_bytes()).expect("writer output must parse");
         assert_eq!(
@@ -1072,5 +1534,164 @@ mod tests {
         // `--help` is not a sweep flag; the dispatcher must still reject it
         // cleanly rather than panicking.
         assert_eq!(run(&args(&["sweep", "--help"])), 2);
+    }
+
+    #[test]
+    fn json_writer_emits_a_parseable_stamp_record() {
+        let summary = StampSummary {
+            registry: vec![(1, "eta-concl".into()), (2, "select-concl".into())],
+            names: vec![("ETA_AX".into(), vec![1]), ("SELECT_AX".into(), vec![2])],
+        };
+        let mut r = fixture("arm", "curve25519", "add", "p25519", 0);
+        r.stamp_required = true;
+        r.stamp_report = Some(StampReport {
+            begun: true,
+            reported: true,
+            axioms: vec!["id:1=|- eta".into(), "id:2=|- select".into()],
+            inference_before: Some(10),
+            inference_after: Some(42),
+            inference_delta: Some(32),
+            registry: summary.registry.clone(),
+            names: summary.names.clone(),
+        });
+        let text = results_json(
+            "arm",
+            true,
+            900,
+            "5e0fc782",
+            "d30e823",
+            1,
+            true,
+            &summary,
+            &[r],
+        );
+        let j = json::parse(text.as_bytes()).expect("stamp record must parse");
+        assert_eq!(j.get("stamp").unwrap(), &json::Json::Bool(true));
+        let reg = j.get("axiom_registry").unwrap().as_array().unwrap();
+        assert_eq!(reg.len(), 2);
+        assert_eq!(reg[0].get("id").unwrap(), &json::Json::Num(1.0));
+        assert_eq!(
+            reg[0].get("conclusion").unwrap().as_str(),
+            Some("eta-concl")
+        );
+        let basic = j.get("basic_axioms").unwrap().as_obj().unwrap();
+        assert_eq!(basic.len(), 2);
+        assert_eq!(
+            basic.get("SELECT_AX").unwrap().as_array().unwrap()[0],
+            json::Json::Num(2.0)
+        );
+        let task = &j.get("tasks").unwrap().as_array().unwrap()[0];
+        assert_eq!(task.get("axioms").unwrap().as_array().unwrap().len(), 2);
+        assert_eq!(task.get("inference_delta").unwrap(), &json::Json::Num(32.0));
+    }
+
+    #[test]
+    fn sweep_parses_stamp_flag() {
+        let parsed = parse_sweep_args(&args(&["--arch", "all", "--stamp"])).unwrap();
+        assert!(parsed.stamp);
+        assert!(!parse_sweep_args(&args(&["--arch", "all"])).unwrap().stamp);
+    }
+
+    #[test]
+    fn relative_paths_are_anchored_at_the_repo_root() {
+        // `make` is run from `<dropin>/<arch>`; a relative `--hol` would break.
+        let parsed = parse_sweep_args(&args(&[
+            "--arch",
+            "arm",
+            "--hol",
+            ".bench/hol-light-stamp",
+            "--json",
+            "research/receipts/x.json",
+        ]))
+        .unwrap();
+        assert!(parsed.hol.is_absolute());
+        assert!(parsed.hol.ends_with(".bench/hol-light-stamp"));
+        assert!(parsed.json.unwrap().is_absolute());
+        assert!(parsed.dropin.is_absolute());
+    }
+
+    #[test]
+    fn stamp_lines_are_parsed_verbatim() {
+        let text = "noise\n\
+                    STAMP_BEGIN BIGNUM_ADD_P25519_CORRECT\n\
+                    STAMP id:1=|- ETA|id:2=|- SELECT\n\
+                    STAMP_INF_BEFORE 100\n\
+                    STAMP_INF_AFTER 250\n\
+                    STAMP_INFERENCES 150\n\
+                    STAMP_REGISTRY 1 (eta)\n\
+                    STAMP_REGISTRY 3 (infinity)\n\
+                    STAMP_NAME ETA_AX 1\n\
+                    STAMP_NAME INFINITY_AX 3\n\
+                    val BIGNUM_ADD_P25519_CORRECT : thm = |- T\n";
+        let r = parse_stamp(text).expect("stamp lines present");
+        assert!(r.begun);
+        assert!(r.reported);
+        assert_eq!(r.axioms, vec!["id:1=|- ETA", "id:2=|- SELECT"]);
+        assert_eq!(r.inference_before, Some(100));
+        assert_eq!(r.inference_after, Some(250));
+        assert_eq!(r.inference_delta, Some(150));
+        assert_eq!(
+            r.registry,
+            vec![(1, "(eta)".to_string()), (3, "(infinity)".to_string())]
+        );
+        assert_eq!(
+            r.names,
+            vec![
+                ("ETA_AX".to_string(), vec![1]),
+                ("INFINITY_AX".to_string(), vec![3])
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_stamp_is_reported_not_missing() {
+        // `REFL` prints `STAMP ` with no ids: still a report, with no axioms.
+        let r = parse_stamp("STAMP_BEGIN X\nSTAMP \n").expect("present");
+        assert!(r.reported);
+        assert!(r.axioms.is_empty());
+    }
+
+    #[test]
+    fn unstamped_output_has_no_report() {
+        assert_eq!(parse_stamp("val X : thm = |- T\n"), None);
+    }
+
+    #[test]
+    fn stamp_required_turns_a_missing_stamp_red() {
+        let mut r = fixture("arm", "p256", "add", "p256", 0);
+        assert!(r.green());
+        r.stamp_required = true;
+        assert!(!r.green());
+        r.stamp_report = Some(StampReport {
+            begun: true,
+            reported: true,
+            ..StampReport::default()
+        });
+        assert!(r.green());
+    }
+
+    #[test]
+    fn ids_are_named_through_the_basic_axiom_map() {
+        let summary = StampSummary {
+            registry: vec![(1, "eta".into()), (2, "select".into()), (3, "inf".into())],
+            names: vec![
+                ("ETA_AX".into(), vec![1]),
+                ("INFINITY_AX".into(), vec![3]),
+                ("SELECT_AX".into(), vec![2]),
+            ],
+        };
+        assert_eq!(
+            summary.name_ids(&["1".into(), "3".into()]),
+            "{ETA_AX, INFINITY_AX}"
+        );
+        assert_eq!(summary.name_ids(&[]), "{}");
+        assert_eq!(summary.name_ids(&["7".into()]), "{id:7}");
+        // Real entries carry their conclusion; the id is still recovered.
+        assert_eq!(
+            summary.name_ids(&["id:2=|- SELECT".into(), "id:9=|- OTHER".into()]),
+            "{SELECT_AX, id:9=|- OTHER}"
+        );
+        assert_eq!(stamp_entry_id("id:12=|- x"), Some(12));
+        assert_eq!(stamp_entry_id("nope"), None);
     }
 }

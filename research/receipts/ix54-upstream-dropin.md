@@ -127,3 +127,22 @@ re-measured in that run and are superseded by the fresh values there (e.g. `add_
 70 s). Two caveats carried by the new receipt: `arm/p521/add_p521` takes 122 s against a
 120 s budget, and the ARM answers are spent development data, not a sealed result.
 Nothing in the sections above is rewritten.
+
+---
+
+## Addendum (IX.57): the per-theorem axiom stamp now exists
+
+`check_axioms ()` above is a **session** predicate: it can only say "no axiom other
+than the three basic ones exists in this session". `research/receipts/ix57-axiom-stamp.md`
+now records, for each of the same 27 theorems (18 ARM + 9 x86), the **set of
+`new_axiom` results its own derivation touches**: all 27 use exactly
+`{ETA_AX, SELECT_AX, INFINITY_AX}`, measured by an axiom-taint bitset carried in a
+copy of the kernel (`tools/hol-light/axiom-stamp.diff`), not inferred from
+`axioms()`. That run is 27/27 with `check_axioms` passing and the same task set as
+IX.56; it also records a primitive-rule invocation count per theorem
+(18,230,539–681,707,202) and per-theorem check time.
+
+It does **not** make the theorems true relative to those axioms, does not cover
+definitional dependencies, and does not export a derivation: proof-object export,
+HOLTrace-style external re-checking and Dedukti export remain open. The three
+sections above are untouched.
