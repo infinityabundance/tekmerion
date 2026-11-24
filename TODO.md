@@ -1509,7 +1509,10 @@ proved equivalent (`ix-o9-guard-mutation.md`), so 66/66 non-equivalent sites.** 
 the native checker's refusal sites.
 
 **O10 — evaluation integrity.** [~] O10.1 freeze tagged and pushed *before* the run; manifest is
-the only authority (done: `freeze-x86-sealed-v3` / `2705f5b`); [~] O10.2 sealed runs in structural
+the only authority. **Strengthened 2026-11-24:** `verify_freeze` now also refuses unless
+`git diff <freeze_commit> -- tools` is empty, so the code must *be* the frozen code, not merely
+clean (`ix-o9-guard-mutation.md` §4a). Consequence: `v3` no longer verifies against the moved
+tree; re-verify by checking out `2705f5b`. [~] O10.2 sealed runs in structural
 isolation — **benchmark proofs are now unreachable inside the container** (IX.54:
 `ix54-sealed-container.md`; O10.2 control shows `No such file or directory` and zero `s2n-bignum`
 `.ml` under the container view). Residual limits, stated: the container borrows host userland
@@ -1840,10 +1843,12 @@ carefully justified authority.
 - [x] **XI.L.10. Challenge files + comparator** for the nine statements (O1.1/O1.2). Done
   2026-11-24, `research/receipts/ix-o1-challenges.md`. `tools/challenge.py` freezes the exact
   statement bytes + corpus/object digests and verifies them against the judge program that ran.
-  **Honest limit:** the nine were frozen *after* the run (`pre-search false`, `POST_HOC`), so O1.1
-  is not met for them; `verify --require-pre-search` refuses them. Future runs must freeze before
-  `emit`. Kernel-term identity is by construction via `prove(query, …)`; the axiom whitelist is
-  still O4. Seven negative controls pass.
+  **27/27 PASS** (nine x86 sealed at `eval-20261124_003911`, eighteen ARM at
+  `eval-20261124_030015`). **Honest limit:** all were frozen *after* the run (`pre-search
+  false`, `POST_HOC`), so O1.1 is not met for them; `verify --require-pre-search` refuses them.
+  Future runs must freeze before `emit`. Kernel-term identity is by construction via
+  `prove(query, …)`; the axiom whitelist is now covered by the IX.54 upstream `check_axioms`.
+  Eight negative controls pass (including shared-template naming).
 
 ## XI.M — Deep research queue (novel / inverted combinations)
 

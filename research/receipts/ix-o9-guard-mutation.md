@@ -38,18 +38,19 @@ killed: 22  survived: 49
 mutation score: 22/71 = 0.310
 ```
 
-After `tools/test_guard_refusals.py` (one test per reachable site):
+After `tools/test_guard_refusals.py` (one test per reachable site) and the freeze-binding
+check added on the same day:
 
 ```
-guard refusal sites: 71
-killed: 66  survived: 5
-mutation score: 66/71 = 0.930
+guard refusal sites: 72
+killed: 66  survived: 6
+mutation score: 66/72 = 0.917
 ```
 
 The first score is the honest datum: the guard's admission refusals were **not** covered
 by the existing mode tests.
 
-## 4. The five survivors are equivalent mutants, with a reason
+## 4. The six survivors are equivalent mutants, with a reason
 
 Each survivor was inspected. In every case the mutant still *refuses*, because a downstream
 check raises the same exception:
@@ -57,17 +58,38 @@ check raises the same exception:
 | line | site | why removing it does not change accept/refuse |
 |---|---|---|
 | 271 | `check_path`: empty path | falls through to `_check_regular("")`, which raises `HeldOutRefused("empty path")` |
-| 596 | `check_object`: empty path | falls through to `check_path("")` → line 271 path → same refusal |
-| 621 | `check_proof`: empty path | falls through to `check_path("")` → same refusal |
-| 629 | `check_proof`: held-out marker (develop) | falls through to `check_path(path, …)`, which raises the same marker refusal (message differs: "in proof path …" vs "in …") |
-| 636 | `check_path`: empty path | falls through to the same `check_path("")` refusal |
+| 520 | `verify_freeze`: dirty `tools/` | a dirty tree also differs from the freeze commit, so the new `git diff` check refuses |
+| 607 | `check_object`: empty path | falls through to `check_path("")` → line 271 path → same refusal |
+| 632 | `check_proof`: empty path | falls through to `check_path("")` → same refusal |
+| 640 | `check_proof`: held-out marker (develop) | falls through to `check_path(path, …)`, which raises the same marker refusal (message differs) |
+| 647 | `check_path`: empty path | falls through to the same `check_path("")` refusal |
 
-Four are exactly behaviour-preserving; the fifth (629) preserves accept/refuse and differs
-only in the diagnostic string. No survivor turns a refusal into an acceptance. Effective
-coverage of non-equivalent sites is therefore **66/66**.
+Five are exactly behaviour-preserving; the sixth (the held-out marker in `check_proof`)
+preserves accept/refuse and differs only in the diagnostic string. No survivor turns a
+refusal into an acceptance.
 
 This is recorded rather than "fixed" by deleting the defensive early returns, because the
 early returns give the more specific diagnostic.
+
+## 4a. New freeze-binding check (2026-11-24)
+
+The harness exposed a real weakness: `verify_freeze` checked that `tools/` was *clean*, not
+that it *was* the frozen code. A later commit could change the emitters and still pass an
+older tag. It now also runs
+
+```
+git diff --name-only <freeze_commit> -- tools
+```
+
+and refuses if anything is listed. Firing controls: `test_sealed_refuses_tools_that_moved_since_the_freeze`
+uses a *valid but different* commit (so the tag check cannot mask the diff check) and also
+tests the tag-resolves-to-a-different-commit path.
+
+Consequence: `freeze-x86-sealed-v3` no longer verifies against the current tree, because
+`tools/` has moved. That is the intended behaviour; re-verifying IX.54 requires checking out
+`2705f5b`.
+
+Effective coverage of non-equivalent sites is **66/66**.
 
 ## 5. Firing controls
 

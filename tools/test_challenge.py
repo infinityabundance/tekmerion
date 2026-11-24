@@ -99,6 +99,21 @@ def test_judge_program_with_wrong_statement_is_caught(tmp_path, capsys):
     assert "FAIL judge-embeds-statement" in capsys.readouterr().out
 
 
+def test_judge_program_named_for_a_shared_template(tmp_path, capsys):
+    """A task may be inlined into a differently-named template (observed:
+    arm.bignum_sub_p256 lives in ml_files_arm_p256_montjdouble.ml)."""
+    p = _tree(tmp_path)
+    chal = _freeze(tmp_path, p)
+    evaldir = tmp_path / "eval"
+    evaldir.mkdir()
+    (evaldir / "ml_files_x86_some_other_template.ml").write_text(
+        'bench_run "' + TASK + '" (' + STATEMENT + ') (fun () -> TAC) 1 "x";\n')
+    (evaldir / f"{TASK}.judge.txt").write_text("OK")
+    capsys.readouterr()
+    assert _verify(p, chal, evaldir) == 0
+    assert "RESULT PASS" in capsys.readouterr().out
+
+
 def test_post_hoc_is_refused_when_pre_search_required(tmp_path, capsys):
     p = _tree(tmp_path)
     chal = tmp_path / "c.challenge"

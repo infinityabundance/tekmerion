@@ -1,0 +1,28 @@
+tnps-challenge v1
+task arm.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT
+category functional_correctness_arm
+standard tnps/1
+frozen-at POST_HOC: judged at eval-20261124_030015; challenge recorded after the run
+pre-search false
+problems-json-sha256 74f314445fa5f579d18b03e73c167ea0ca56e0581e26add8a11d8d077f7ea8d4
+statement-sha256 3c49dbdadf35a59f0841bb35e992f164b90ab1093ec06f565dd1287900226359
+statement-bytes 674
+object arm/sm2/bignum_sub_sm2.o
+object-sha256 e9109c12786e2e238ce54cd999fb42127b3bb105550c04edba7bc282ba53980b
+s2n-bignum-commit 5e0fc782ae6d587c2ae40faf2c2c4d0b637e6240
+--- statement begin ---
+`!z x y m n pc.
+        nonoverlapping (word pc,0x48) (z,8 * 4)
+        ==> ensures arm
+             (\s. aligned_bytes_loaded s (word pc) bignum_sub_sm2_mc /\
+                  read PC s = word pc /\
+                  C_ARGUMENTS [z; x; y] s /\
+                  bignum_from_memory (x,4) s = m /\
+                  bignum_from_memory (y,4) s = n)
+             (\s. read PC s = word (pc + 0x44) /\
+                  (m < p_sm2 /\ n < p_sm2
+                   ==> &(bignum_from_memory (z,4) s) = (&m - &n) rem &p_sm2))
+          (MAYCHANGE [PC; X3; X4; X5; X6; X7; X8] ,,
+           MAYCHANGE SOME_FLAGS ,, MAYCHANGE [events] ,,
+           MAYCHANGE [memory :> bignum(z,4)])`
+--- statement end ---

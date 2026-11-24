@@ -254,6 +254,30 @@ def test_sealed_refuses_freeze_mismatch(tmp_path):
         heldout_guard.sealed_policy(str(manifest), FREEZE_TAG, repo=repo)
 
 
+def test_sealed_refuses_tools_that_moved_since_the_freeze(tmp_path):
+    """Clean is not enough: the tree must be the frozen code."""
+    repo, commit1 = _init_repo(tmp_path)
+    (repo / "tools" / "tracked.py").write_text("# later\n", encoding="utf-8")
+    _git(repo, "add", "tools/tracked.py")
+    _git(repo, "-c", "user.name=infinityabundance",
+         "-c", "user.email=255699974+infinityabundance@users.noreply.github.com",
+         "-c", "commit.gpgsign=false", "commit", "-q", "-m", "later")
+    commit2 = _git(repo, "rev-parse", "HEAD")
+
+    # Clean tree at commit2, manifest frozen at commit1: refuse.
+    with pytest.raises(heldout_guard.HeldOutRefused,
+                       match="differs from the freezer commit"):
+        heldout_guard.sealed_policy(
+            str(_write_manifest(tmp_path, NINE, commit1, "moved.json")),
+            FREEZE_TAG, repo=repo)
+
+    # Manifest records commit2 but the tag resolves to commit1: refuse.
+    with pytest.raises(heldout_guard.HeldOutRefused, match="resolves to"):
+        heldout_guard.sealed_policy(
+            str(_write_manifest(tmp_path, NINE, commit2, "wrong-commit2.json")),
+            FREEZE_TAG, repo=repo)
+
+
 # --------------------------------------------------------------------------
 # 6. Manifest validation
 # --------------------------------------------------------------------------

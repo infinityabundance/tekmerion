@@ -200,18 +200,19 @@ def verify(args) -> int:
 
     if args.evaldir:
         evaldir = Path(args.evaldir)
-        cands = sorted(evaldir.glob(f"ml_files_*_{task.split('.')[1]}.ml"))
-        check("judge-ml-found", len(cands) == 1, f"{len(cands)} candidate(s)")
-        if len(cands) == 1:
-            check("judge-embeds-statement",
-                  contains_wrapper(cands[0].read_bytes(), task,
-                                   statement.decode("utf-8")))
-            judge_txt = evaldir / f"{task}.judge.txt"
-            if judge_txt.is_file():
-                verdict = judge_txt.read_text(encoding="utf-8").strip()
-                check("judge-verdict-ok", verdict == "OK", verdict)
-            else:
-                notes.append(f"no judge verdict file at {judge_txt}")
+        cands = sorted(evaldir.glob("ml_files_*.ml"))
+        hits = [p for p in cands
+                if contains_wrapper(p.read_bytes(), task, statement.decode("utf-8"))]
+        check("judge-program-scanned", len(cands) > 0, f"{len(cands)} ml_files_*.ml")
+        check("judge-embeds-statement", len(hits) == 1,
+              f"{len(hits)} of {len(cands)} judge program(s) embed it"
+              + (f"; {hits[0].name}" if len(hits) == 1 else ""))
+        judge_txt = evaldir / f"{task}.judge.txt"
+        if judge_txt.is_file():
+            verdict = judge_txt.read_text(encoding="utf-8").strip()
+            check("judge-verdict-ok", verdict == "OK", verdict)
+        else:
+            notes.append(f"no judge verdict file at {judge_txt}")
 
     if args.require_pre_search:
         check("pre-search", f.get("pre-search") == "true",

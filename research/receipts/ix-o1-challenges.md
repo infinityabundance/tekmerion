@@ -3,7 +3,7 @@
 - **Date:** 2026-11-24
 - **Branch:** `staging`
 - **Artefacts:** `tools/challenge.py`, `tools/test_challenge.py`,
-  `research/challenges/*.challenge` (nine files)
+  `research/challenges/*.challenge` (twenty-seven files: nine x86 sealed, eighteen ARM)
 - **Corpus:** `.bench/problems.json` sha256 `74f314445fa5f579d18b03e73c167ea0ca56e0581e26add8a11d8d077f7ea8d4`
 - **s2n-bignum:** `5e0fc782ae6d587c2ae40faf2c2c4d0b637e6240`
 
@@ -23,16 +23,23 @@ The comparator is deliberately independent of `emit_ref_proof*.py` and of
 `heldout_guard.py`: it re-implements the object lookup instead of importing the
 emitters, so a defect in the producer cannot hide in the checker of the producer.
 
-## 2. Result — nine of nine PASS
+## 2. Result — twenty-seven of twenty-seven PASS
 
-For every one of the nine sealed x86 tasks, `verify --evaldir
-.bench/eval-20261124_003911` reports PASS on all of: `statement-sha256`,
-`statement-bytes`, `task-present`, `statement==problems.json`, `category`,
-`object-exists`, `object-sha256`, `judge-ml-found`, `judge-embeds-statement`,
-`judge-verdict-ok`.
+The nine sealed x86 tasks verify against `.bench/eval-20261124_003911`, and the eighteen
+ARM `add`/`sub`/`neg` tasks verify against `.bench/eval-20261124_030015`. For every task
+`verify` reports PASS on: `statement-sha256`, `statement-bytes`, `task-present`,
+`statement==problems.json`, `category`, `object-exists`, `object-sha256`,
+`judge-program-scanned`, `judge-embeds-statement`, `judge-verdict-ok`.
 
 That binds, for each task: the intended statement → the corpus → the object →
 the exact judge program → the `OK` verdict file.
+
+One comparator defect was found and fixed while doing this: the first version guessed the
+judge-program filename from the task id, but some tasks are inlined into a
+*differently named* shared template (`arm.bignum_sub_p256` lives in
+`ml_files_arm_p256_montjdouble.ml`). `verify` now scans every `ml_files_*.ml` and requires
+exactly one to embed the statement. Regression test:
+`test_judge_program_named_for_a_shared_template`.
 
 ## 3. What this does **not** establish
 
@@ -45,7 +52,7 @@ the exact judge program → the `OK` verdict file.
 * **The axiom whitelist is not checked.** The harness compares axiom *counts*
   (`axioms_before = axioms_after`), which detects cheating but permits inherited
   context. The whitelist belongs to O4 (empty-kernel re-check).
-* **O1.1 is not met for these nine.** The challenge files were written *after* the
+* **O1.1 is not met for these twenty-seven.** The challenge files were written *after* the
   judged run, so each carries `pre-search false` and
   `frozen-at POST_HOC: judged at eval-20261124_003911`. `verify
   --require-pre-search` refuses them, and certification must. For future runs,

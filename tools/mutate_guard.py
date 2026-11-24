@@ -41,10 +41,11 @@ DEFAULT_TESTS = [
 # inheriting the exemption. See research/receipts/ix-o9-guard-mutation.md §4.
 EQUIVALENT = {
     (271, 'raise HeldOutRefused("empty path")'),
-    (596, 'raise HeldOutRefused("empty path")'),
-    (621, 'raise HeldOutRefused("empty path")'),
-    (636, 'raise HeldOutRefused("empty path")'),
-    (629, 'raise HeldOutRefused( f"held-out marker {marker!r} in proof path {path}")'),
+    (520, 'raise HeldOutRefused( f"working tree has changes to tracked files under tools/: {first}")'),
+    (607, 'raise HeldOutRefused("empty path")'),
+    (632, 'raise HeldOutRefused("empty path")'),
+    (647, 'raise HeldOutRefused("empty path")'),
+    (640, 'raise HeldOutRefused( f"held-out marker {marker!r} in proof path {path}")'),
 }
 
 

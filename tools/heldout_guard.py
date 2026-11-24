@@ -520,6 +520,17 @@ def verify_freeze(manifest: SealedManifest, freeze_tag: str,
         raise HeldOutRefused(
             f"working tree has changes to tracked files under tools/: {first}")
 
+    # Cleanliness is not enough: the tree must *be* the frozen code.  Without
+    # this, a later commit could change the emitters and still be accepted
+    # under an older freeze tag.
+    changed = _git(repo, "diff", "--name-only", manifest.freeze_commit,
+                   "--", "tools").strip()
+    if changed:
+        first = changed.splitlines()[0]
+        raise HeldOutRefused(
+            f"tools/ differs from the freezer commit {manifest.freeze_commit[:12]}: "
+            f"{first}")
+
 
 # --------------------------------------------------------------------------
 # Policy object shared by the guard command and the emitters
