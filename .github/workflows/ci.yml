@@ -41,9 +41,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Python test dependency
-        run: python3 -m pip install --quiet pytest
-
       # tools/selftest.sh syntax-checks an OCaml module; it needs ocamlc but does
       # not load HOL Light or the bench.
       - name: Install OCaml (syntax check only)
@@ -65,19 +62,21 @@ jobs:
       - name: cargo clippy (offline, warnings are errors)
         run: cargo clippy --offline --all-targets -- -D warnings
 
-      # Bench-dependent tests skip themselves when .bench is absent.
-      - name: Python tool tests (offline)
-        run: python3 -m pytest tools/ -q
+      # The Python proof-production chain (guard, derive, disasm, emitters) and
+      # its pytest suite are now Rust (`src/tools`, `tests/tools_*.rs`), so there
+      # is no pytest-collectable Python test left to run here. The remaining
+      # Python harness, tools/test_write_through.py, is exercised directly by
+      # tools/selftest.sh below.
 
       - name: Refusal-site mutation harness (offline)
-        run: python3 tools/mutate.py
+        run: cargo run --offline --quiet --bin mutate
 
       - name: Lifecycle mutation harness (offline)
-        run: python3 tools/mutate_lifecycle.py
+        run: cargo run --offline --quiet --bin mutate_lifecycle
 
-      # The Python guard decides which tasks may be opened, so its refusals are
-      # on the acceptance path. The Rust harness mutates every HeldOutRefused
-      # site and requires the mode tests to notice; it restores the file in Drop.
+      # The guard now lives in src/tools/guard.rs. The Rust harness mutates every
+      # Err(Refused::new(..)) site in it and requires tests/tools_guard.rs to
+      # notice; it restores the file in Drop.
       - name: Guard refusal-site mutation harness (Rust, offline)
         run: cargo run --offline --quiet --bin mutate_guard
 

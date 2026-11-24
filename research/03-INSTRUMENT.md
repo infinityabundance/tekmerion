@@ -206,7 +206,7 @@ application and carries `"scope": "conv"`.
 | `trace/fixtures/conformance/stock/REWRITE_TAC.json` | Stock success records used by the conformance self-test. |
 | `trace/fixtures/conformance/patched/REWRITE_TAC.json` | Identical content, standing in for the patched run. |
 | `trace/fixtures/conformance/diverged/REWRITE_TAC.json` | Same content with one `num_subgoals` value changed, so the self-test must fail and name that field. |
-| `tools/selftest.sh` | Runs the OCaml syntax check, the write-through stub test, both Python self-tests, `cargo test --offline`, and `tools/mutate.py`. Exits non-zero on any failure. Uses a temporary directory for OCaml artifacts. |
+| `tools/selftest.sh` | Runs the OCaml syntax check, the write-through stub test, both Python self-tests, `cargo test --offline`, and `cargo run --bin mutate`. Exits non-zero on any failure. Uses a temporary directory for OCaml artifacts. |
 
 ### Exact integration sequence with TacticTrace
 

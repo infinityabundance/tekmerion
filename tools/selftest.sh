@@ -127,18 +127,18 @@ else
   fail "cargo test --offline failed"
 fi
 
-section "6/7b existing mutation harness (tools/mutate.py)"
-if python3 tools/mutate.py; then
-  printf 'OK: tools/mutate.py passed\n'
+section "6/7b existing mutation harness (cargo run --bin mutate)"
+if cargo run --offline --quiet --bin mutate; then
+  printf 'OK: cargo run --bin mutate passed\n'
 else
-  fail "tools/mutate.py failed"
+  fail "cargo run --bin mutate failed"
 fi
 
-section "7/7 lifecycle mutation harness (tools/mutate_lifecycle.py)"
-if python3 tools/mutate_lifecycle.py; then
-  printf 'OK: tools/mutate_lifecycle.py passed\n'
+section "7/7 lifecycle mutation harness (cargo run --bin mutate_lifecycle)"
+if cargo run --offline --quiet --bin mutate_lifecycle; then
+  printf 'OK: cargo run --bin mutate_lifecycle passed\n'
 else
-  fail "tools/mutate_lifecycle.py failed"
+  fail "cargo run --bin mutate_lifecycle failed"
 fi
 
 # ---------------------------------------------------------------------------

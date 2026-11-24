@@ -5,7 +5,7 @@
 - **Artefacts:** `src/tools/mutate_guard.rs`, `tools/test_guard_refusals.py`,
   `.github/workflows/ci.yml`
 - **Subject:** `tools/heldout_guard.py` (the Python guard that decides which tasks and
-  objects may be opened). `tools/mutate.py` mutates the *Rust* refusal sites only; the
+  objects may be opened). `cargo run --bin mutate` mutates the *Rust* refusal sites only; the
   guard was not covered by it.
 
 ## 1. Why this matters

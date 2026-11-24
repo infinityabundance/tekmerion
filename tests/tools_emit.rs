@@ -1,0 +1,284 @@
+//! Byte-identity acceptance tests for the Rust emitters.
+//!
+//! The reference answers under `.bench/dropin-gen/answers{,-arm}` were produced
+//! by the Python emitters at the pinned inputs. For every task the Rust emitter
+//! in `--mode answer` must reproduce the file byte for byte, under the same
+//! guard mode and manifest. The tests skip themselves when `.bench` is absent.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use tekmerion::tools::emit;
+use tekmerion::tools::guard::{self, default_held_out, GuardPolicy, Manifest, Mode};
+
+static SEQ: AtomicU32 = AtomicU32::new(0);
+
+struct Tmp(PathBuf);
+
+impl Tmp {
+    fn new(tag: &str) -> Tmp {
+        let n = SEQ.fetch_add(1, Ordering::SeqCst);
+        let p = std::env::temp_dir().join(format!("tek-emit-{}-{}-{}", std::process::id(), tag, n));
+        let _ = fs::remove_dir_all(&p);
+        fs::create_dir_all(&p).unwrap();
+        Tmp(p)
+    }
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Tmp {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn repo() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+fn answers_x86() -> PathBuf {
+    repo().join(".bench/dropin-gen/answers")
+}
+
+fn answers_arm() -> PathBuf {
+    repo().join(".bench/dropin-gen/answers-arm")
+}
+
+fn sealed_manifest_path() -> PathBuf {
+    repo().join("research/receipts/ix55-sealed-manifest.json")
+}
+
+fn spent_manifest_path() -> PathBuf {
+    repo().join("research/receipts/spent-r4-arm.json")
+}
+
+fn sealed_policy() -> GuardPolicy {
+    let manifest = guard::load_sealed_manifest(&sealed_manifest_path()).expect("sealed manifest");
+    GuardPolicy::new(
+        Mode::SealedEval,
+        Some(Manifest::Sealed(manifest)),
+        &repo(),
+        &default_held_out(),
+    )
+    .expect("sealed policy")
+}
+
+fn spent_policy() -> GuardPolicy {
+    let manifest = guard::load_spent_manifest(&spent_manifest_path()).expect("spent manifest");
+    GuardPolicy::new(
+        Mode::Spent,
+        Some(Manifest::Spent(manifest)),
+        &repo(),
+        &default_held_out(),
+    )
+    .expect("spent policy")
+}
+
+const X86_TASKS: [&str; 9] = [
+    "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+    "x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT",
+    "x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT",
+    "x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
+    "x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT",
+    "x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT",
+    "x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT",
+    "x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT",
+    "x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT",
+];
+
+const ARM_TASKS: [&str; 18] = [
+    "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+    "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT",
+    "arm.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT",
+    "arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT",
+    "arm.bignum_add_p521.BIGNUM_ADD_P521_CORRECT",
+    "arm.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT",
+    "arm.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
+    "arm.bignum_neg_p256.BIGNUM_NEG_P256_CORRECT",
+    "arm.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT",
+    "arm.bignum_neg_p384.BIGNUM_NEG_P384_CORRECT",
+    "arm.bignum_neg_p521.BIGNUM_NEG_P521_CORRECT",
+    "arm.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT",
+    "arm.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT",
+    "arm.bignum_sub_p256.BIGNUM_SUB_P256_CORRECT",
+    "arm.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT",
+    "arm.bignum_sub_p384.BIGNUM_SUB_P384_CORRECT",
+    "arm.bignum_sub_p521.BIGNUM_SUB_P521_CORRECT",
+    "arm.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT",
+];
+
+/// Assert byte equality, reporting the first differing offset.
+fn assert_identical(task: &str, got: &[u8], want: &[u8]) {
+    if got == want {
+        return;
+    }
+    let at = got
+        .iter()
+        .zip(want.iter())
+        .position(|(a, b)| a != b)
+        .unwrap_or_else(|| got.len().min(want.len()));
+    let from = at.saturating_sub(40);
+    let to_got = (at + 40).min(got.len());
+    let to_want = (at + 40).min(want.len());
+    panic!(
+        "{task}: first difference at byte {at} (got {} bytes, want {} bytes)\n  got:  {:?}\n  want: {:?}",
+        got.len(),
+        want.len(),
+        String::from_utf8_lossy(&got[from..to_got]),
+        String::from_utf8_lossy(&want[from..to_want]),
+    );
+}
+
+#[test]
+fn x86_answers_are_byte_identical() {
+    if !answers_x86().is_dir() {
+        return;
+    }
+    let policy = sealed_policy();
+    let mut count = 0;
+    for task in X86_TASKS {
+        let parsed = guard::parse_task_id(task).expect("declared task id");
+        let info = emit::build_x86(&parsed.op, task, &policy, &repo())
+            .unwrap_or_else(|e| panic!("{task}: {e}"));
+        let text = emit::inlined_answer(&info.tactic, &repo()).expect("answer");
+        let path = answers_x86().join(format!("bignum_{}_{}.answer.txt", parsed.op, parsed.family));
+        let want = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert_identical(task, text.as_bytes(), &want);
+        count += 1;
+    }
+    assert_eq!(count, 9);
+}
+
+#[test]
+fn arm_answers_are_byte_identical() {
+    if !answers_arm().is_dir() {
+        return;
+    }
+    let policy = spent_policy();
+    let mut count = 0;
+    for task in ARM_TASKS {
+        let parsed = guard::parse_task_id(task).expect("declared task id");
+        let info = emit::build_arm(&parsed.op, task, &policy, &repo())
+            .unwrap_or_else(|e| panic!("{task}: {e}"));
+        let text = emit::inlined_answer(&info.tactic, &repo()).expect("answer");
+        let path = answers_arm().join(format!("bignum_{}_{}.answer.txt", parsed.op, parsed.family));
+        let want = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert_identical(task, text.as_bytes(), &want);
+        count += 1;
+    }
+    assert_eq!(count, 18);
+}
+
+#[test]
+fn arm_dev_mode_refuses_a_spent_proof_file() {
+    if !answers_arm().is_dir() {
+        return;
+    }
+    let policy = spent_policy();
+    let task = "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT";
+    let info = emit::build_arm("add", task, &policy, &repo()).expect("build");
+    match emit::dev_script_arm(&info, &policy, &repo()) {
+        Err(e) => assert!(
+            e.to_string().contains("never readable"),
+            "unexpected dev refusal: {e}"
+        ),
+        Ok(_) => panic!("spent mode produced a dev script from the proof text"),
+    }
+}
+
+#[test]
+fn x86_dev_mode_refuses_a_sealed_proof_file() {
+    if !answers_x86().is_dir() {
+        return;
+    }
+    let policy = sealed_policy();
+    let task = "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
+    let info = emit::build_x86("add", task, &policy, &repo()).expect("build");
+    match emit::dev_script_x86(&info, &policy, &repo()) {
+        Err(e) => assert!(
+            e.to_string().contains("never readable"),
+            "unexpected dev refusal: {e}"
+        ),
+        Ok(_) => panic!("sealed mode produced a dev script from the proof text"),
+    }
+}
+
+/// Freeze verification end to end: a throw-away repository at a tag, holding a
+/// copy of `tools/` and a symlink to the benchmark tree, must reproduce an
+/// answer byte for byte.
+#[test]
+fn sealed_freeze_verification_end_to_end() {
+    if !answers_x86().is_dir() {
+        return;
+    }
+    if Command::new("git").arg("--version").output().is_err() {
+        return;
+    }
+    let tmp = Tmp::new("freeze");
+    let root = tmp.path();
+    fs::create_dir_all(root.join("tools")).unwrap();
+    for name in ["csat_lib.ml", "bridge.ml"] {
+        fs::copy(
+            repo().join("tools").join(name),
+            root.join("tools").join(name),
+        )
+        .unwrap();
+    }
+    std::os::unix::fs::symlink(repo().join(".bench"), root.join(".bench")).unwrap();
+
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap_or_else(|e| panic!("cannot run git: {e}"));
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    git(&["init", "-q"]);
+    git(&["add", "tools/csat_lib.ml", "tools/bridge.ml"]);
+    git(&[
+        "-c",
+        "user.name=infinityabundance",
+        "-c",
+        "user.email=255699974+infinityabundance@users.noreply.github.com",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "freeze",
+    ]);
+    git(&["tag", "freeze-rust-test"]);
+    let commit = git(&["rev-parse", "HEAD"]);
+
+    let task = X86_TASKS[0];
+    let manifest_path = root.join("sealed.json");
+    fs::write(
+        &manifest_path,
+        format!(
+            "{{\"freeze_commit\":\"{commit}\",\"freeze_tag\":\"freeze-rust-test\",\"sealed_ids\":[\"{task}\"]}}"
+        ),
+    )
+    .unwrap();
+
+    let policy = guard::sealed_policy(
+        &manifest_path,
+        "freeze-rust-test",
+        root,
+        &default_held_out(),
+    )
+    .expect("frozen tree must be accepted");
+    let info = emit::build_x86("add", task, &policy, root).expect("build");
+    let text = emit::inlined_answer(&info.tactic, root).expect("answer");
+    let want = fs::read(answers_x86().join("bignum_add_p25519.answer.txt")).unwrap();
+    assert_identical(task, text.as_bytes(), &want);
+}

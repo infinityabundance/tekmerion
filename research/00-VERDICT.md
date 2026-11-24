@@ -167,7 +167,7 @@ cd /mnt/1tb_kingston/Tekmerion
 
 # 1. Reproduce the measurements (no network, no 20 GB build).
 cargo test --offline
-python3 tools/mutate.py
+cargo run --offline --bin mutate
 cargo run --offline --example reassembly
 
 # 2. Build the benchmark environment (needs ~20 GB and ~1 h).

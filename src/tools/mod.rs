@@ -5,6 +5,13 @@
 //! `native::check` never calls them.
 
 pub mod challenge;
+pub mod derive;
+pub mod disasm;
+pub mod dropin;
+pub mod emit;
+pub mod guard;
 pub mod json;
+pub mod mutate;
 pub mod mutate_guard;
+pub mod mutate_lifecycle;
 pub mod script_gate;

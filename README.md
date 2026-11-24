@@ -95,7 +95,7 @@ Measured on 2026-11-22, Rust 1.98.0, this machine:
 |---|---|---|
 | Tests | 46 passing | `cargo test` |
 | Refusal sites | 16 | `R01`–`R16` |
-| Valid mutants | 16 (no non-compiling mutants) | `tools/mutate.py` |
+| Valid mutants | 16 (no non-compiling mutants) | `cargo run --bin mutate` |
 | Mutation score | **16/16 = 1.000** | every disabled refusal is caught |
 | Lifecycle fault sites | 5 | `L01`–`L05`, feature `fault-injection` |
 | Lifecycle mutation score | **5/5 = 1.000** | every lifecycle control is caught |
@@ -112,7 +112,8 @@ experiment E3 in `research/02-EXPERIMENTS.md`, which puts real object bytes from
 
 ### The mutation harnesses
 
-`tools/mutate.py` implements invariant 5 — every instrument proves its sensitivity. For each
+`cargo run --bin mutate` (source: `src/tools/mutate.rs`) implements invariant 5 — every
+instrument proves its sensitivity. For each
 refusal site it replaces `refuse!` with the no-op `skip_refusal!` and runs the suite. A
 mutant that fails to compile is excluded from the score rather than counted as killed; a
 site whose removal no test notices is reported as `SURVIVED` and the script exits non-zero.
@@ -121,7 +122,8 @@ The technique is not ours. It is published as refusal-site mutation testing
 (arXiv 2608.26183, August 2026), which also reports 112 refusal sites of which 75 could be
 deleted with a green suite. Cite it; do not claim it.
 
-`tools/mutate_lifecycle.py` covers the lifecycle rather than the wire format. The crate has
+`cargo run --bin mutate_lifecycle` (source: `src/tools/mutate_lifecycle.rs`) covers the
+lifecycle rather than the wire format. The crate has
 an off-by-default `fault-injection` feature and a `fault(code)` switch driven by
 `TEKMERION_FAULT`. Five guarded sites (`L01`–`L05`) disable, respectively, pin handling in
 effective status, the pins comparison in `classify`, closure propagation in `status`,
@@ -155,13 +157,13 @@ update. Rendering emits the node table, then the head map.
 README.md              this file
 Cargo.toml             crate `tekmerion`, published as 0.1.0
 src/                   typed revocation engine
+src/tools/mutate.rs    refusal-site mutation harness (`--bin mutate`)
+src/tools/mutate_lifecycle.rs  lifecycle fault-injection harness (`--bin mutate_lifecycle`)
 tests/                 46 tests, including one per refusal site and lifecycle status tests
 examples/              reassembly.rs: the gap s2n-bignum names, step by step
 trace/                 failure-side extension to TacticTrace
   exptrace_failure.ml  write-through failure capture, `exptrace_guard`
   fixtures/            wrapper golden file and conformance record pairs
-tools/mutate.py        refusal-site mutation harness
-tools/mutate_lifecycle.py  lifecycle fault-injection harness (feature `fault-injection`)
 tools/patch_wrapper.py rewrites a generated kernel_wrapper.ml, fail-closed
 tools/trace_conformance.py  stock vs patched success records, field by field
 tools/test_write_through.py proves a failure reaches disk before any dump
@@ -183,8 +185,8 @@ research/
 bash tools/selftest.sh                     # everything below, one command
 cargo test --offline                       # 46 tests
 cargo test --offline --features fault-injection  # same suite, lifecycle faults armed
-python3 tools/mutate.py                    # refusal-site mutation score
-python3 tools/mutate_lifecycle.py          # lifecycle mutation score
+cargo run --offline --bin mutate            # refusal-site mutation score
+cargo run --offline --bin mutate_lifecycle  # lifecycle mutation score
 cargo run --offline --example reassembly   # the reassembly gap, step by step
 ```
 
