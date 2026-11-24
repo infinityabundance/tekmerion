@@ -114,6 +114,37 @@ def test_judge_program_named_for_a_shared_template(tmp_path, capsys):
     assert "RESULT PASS" in capsys.readouterr().out
 
 
+def test_missing_verdict_is_not_a_pass(tmp_path, capsys):
+    p = _tree(tmp_path)
+    chal = _freeze(tmp_path, p)
+    evaldir = _judged(tmp_path)
+    (evaldir / f"{TASK}.judge.txt").unlink()
+    capsys.readouterr()
+    assert _verify(p, chal, evaldir) == 1
+    out = capsys.readouterr().out
+    assert "FAIL judge-verdict-ok" in out and "missing verdict file" in out
+
+
+def test_corpus_digest_mismatch_is_caught(tmp_path, capsys):
+    p = _tree(tmp_path)
+    chal = _freeze(tmp_path, p)
+    corpus = json.loads(p["problems"].read_text())
+    corpus["harmless"] = {"category": "x", "query": "`True`"}
+    p["problems"].write_text(json.dumps(corpus))
+    capsys.readouterr()
+    assert _verify(p, chal) == 1
+    assert "FAIL problems-json-sha256" in capsys.readouterr().out
+
+
+def test_no_verdict_evidence_is_incomplete_not_pass(tmp_path, capsys):
+    p = _tree(tmp_path)
+    chal = _freeze(tmp_path, p)
+    capsys.readouterr()
+    assert _verify(p, chal) == 3
+    out = capsys.readouterr().out
+    assert "RESULT INCOMPLETE" in out and "RESULT PASS" not in out
+
+
 def test_post_hoc_is_refused_when_pre_search_required(tmp_path, capsys):
     p = _tree(tmp_path)
     chal = tmp_path / "c.challenge"

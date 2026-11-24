@@ -183,8 +183,12 @@ def verify(args) -> int:
           f"recorded={f.get('statement-bytes')}")
 
     corpus_path = Path(args.problems)
-    corpus = json.loads(corpus_path.read_bytes())
+    corpus_bytes = corpus_path.read_bytes()
+    corpus = json.loads(corpus_bytes)
     task = f["task"]
+    check("problems-json-sha256",
+          sha256(corpus_bytes) == f.get("problems-json-sha256"),
+          f"recorded={f.get('problems-json-sha256')}")
     check("task-present", task in corpus)
     if task in corpus:
         check("statement==problems.json",
@@ -198,6 +202,14 @@ def verify(args) -> int:
     if obj.is_file():
         check("object-sha256", sha256(obj.read_bytes()) == f.get("object-sha256"))
 
+    recorded_commit = f.get("s2n-bignum-commit", "unknown")
+    live_commit = git_head(s2n)
+    if recorded_commit == "unknown":
+        notes.append("s2n-bignum-commit was not recorded (no git metadata at freeze)")
+    else:
+        check("s2n-bignum-commit", live_commit == recorded_commit,
+              f"recorded={recorded_commit[:12]} live={live_commit[:12]}")
+
     if args.evaldir:
         evaldir = Path(args.evaldir)
         cands = sorted(evaldir.glob("ml_files_*.ml"))
@@ -208,22 +220,32 @@ def verify(args) -> int:
               f"{len(hits)} of {len(cands)} judge program(s) embed it"
               + (f"; {hits[0].name}" if len(hits) == 1 else ""))
         judge_txt = evaldir / f"{task}.judge.txt"
-        if judge_txt.is_file():
-            verdict = judge_txt.read_text(encoding="utf-8").strip()
-            check("judge-verdict-ok", verdict == "OK", verdict)
-        else:
-            notes.append(f"no judge verdict file at {judge_txt}")
+        check("judge-verdict-ok", judge_txt.is_file()
+              and judge_txt.read_text(encoding="utf-8").strip() == "OK",
+              "missing verdict file" if not judge_txt.is_file()
+              else judge_txt.read_text(encoding="utf-8").strip())
+    else:
+        notes.append("no --evaldir: verdict evidence missing, result is INCOMPLETE")
 
     if args.require_pre_search:
         check("pre-search", f.get("pre-search") == "true",
               f"frozen-at={f.get('frozen-at')}")
 
     notes.append("NOT CHECKED: kernel-term identity (needs an exported proof "
-                 "object); axiom whitelist (the harness compares counts only).")
+                 "object) and the axiom whitelist (the harness compares counts "
+                 "only; see the upstream drop-in receipt).")
+    notes.append("NOT CHECKED: the statement's upstream provenance; this "
+                 "comparator reads the same corpus the producer used.")
     for n in notes:
         print(f"NOTE {n}")
-    print(f"RESULT {'PASS' if ok else 'FAIL'} {task}")
-    return 0 if ok else 1
+    if not ok:
+        print(f"RESULT FAIL {task}")
+        return 1
+    if not args.evaldir:
+        print(f"RESULT INCOMPLETE {task}")
+        return 3
+    print(f"RESULT PASS {task}")
+    return 0
 
 
 def main(argv=None) -> int:

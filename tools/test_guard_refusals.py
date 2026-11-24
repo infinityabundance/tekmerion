@@ -311,6 +311,27 @@ def test_object_not_a_bignum_object(tmp_path):
         pol.check_object("arm/p25519/notbignum_p25519.o")
 
 
+def test_object_not_in_manifest(tmp_path):
+    """Synthetic: no .bench needed. A held-out object whose task is not listed."""
+    pol = _policy(g.MODE_SEALED_EVAL, _sealed_manifest(tmp_path))
+    with pytest.raises(g.HeldOutRefused, match="is not in the"):
+        pol.check_object("x86/sm2/bignum_add_sm2.o", root=str(tmp_path))
+
+
+def test_object_requires_allowed_root(tmp_path):
+    """Synthetic: the listed object still requires root when admitted."""
+    pol = _policy(g.MODE_SEALED_EVAL, _sealed_manifest(tmp_path))
+    with pytest.raises(g.HeldOutRefused, match="requires an allowed root"):
+        pol.check_object("x86/curve25519/bignum_add_p25519.o", root=None)
+
+
+def test_proof_of_listed_task_is_never_readable(tmp_path):
+    """Synthetic: a manifest-listed task's proof text is refused in every mode."""
+    pol = _policy(g.MODE_SEALED_EVAL, _sealed_manifest(tmp_path))
+    with pytest.raises(g.HeldOutRefused, match="never readable"):
+        pol.check_proof("x86/proofs/bignum_add_p25519.ml")
+
+
 def test_proof_empty_path():
     with pytest.raises(g.HeldOutRefused, match="empty path"):
         g.develop_policy().check_proof("")
