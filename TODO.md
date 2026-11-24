@@ -1419,3 +1419,419 @@ already done, the falsifiable experiment, and the cost. Only after that may it b
 6. X.13–X.17 acceleration, scalar reference first.
 Done in this order because (2) needs an untouched `tools/` tree, (3) does not touch `tools/`, and
 (4) dirties it.
+
+---
+
+# PART XI — The Tekmerion Ordeal, Millennium Layer, and Areopagus (intake 2026-11-24)
+
+Source: the external reviews dated 2026-11-24 plus the four standards documents
+(Ordeal v1, Millennium Layer, Areopagus, and the millennial architecture). **Nothing is
+omitted.** Items carry the identifier they have in the source so a reviewer can diff this queue
+against the standard. A clause is `[ ]` until it has a receipt; a clause whose *firing control*
+does not exist cannot be marked done.
+
+## XI.0 — Blocking defects (fixed 2026-11-24, `af539ed`)
+
+- [x] **XI.0a. CI red.** `cargo clippy --all-targets -- -D warnings` failed on
+  `src/native/reference.rs:178` (`needless_lifetimes`) and then on
+  `tests/native_semantics.rs:202` (`manual_contains`). Both fixed. Local gate: 79 Rust tests,
+  48 Python tests (1 skip), mutation 16/16, lifecycle 5/5.
+- [x] **XI.0b. TNPS soundness argument was wrong.** §6.3 claimed deletion preserves UNSAT;
+  false (`{x,¬x}` minus `x` is satisfiable). Replaced with the model-preservation invariant.
+  Not yet machine-checked (see XI.G).
+- [x] **XI.0c. Leaked absolute paths** in `research/08-TNPS-SEMANTICS.md` and
+  `research/receipts/ix43-tcb.md`; `tools/hol_tests/p256_carry_reuse.ml` used an absolute
+  `loadt`. All removed; the harness now reads `TEKMERION_ROOT` with a relative fallback.
+- [ ] **XI.0d.** Run a repository-wide scan in CI for `/mnt/`, `/home/`, drive letters and
+  personal identifiers in tracked files. Firing control: a planted absolute path fails the build.
+
+## XI.A — The Ordeal, O1–O14 (fourteen trials; one public label)
+
+Rule: only a theorem passing **every** trial may be called `TEKMERION-CERTIFIED`. Anything
+else is `SCOPED_ACCEPTED [failed: …]`. No partial credit, no rounding up.
+
+- [ ] **XI.A.0. Superset map + firing controls.** Every requirement of every mapped regime
+  appears in Annex A with an Ordeal clause at least as strong; every clause has a planted defect
+  its check must catch, run on every build. A control that stops firing fails the build.
+
+**O1 — statement fidelity.** [ ] O1.1 challenge file written before search, frozen by digest;
+[ ] O1.2 independent comparator: term-identical statement + axiom subset; [ ] O1.3 Pollack
+consistency/faithfulness with an adversarial corpus (Unicode lookalikes, shadowed constants,
+printer that swaps `T`/`F`); [ ] O1.4 two independent formalisations proved equivalent;
+[ ] O1.5 non-vacuity: kernel-checked satisfying witness for preconditions, kernel-refuted
+violation of each postcondition; [ ] O1.6 spec-mutation sensitivity (dropped bound, `<`→`≤`,
+dropped conjunct such as `out < m`).
+
+**O2 — derivation (de Bruijn).** [ ] O2.1 complete proof object exported, no trusted tactics;
+[ ] O2.2 ≥2 independent checkers, disjoint implementation and authorship; [ ] O2.3 at least one
+verified to machine code for the fragment — **for LRAT this is available now: run `cake_lpr` on
+every LRAT certificate**; [ ] O2.4 acceptance originates only from a kernel theorem value, every
+acceptance path mutation-controlled (the `BRIDGE_CSAT_TAC` false-success bug is the founding
+counterexample).
+
+**O3 — logical diversity.** [ ] O3.1 the full derivation accepted by two *different logics*
+(e.g. HOL and a first-order/Metamath-Zero-style checker). Re-implementing one rule set twice does
+not count. Control: planted unsound rules and the CVE-2026-72844 definitional class.
+
+**O4 — context closure.** [ ] O4.1 re-check from an empty kernel (base axioms only, every
+definition replayed); [ ] O4.2 print the axiom set and require equality with the declared
+whitelist; [ ] O4.3 upstream drop-in: replace the human s2n-bignum proof and pass the upstream
+build unmodified. Today's sealed `OK` is under 2,462 inherited axioms, so O4 is **not met**.
+
+**O5 — artifact binding.** [ ] O5.1 digests of object bytes, loader view, ISA model, spec, kernel
+binary, checker binaries, certificate engines; [ ] O5.2 theorem is about the *shipped* bytes;
+[ ] O5.3 property preservation where a claim moves source→object (by construction here — record
+it). Control: flip one byte; binding fails and typed revocation revokes exactly the dependents.
+
+**O6 — machine-model validity.** [ ] O6.1 per instruction used: proof model vs mechanically
+derived vendor model (Sail/ASL) vs two-microarchitecture silicon co-simulation, digest-bound.
+Any unexplained disagreement blocks every theorem using that instruction.
+
+**O7 — toolchain integrity.** [ ] O7.1 reproducible checker builds on two machines; [ ] O7.2
+diverse double-compiling (DDC) for each checker binary not already verified to machine code;
+[ ] O7.3 signed tagged releases with recorded binary provenance.
+
+**O8 — execution integrity.** [ ] O8.1 every certified check on two dissimilar platforms
+(different ISA *and* vendor), ECC where available; transcript digests must agree. Control: one
+bit flip in one transcript must be caught.
+
+**O9 — adversarial robustness.** [ ] O9.1 standing hostile corpus (malformed, truncated,
+transplanted, ill-typed, definitional exploits, hash-collision padding); [ ] O9.2 differential
+fuzzing of kernels against each other; [ ] O9.3 refusal-site mutation score = 1.0 across the whole
+TCB, not just the current 16 sites.
+
+**O10 — evaluation integrity.** [ ] O10.1 freeze tagged and pushed *before* the run; manifest is
+the only authority; [ ] O10.2 sealed runs in structural isolation (container/VM, read-only, no
+network); [ ] O10.3 a held-out split is evaluated once. Today: tag-before-run done; isolation is
+procedural, so O10.2 is open.
+
+**O11 — independence and review.** [ ] O11.1 every certified statement reviewed by someone who
+wrote neither statement nor proof, against a published checklist; [ ] O11.2 external
+reproduction by an outsider from the frozen package (`EXTERNAL_REVIEW_PENDING` until then);
+[ ] O11.3 every human override of an automated verdict logged and the rate published. This trial
+needs **people**, not code; for a solo programme it is budgeted and cannot be waived.
+
+**O12 — honesty of claims.** [x] O12.1 numbers generated from receipts; [x] O12.2 losses beside
+wins; [ ] O12.3 certification language exact ("qualification-ready against DO-330 TQL-1
+objectives", never "qualified"/"certified"); [x] O12.4 a regression withdraws the claim it
+contradicts.
+
+**O13 — revocation.** [ ] O13.1 any change to a bound digest revokes, automatically, with typed
+severity; re-certification runs the full Ordeal again. Control: change one ISA-model digest;
+exactly the dependent theorems revoke. The engine exists (`src/lib.rs`) but is not wired to
+proofs.
+
+**O14 — longevity.** [ ] O14.1 plain documented versioned text for certificates, statements,
+checker rules; [ ] O14.2 re-implementation test: someone re-implements the smallest checker from
+its written spec and reaches identical verdicts on the whole corpus; [ ] O14.3 frozen packages
+archived with persistent identifiers (Software Heritage, Zenodo).
+
+### XI.A.1 Baseline against O1–O14 (the nine sealed x86 proofs, `c4e1eb4`)
+
+| Trial | Status | Cheapest next step |
+|---|---|---|
+| O1 | not met | challenge files from the bench statements; write the comparator |
+| O2 | partly (HOL kernel only) | **`cake_lpr` on every LRAT certificate** |
+| O3 | not met | long-term Dedukti/MM0 track |
+| O4 | not met (2,462 inherited axioms) | empty-kernel re-check; upstream drop-in |
+| O5 | partly (objects named; engine exists) | bind digests into each proof record |
+| O6 | not met here (upstream co-sim exists) | import co-sim results per instruction, digest-bound |
+| O7 | not met (unsigned) | signed tags; reproducible checker build; DDC |
+| O8 | not met | re-run the nine on AArch64, compare transcripts |
+| O9 | partly (16/16, 5/5) | extend to the full TCB and the bench harness |
+| O10 | partly (tag first; procedural isolation) | container |
+| O11 | not met | recruit two statement reviewers and one reproducer |
+| O12 | largely met | keep |
+| O13 | engine exists, not wired | wire |
+| O14 | not met | archive the frozen packages |
+
+**No current theorem is `TEKMERION-CERTIFIED`.** That is the correct result.
+
+## XI.B — Millennium Layer, O15–O22 (1000-year reconstructibility)
+
+Honest frame: nobody can prove a 1000-year property. What can be done is (1) name every
+dependency that decays, (2) remove or make it renewable, (3) drill the cold start.
+
+- [ ] **O15.** Eternal/empirical split: mathematics is stated to outlast us; evidence about
+  silicon, products and people is dated history, never presented as timeless.
+- [ ] **O16.** Closed-world statements: every symbol resolved inside the archive; a closure
+  checker walks symbols to a definition or axiom and blocks on a dangling reference.
+- [ ] **O17.** Foundation stamp (reverse-mathematics): every theorem carries the weakest base
+  system that proves its eternal part, with a checked proof in that system. Target: the
+  certified-SAT closes stamped **propositional resolution**; the arithmetic bridge in a weak
+  arithmetic (PRA or QF arithmetic with induction); anything stronger reported explicitly.
+  Control: a lemma silently using choice must be caught.
+- [ ] **O18.** The Stele: the root checker is a **one-page specification**, fully specified,
+  with ~50 hand-checkable Rosetta vectors plus invalid vectors with reasons. Translators into
+  Stele format are untrusted because the Stele checks their output.
+- [ ] **O19.** Cold-start drill: strangers given only the archive implement a checker from
+  scratch; every ambiguity is a defect that blocks the next release; record time-to-first-verdict
+  and every question asked.
+- [ ] **O20.** Lineage ritual: decennial re-check by a freshly implemented Stele checker;
+  each re-check appends an archived lineage entry.
+- [ ] **O21.** Cryptographic expiry and renewal: ≥3 digests from unrelated families, renewal
+  before weakness (RFC 4998 ERS model); succinct arguments are convenience, never the root.
+- [ ] **O22.** Custody: plain text; many copies with independent custodians (LOCKSS); durable
+  media for the core; a primer teaching the notation from counting upward, in several languages.
+
+## XI.C — Areopagus (the court that administers the Ordeal)
+
+- [ ] **XI.C.1. Certification Theorem.** For every certified `T`, check a second theorem
+  `Cert(T)` whose hypotheses are exactly the residual trust assumptions: judges sound (H1),
+  translations meaning-preserving (H2), hardware faithful (H3), statement transcribed correctly
+  (H4), stored certificate is the checked one (H5). Nothing trusted that is not a named
+  hypothesis. Precedent: Milawa; gap: per-result, whole-pipeline.
+- [ ] **XI.C.2. Quantified residual risk.** One judge (the Stele) is built to claim *perfection*,
+  enabling the Littlewood–Rushby bound for a possibly-perfect channel: `P(false accepted) ≤
+  P(rich judge false-accepts) × P(Stele imperfect)`, without assuming independence. Publish the
+  evidence for each factor and the epistemic uncertainty; never a bare number.
+- [ ] **XI.C.3. Measured diversity.** Run a coincident-failure programme (mutate each judge; record
+  which others still catch it) and publish a pairwise diversity matrix. Judges whose failures
+  correlate are merged in the risk calculation, not counted twice. Record strategy classes:
+  different logics (strongest), different execution technologies, different architectures.
+- [ ] **XI.C.4. Checker appliance.** Verified processor (Silver line) + verified compiler, open
+  PDK, fabricated at two foundries, imaged against the netlist, air-gapped, one-way media,
+  signed verdicts; plus dissimilar commodity execution with bit-identical transcripts; TMR for
+  radiation environments.
+- [ ] **XI.C.5. Statement tribunal.** Dual formalisation, signed plain-language intent records
+  with worked examples, and a paid red cell (technically, managerially, financially independent)
+  that hunts for a program satisfying the statement but violating the intent.
+- [ ] **XI.C.6. Defeater ledger (Assurance 2.0).** Every assurance case is a ledger of defeaters:
+  each eliminated with evidence or printed as open on the certificate.
+- [ ] **XI.C.7. Proof Safety Board.** Global registry of soundness incidents across all proof
+  systems (root cause, versions, defeating input, regression vectors); confidential near-miss
+  reporting (the `BRIDGE_CSAT_TAC` bug is founding entry); standing bounties sized to make
+  breaking the court worth more than silence.
+- [ ] **XI.C.8. False-theorem heartbeat.** A continuous stream of known-false theorems that every
+  judge must reject; one miss halts all certification. Plus a flight recorder: every verdict
+  deterministic and replayable forever.
+- [ ] **XI.C.9. Two-person integrity for the trusted base.** Quorum of independent custodians
+  with independently held keys, plus a mutation control proving the suite would notice removal.
+- [ ] **XI.C.10.** Recompute the §XI.C.2 risk bound at every lineage re-check; archive its
+  history so confidence changes only by evidence.
+
+## XI.D — Eight-layer architecture, TNPS-0, proof-carrying checkers
+
+Complexity increases outward; trust decreases outward. The smallest component has the most
+carefully justified authority.
+
+- [ ] **XI.D.1.** Specify all eight layers with a formal contract, explicit trust boundary and
+  conformance standard: (01) Eternal nucleus, (02) Proof calculus, (03) Semantic verification,
+  (04) Accelerated computation, (05) Verified execution, (06) Adversarial verification,
+  (07) Assurance authority, (08) Continuity.
+- [ ] **XI.D.2. TNPS-0.** A finite mathematical language with a precisely specified derivability
+  relation — not a Rust/HOL/VM implementation. Investigate LF/Dedukti-style frameworks vs the
+  Metamath-style single-rule approach before freezing. Constraints: unambiguous syntax, explicit
+  capture-avoiding binding, exact arithmetic (no implicit overflow), precise equality and checked
+  conversion, conservative definitions or declared axioms, machine-checked soundness per rule,
+  decidable checking for the supported language, complete dependencies, extensions cannot add
+  trusted inference silently, interpretation independent of language/hardware/runtime.
+- [ ] **XI.D.3.** No arbitrary user rewrite becomes trusted by registration; no unconstrained
+  normalisation inside the nucleus — require explicit conversion evidence or a separately verified
+  decision procedure whose soundness theorem the nucleus can use.
+- [ ] **XI.D.4.** `check(foundation, judgment, certificate, budget) → Result` specified as
+  executable mathematics; `Check(F,J,C,R)=Accepted ⇒ F ⊢ J`; separate metatheorem from
+  derivability to validity.
+- [ ] **XI.D.5. Proof-carrying checker modules.** Every optimised module (SAT, modular arithmetic,
+  polynomial identity, GPU) carries its spec, implementation, correctness certificate, resource
+  contract, permitted capabilities and dependencies; `Run_M(x,c)=Accept ⇒ Valid_M(x)`, plus a
+  proof of how the module's judgment is interpreted by TNPS-0. **The justification must not be
+  circular.**
+
+## XI.E — Semantic Constitution, assumptions, anti-vacuity, applicability
+
+- [ ] **XI.E.1. Semantic Constitution** per verification subject: decoding, memory, exceptions,
+  alignment, translation, concurrency, interference, initialisation, termination, timing,
+  observation model; for physical systems add numerics, units, tolerances, uncertainty, validity
+  domain.
+- [ ] **XI.E.2. Semantic sensitivity certificates:** which model changes preserve the guarantee
+  (proved), which break it (checked counterexample), which are unresolved. Report applicability
+  rather than a broad "correct".
+- [ ] **XI.E.3. Assumption Observatory:** assumptions are first-class objects with class
+  (logical/mathematical/semantic/environmental/physical/implementation/institutional), meaning,
+  provenance, scope, justification, dependencies, invalidation conditions. A physical measurement
+  must not masquerade as an axiom; an institutional signature must not masquerade as a proof.
+- [ ] **XI.E.4. Assumption counterfactuals:** classify each assumption dispensable / necessary
+  (with checked countermodel) / unresolved; search for smaller sufficient sets; preserve
+  unresolved outcomes. Never claim full minimisation.
+- [ ] **XI.E.5. Anti-vacuity engine:** satisfiability of preconditions, reachability, spec
+  implementability, over-unconstrained outputs, termination, hazard coverage. A valid vacuous
+  theorem is still a valid theorem; a *safety claim* built on it is refused.
+
+## XI.F — Verification fabric, trust cut-sets, hardware, execution
+
+- [ ] **XI.F.1.** ≥3 substantially different checkers (minimal reference, formally verified,
+  high-performance Rust, independent research checkers). Acceptance requires **all** mandatory
+  checkers to accept the same judgment; any refusal/crash/budget-exhaustion/different semantics
+  stops issuance. Majority voting is rejected as the authority.
+- [ ] **XI.F.2. Fault-relative soundness:** under the declared bounded fault model, checking
+  either yields a correct judgment or refuses issuance. Publish the fault model and residual risk;
+  never claim immunity.
+- [ ] **XI.F.3. Trust Cut-Set Analyzer:** model the whole infrastructure as a failure-propagation
+  graph; publish identified failure paths and minimal cut sets (shared parser, shared bit-blaster,
+  same compiler, same machine model, wrong theorem, issuance ignoring failure). Make assurance
+  independence machine-analysable and partially formally verifiable.
+- [ ] **XI.F.4. Dedicated appliance** per XI.C.4; keep commodity CPU/GPU for throughput.
+- [ ] **XI.F.5. Proof-carrying parallel scheduling:** demonstrate every required block was checked
+  with its exact dependencies and no unverified block entered the final derivation; optimality is
+  not required.
+- [ ] **XI.F.6. Resource-bounded reference path** with distinct outcomes: `Accepted | Invalid |
+  Unsupported | BudgetExhausted | IntegrityFailure | InternalFailure`. A timeout is not a proof of
+  falsity; an unsupported rule is not a counterexample; an internal failure is not a rejection.
+- [ ] **XI.F.7.** Scalar → SIMD → AVX2 → AVX-512 → CUDA → verified hardware, each equivalence-tested
+  and fault-injected (IX.24–IX.28, X.13–X.17 remain the operative items).
+
+## XI.G — Formal gaps of the native checker (the current science)
+
+- [ ] **XI.G.1. G4 (paper lemmas) — machine-check.** Formalise terms/typing/semantics, CNF, unit
+  propagation, RUP soundness, LRAT model-preservation, and DAG acceptance soundness (Theorem 1)
+  with the blast lemma as a **hypothesis**, not an axiom. Lean 4 core is available offline; a
+  621-line draft exists at `.bench/wip-tnps-lean/Tnps.lean.draft` (does **not** compile; not
+  evidence). Acceptance: compiles, no `sorry`/`admit`/`axiom`, `#print axioms` shows only standard
+  axioms, README states the G1/G2/G3 boundary.
+- [ ] **XI.G.2. G1 (bit-blaster equivalence).** Prove `blast` correct for the restricted fragment
+  or replace it with a verified generator; state the width-indexed-name caveat. Acceptance:
+  machine-checked or an independently generated encoding with a checked certificate.
+- [ ] **XI.G.3. G2 (parser refinement).** Discharge (P1)–(P4) of `research/08-TNPS-SEMANTICS.md`
+  §1.7, ideally by construction (typed parse target) plus a grammar/injectivity proof.
+- [ ] **XI.G.4. G3 (executable refinement).** Connect the compiled checker to the abstract
+  acceptance relation; include the parser and every trusted optimisation.
+- [ ] **XI.G.5. Dual acceptance on a real obligation.** The native checker must re-derive its CNF
+  **from the HOL statement itself**, not read the file CaDiCaL was given; then check a sealed
+  task's certificate natively and in HOL Light. State plainly that the bit-blaster is trusted
+  code until XI.G.2 lands.
+
+## XI.H — Capsule, adapters, gates, issuance
+
+- [ ] **XI.H.1. Thousand-Year Proof Capsule**, six layers: (0) reconstruction key, (1) permanent
+  foundation, (2) exact judgment, (3) complete derivation, (4) verification evidence,
+  (5) assurance history. Bootstrap ladder from physical explanation to full replay. Preserve an
+  *interpretation* (compressed derivations + exact decompression rules + checked interpreters +
+  their correctness proofs), not a prohibitive full expansion. Alignment with ISO 14721:2025,
+  ISO 16363:2025, ISO 16919:2025.
+- [ ] **XI.H.2. Adapters are observations.** HOL Light, OpenTheory, Lean, Rocq, Isabelle,
+  Metamath, Alethe, LFSC, Dedukti via checked translations; each returns faithful export /
+  characterised restricted export / refusal. No external format defines TNPS authority.
+- [ ] **XI.H.3. Fifteen issuance gates G01–G15** (identity, grammar, logic, foundations,
+  semantics, adequacy, implementation, independence, fault integrity, adversarial scrutiny,
+  resource integrity, provenance, preservation, assurance, continuing validity), each with a
+  falsifiable evidence requirement and explicit applicability rules.
+- [ ] **XI.H.4.** `Issue(C,P) ⇔ ∀g∈G, Satisfied(g,C,P)`; the issuance implementation itself is
+  verified against that policy; no score compensates for a failed gate; no one may waive a gate
+  and keep the label.
+
+## XI.I — Ten research inventions (order: flagship first)
+
+1. [ ] **XI.I.1. Verified proof-module calculus** (XI.D.5 generalised).
+2. [ ] **XI.I.2. Semantic sensitivity certificates** (XI.E.2).
+3. [ ] **XI.I.3. Assumption counterfactual analysis** (XI.E.4).
+4. [ ] **XI.I.4. Trust cut-set analysis** (XI.F.3).
+5. [ ] **XI.I.5. Fault-relative checker soundness** (XI.F.2).
+6. [ ] **XI.I.6. Proof-carrying parallel scheduling** (XI.F.5).
+7. [ ] **XI.I.7. Proof-carrying assurance cases** (XI.C.6 + XI.H.3).
+8. [ ] **XI.I.8. Temporal applicability contracts:** `Applicable(P,t) ⇔ ⋀ Aᵢ(t)`; monitored
+   assumptions failing trigger the engineered safe response, never silent reliance.
+9. [ ] **XI.I.9. Verified archival resurrection** (O19/O14.2).
+10. [ ] **XI.I.10. Cross-era semantic migration:** checked correspondence between historical and
+    future versions of the standard.
+
+## XI.J — Benchmark laboratory and Project Millennium
+
+- [ ] **XI.J.1.** Public tracks: logical rigor, implementation rigor, hostile-proof resistance,
+  semantic rigor, specification adequacy, hardware resilience, parallel performance, native
+  automation, interoperability, preservation. Measure the cost of a *justified* result, not the
+  speed of "success".
+- [ ] **XI.J.2. Project Millennium:** freeze requirements/theorem/models/artifact → native proof →
+  independent verified checkers → semantic correspondence → replay on scalar/blocked/SIMD/AVX2/
+  AVX-512/CUDA → verified hardware path → adversarial campaign → HOL/OpenTheory observations →
+  assurance case + capsule → **independent clean-room reconstruction**.
+- [ ] **XI.J.3.** Effort allocation is a *research* decision, not a forecast: foundations and
+  checker metatheory, machine semantics and refinement, independent assurance and adversarial
+  research, verified hardware, performance, preservation. Rebalance as bottlenecks move.
+
+## XI.K — Engineering prohibitions and the Constitution
+
+- [ ] **XI.K.1.** Prohibit: trusted inference plugins without formal justification; validity by
+  vote among unverified solvers; hidden assumptions or implicit weakening; acceleration that
+  changes acceptance semantics; undocumented certificate encodings; history rewritten by upgrade;
+  security claims resting on fuzzing alone; assurance scores concealing mandatory failures;
+  self-referential certification; indispensable proprietary dependencies; absolute-reliability
+  claims; undeclared regulatory certification.
+- [ ] **XI.K.2. Constitution, ten articles** as normative text in `research/`: (I) mathematical
+  sovereignty, (II) complete justification, (III) verification of verification, (IV) exact
+  meaning, (V) adversarial independence, (VI) computational excellence, (VII) intellectual
+  integrity, (VIII) permanent reconstructibility, (IX) continuing applicability,
+  (X) frontier responsibility.
+- [ ] **XI.K.3.** Standards to study at source and add to Annex A before any public "no standard
+  goes further" claim: **IEC 61508 SIL 4**, **ISO 26262 ASIL D tool confidence**, **NASA
+  software-assurance standards**, **seL4's proof-maintenance practice**, **IEC/IEEE 60880:2026**,
+  **IEC 62443**, **NIST SP 800-160**, **ISO/IEC 15408-1:2026**, **ISO 14721:2025**,
+  **ISO 16363:2025**, **ISO 16919:2025**, **NASA-STD-7009B**. Distinguish adopted standards from
+  drafts (NASA-STD-8739.8C is a 2026-11-05 draft).
+
+## XI.L — Concrete frontier moves from the reviews
+
+- [ ] **XI.L.1. Label the sealed result correctly.** 9/9 is **leave-one-ISA-out**: the ARM
+  versions of these curves/operations were development data. It is not leave-one-curve-out. State
+  this in the receipt and in every downstream claim.
+- [ ] **XI.L.2. Fix `XZR` flag accumulation.** Flag-only `ADCS/SBCS XZR` chains are not encoded;
+  the tooling excludes `XZR` destinations, so the correction flag is unconstrained. Fix, then
+  re-run the affected `add_p384`/`add_p256k1` tasks.
+- [ ] **XI.L.3. Upstream drop-in build.** Replace the human s2n-bignum proofs with the generated
+  ones and run s2n-bignum's own build. Passing removes the inherited-context caveat; it is the
+  cheapest strong upgrade available.
+- [ ] **XI.L.4. Containerise the sealed run.** Filesystem holds only declared inputs,
+  read-only, no network. Then O10.2 is met structurally, not procedurally.
+- [ ] **XI.L.5. Full-898 sealed pass.** Freeze arm Z, one pass over all 898 FC tasks at the pin;
+  unsupported shapes refused fast and counted as FAIL; report `OK/898`, zero `CHEATING`, split
+  development-seen vs sealed. Then **submit the CSV to the leaderboard** so adjudication moves
+  outside the programme.
+- [ ] **XI.L.6. Timeout headroom measured, not assumed.** A reviewer reports `add_p521` at
+  95.864 s of 120 s; that figure has **no receipt here**. Measure every task under the frozen
+  emitter on this host and record it; do not cite 95.864 s until reproduced.
+- [ ] **XI.L.7. `cake_lpr` on every LRAT certificate**, and on the sealed set. This is O2.3 and
+  the cheapest large trust upgrade.
+- [ ] **XI.L.8. Divergent hardware.** Re-run the nine on AArch64 and compare transcripts (O8).
+- [ ] **XI.L.9. Signed tags.** Sign `freeze-*` tags; record the public key and verification
+  command in the receipt.
+- [ ] **XI.L.10. Challenge files + comparator** for the nine statements (O1.1/O1.2).
+
+## XI.M — Deep research queue (novel / inverted combinations)
+
+Deliverable `research/09-NOVEL-COMBINATIONS.md`: components, combination or inversion, closest
+published work with citation, why not already done, falsifiable experiment, cost. Primary sources
+only; every "nobody has combined X and Y" names the search terms and the closest hit.
+
+- [ ] **XI.M.1.** Carry-conservation as a **first-class SAT certificate** (one checked object
+  across ISAs and limb counts), not a tactic fold.
+- [ ] **XI.M.2.** **Inverted reference route:** synthesise the weakest reference function the
+  machine state implies, then prove `ref = spec` in a small prover — inverting which side owns the
+  hard arithmetic.
+- [ ] **XI.M.3.** **Equality saturation over the carry chain** with SAT closing only residual
+  disequalities; e-graph rewrites untrusted, the refutation checked.
+- [ ] **XI.M.4.** **Portfolio planner with a cost model learned from measured judge times**, used
+  only to order attempts, never to accept.
+- [ ] **XI.M.5.** **Specification-relative mutation testing:** mutate the spec and require the
+  checker to reject the old proof (closes "valid proof of the wrong spec").
+- [ ] **XI.M.6.** **Certificate compression with checked replay** (content-addressed dedup of
+  identical inference subgraphs), determinism and equivalence tested.
+- [ ] **XI.M.7.** **Invariant synthesis from postcondition + live machine state** for loops, the
+  synthesised invariant kernel-checked (Wall 2 / L-FIT).
+- [ ] **XI.M.8.** Evaluate **foundational proof certificates** and **small-witness** checking for
+  the expansion problem in XI.H.1.
+- [ ] **XI.M.9.** Update `research/04-NOVELTY-REGISTER.md`: only N3 is `PLAUSIBLY_NOVEL`; nothing
+  is `DEMONSTRATED_ADVANCE`. A claim rises only with an experiment.
+
+## XI.N — Order of work (supersedes X.J once XI.0 is done)
+
+1. XI.0 — blockers — **done** (`af539ed`).
+2. XI.L.7 (`cake_lpr` on LRAT) + XI.L.10 (challenge files/comparator) — cheapest assurance.
+3. XI.G.1 (G4 machine-checked) — in flight; draft parked, does not compile.
+4. XI.L.2 (`XZR`), then XI.L.3 (upstream drop-in) — removes the two named caveats.
+5. XI.L.4 (container), XI.L.9 (signed tags), XI.L.8 (AArch64).
+6. XI.L.5 (full-898 + leaderboard).
+7. XI.G.2–XI.G.5, then XI.F.7 acceleration.
+8. XI.L.1 label correction in the receipts that predate this intake.
+
+Every step pushes to `staging` on completion. No step is marked done without its receipt and,
+where the standard requires it, its firing control.
