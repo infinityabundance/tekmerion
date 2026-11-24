@@ -1,6 +1,6 @@
 # TNPS logical core — specification (Milestone B, IX.43)
 
-- **Repository:** `/mnt/1tb_kingston/Tekmerion`
+- **Repository:** the `tekmerion` source tree (paths below are repository-relative).
 - **Scope:** `src/native/{logic,bitblast,lrat,cert,check}.rs`
 - **Status:** this document specifies the *abstract* system. It does **not** claim
   that the Rust implementation is verified. The gap between the two is named in
@@ -162,6 +162,112 @@ tag; widths are 4-byte little-endian, constants 8-byte little-endian, names are
 UTF-8 bytes, child digests are 32 raw bytes, and every field written by
 `Canon::bytes` carries an 8-byte little-endian length prefix
 (`tekmerion/native/term/v1`). Digests name content; they never establish truth.
+
+### 1.7 Parser specification (canonical-language refinement)
+
+This subsection is normative for `Term::parse`, `Certificate::parse`,
+`Cnf::parse_dimacs` and the LRAT reader. It turns the grammars above into a
+single precise obligation instead of a set of "did we reject the right things"
+tests.
+
+**Input domain.** The decoders consume a byte string. Only ASCII is legal:
+any byte `>= 0x80` is refused before tokenising. The Rust entry points take
+`&str`; that is a *precondition*, not a guarantee — a non-UTF-8 byte string can
+never reach a decoder, and this is recorded as an assumption (A8 below), not as
+parser logic. The abstract relation is stated over `Bytes = List u8` and
+therefore does not depend on that precondition.
+
+**Token decoders.** Each token class denotes a partial function:
+
+```
+dec_decimal : Bytes ⇀ Nat
+  accepted iff  s = "0"  or  s = d₀ d₁ … dₖ with d₀ ∈ 1..9 and dᵢ ∈ 0..9
+  value        =  Σ dᵢ · 10^(k−i)         (computed, never wrapped)
+
+dec_hex : Bytes ⇀ Bytes
+  accepted iff  s = 2n lowercase hex digits, n ≥ 0
+  value        =  the n payload bytes
+
+SP = 0x20,  NL = 0x0A;  CR, TAB and every other separator are refused.
+```
+
+**Numeric narrowing is a refusal, not a conversion.** A `decimal` used as a
+width must satisfy `1 ≤ v ≤ 64`; as a clause/step id or a variable count it must
+satisfy `v < 2^32`; as a DIMACS literal it must satisfy `1 ≤ v ≤ n_vars`; as an
+`lrat` hint it must satisfy `v < 2^32`. A decimal whose mathematical value
+exceeds the target bound is `Err`, never a truncation, wraparound or saturating
+conversion. This is the clause that the earlier `IWORDIFY` failure mode lacked
+in the HOL path (a Boolean became a numeral and a carry constraint was lost);
+here it is a typing rule on the decoder.
+
+**The parse relation.** For each artefact `A ∈ {Term, Cnf, Lrat, Certificate}`
+there is a partial function
+
+```
+parse_A : Bytes ⇀ A
+```
+
+It is defined by the grammar of §1.1/§1.3/§1.4/§1.5 together with the token
+decoders above. Because the grammar is LL(1) after the first token and every
+production consumes a distinct prefix, `parse_A` is **deterministic**: at most
+one `a` satisfies `parse_A s = Some a`.
+
+**Rendering.** `render_A : A → Bytes` is the canonical printer of §1.2/§1.3/
+§1.4/§1.5 (exactly one space between tokens, no trailing space, ascending step
+ids, sorted blobs, `end\n` last).
+
+**Refinement is a round-trip, not a lookalike.** The implementation does not
+reimplement the grammar as a set of accept/reject checks; it parses, re-renders
+and requires byte equality with the input. The specification therefore reduces
+the whole parser to four properties:
+
+```
+(P1) soundness      parse_A s = Some a            ⇒  render_A a = s
+(P2) completeness   (∀ a : A)                    ⇒  parse_A (render_A a) = Some a
+(P3) injectivity    render_A a = render_A a'     ⇒  a = a'
+(P4) totality       parse_A s = None  ⇔  ¬ ∃ a, render_A a = s
+```
+
+(P1) alone is what the `parse → render → compare` discipline enforces at
+runtime: an accepted artefact is *its own* canonical rendering. (P1)+(P3)
+make acceptance equivalent to membership in `image(render_A)`; (P2)+(P4) make
+that image exactly the parsable set. Together they say:
+
+> **Parser theorem.** `parse_A` accepts exactly the canonical language of the
+> artefact and nothing else, and acceptance is byte-for-byte verifiable.
+
+**The gap this leaves (G2, restated precisely).** (P1)–(P4) are properties of
+the abstract relation. The open obligation is the *refinement*:
+
+```
+(G2)   ∀ s,  Term::parse(s)   = Ok a  ⇔  parse_Term s = Some a
+            Term::parse(s)   = Err e ⇔  parse_Term s = None
+       (and identically for the other three artefact types)
+```
+
+(P1) is cheap to discharge *by construction*: the executable already tests it
+on every input because it re-renders and compares. (P2)/(P3) are grammar
+lemmas. (P4) is the hard half — it is the statement that no non-canonical byte
+string slips through, and it is what fuzzing can only sample, never prove.
+
+**Fail-closed rejection table.** The following are `Err`, with no repair and no
+defaulting. This list is the conformance surface for `tests/native.rs` and
+`tests/native_semantics.rs`:
+
+| class | examples |
+| --- | --- |
+| encoding | non-ASCII byte; `CR`/`TAB`; doubled or missing `SP`; trailing `SP`; missing final `NL`; second `end`; bytes after `end`; empty line; comment line |
+| integers | leading zero (`bv08`, `012`); `+` sign; `-0`; value `> 2^32` in a count/id/hint; width outside `1..=64`; literal `>= 2^w` |
+| literals | `0` inside a clause; `\|lit\| > n_vars`; repeated literal; tautological clause |
+| ids | duplicate step id; non-ascending step id (certificate); clause id not strictly greater than every earlier addition |
+| structure | wrong premise count for a rule; unknown rule; unknown blob kind; deleted id absent or already deleted; hint naming a non-live clause; records after the empty clause; root id absent; cyclic premises |
+| hashes | digest not 64 lowercase hex; declared length ≠ payload length; odd-length hex payload; declared digest ≠ `digest_bytes(payload)` |
+| coverage | a referenced digest without a blob; a blob no step references |
+
+**A8 — UTF-8 precondition.** The decoders are only reachable with a `&str`. A
+caller that hands a `&[u8]` must validate UTF-8 first; the checker's own API
+does not expose such a path. Recorded here because (P4) is stated over `Bytes`
+and the executable is stated over `&str`.
 
 ---
 
@@ -333,10 +439,22 @@ any record after the empty clause is refused.
 
 *Lemma (LRAT soundness).* If an LRAT refutation of `F` is accepted, then `F` is
 UNSAT.
-*Proof.* Additions preserve satisfiability by the RUP lemma; deletions only
-remove clauses, so an UNSAT set stays UNSAT (and a satisfiable set may become
-satisfiable or not). The final live set contains the empty clause, which no
-assignment satisfies. Hence `F` had no model. ∎
+*Proof.* Suppose, for contradiction, that `F` has a model `α`. The invariant is
+**`α` satisfies every clause live at the current record**. It holds initially.
+An addition of `C` is admitted only when `C` is RUP with respect to the live set
+`F_live`; by the RUP lemma, `α ⊨ F_live` implies `α ⊨ C`, so the invariant is
+restored after inserting `C`. A deletion removes clauses, so any assignment
+satisfying the previous live set satisfies the smaller one — the invariant is
+preserved. The final live set therefore still contains the empty clause, which
+no assignment satisfies; this contradicts `α ⊨ ∅`. Hence `F` has no model. ∎
+
+**Correction (2026-11-24).** An earlier draft said "deletions only remove
+clauses, so an UNSAT set stays UNSAT". That is false: `{x, ¬x}` is UNSAT, and
+deleting `x` leaves a satisfiable set. The theorem is still true, but the proof
+must track a *model of the original formula* through every record (as above),
+not preservation of UNSAT under deletion. This paragraph is the corrected
+argument; it is also the statement formalised in
+`verification/tnps/Tnps.lean` (G4).
 
 ---
 

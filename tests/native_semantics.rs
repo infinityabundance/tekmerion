@@ -199,7 +199,7 @@ impl Prover {
             .iter()
             .map(|lit| reason[lit.unsigned_abs() as usize])
             .collect();
-        if hints.iter().any(|&r| r == 0) {
+        if hints.contains(&0) {
             return Err("propagated literal has no reason".to_string());
         }
         hints.push(conflict);

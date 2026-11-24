@@ -1,8 +1,8 @@
 # Receipt — IX.43 / Milestone B trusted-base report
 
-- **Repository:** `/mnt/1tb_kingston/Tekmerion`
-- **Branch:** `staging` (per instruction: not committed, not pushed)
-- **Date:** 2026-11-23
+- **Repository:** the `tekmerion` source tree (paths are repository-relative).
+- **Branch:** `staging` (committed; the original draft said "not committed, not pushed" — that was true when written and is corrected here).
+- **Date:** 2026-11-23 (status lines added 2026-11-24).
 - **Toolchain:** `rustc 1.98.0`, `cargo 1.98.0`
 - **New crates:** none. `Cargo.toml` still has exactly one direct dependency,
   `sha2 = "0.10"` (locked 0.10.9).

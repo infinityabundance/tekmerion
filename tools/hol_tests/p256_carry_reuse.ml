@@ -2,8 +2,10 @@
 #load "unix.cma";;
 needs "arm/proofs/base.ml";;
 needs "Cadical/make.ml";;
-loadt "/mnt/1tb_kingston/Tekmerion/tools/csat_lib.ml";;
-loadt "/mnt/1tb_kingston/Tekmerion/tools/bridge.ml";;
+(* Set TEKMERION_ROOT when running outside the repository root. *)
+let tekm_root = try Sys.getenv "TEKMERION_ROOT" with Not_found -> "../..";;
+loadt (tekm_root ^ "/tools/csat_lib.ml");;
+loadt (tekm_root ^ "/tools/bridge.ml");;
 
 let p_256 = new_definition
  `p_256 = 115792089210356248762697446949407573530086143415290314195533631308867097853951`;;

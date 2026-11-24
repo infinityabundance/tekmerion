@@ -175,7 +175,7 @@ fn apply_rule(
     }
 }
 
-fn premise<'a>(proved: &'a BTreeMap<u32, Term>, id: u32) -> Result<&'a Term, RefError> {
+fn premise(proved: &BTreeMap<u32, Term>, id: u32) -> Result<&Term, RefError> {
     proved
         .get(&id)
         .ok_or_else(|| err("R-OR29", "premise was not derived"))
