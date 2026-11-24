@@ -244,7 +244,8 @@ $ cd .bench && PATH=…cadical…:$PATH python3 collect-verdicts.py eval-2026112
 `*.judge.txt`.  One task (`sub_p256`) is carried by the benchmark's larger
 `p256_montjdouble.ml` template (as in R4); it still judges `OK` (14.706 s).
 
-Answer hashes: `research/receipts/r5-xzr-answers.sha256` (18 lines). The three
+Answer hashes: `research/receipts/r5-xzr-answers.sha256` (18 lines, plus a trailing block
+of the four producing tools). The three
 relevant ones:
 
 ```
