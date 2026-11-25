@@ -3410,3 +3410,110 @@ The review's structural point, adopted as policy:
 4. **`XVIII.A1`** — CI green (the shim defect), because it gates every merge.
 5. Then `XVIII.A2`–`A7` as `v7` work, interleaved with `XVII.B2` (framework core) and `XVII.C1`
    (assembly as hardware, after its prior-art sweep).
+
+---
+
+# XIX — Intake 2026-11-25 (after `8dbece3`): the aggregate, the interval defect, and CI
+
+Nothing omitted. `XIX.F` supersedes `XVIII.E`.
+
+## XIX.0 — Standing state
+
+- [x] **XIX.0.1.** `freeze-rust-closure-v6` is **sealed** (`cb054bd`), annotated and unsigned,
+  `source_digest e798c9b0…` (72 files), 10 runtime digests, 6 bound variables. Later work is a `v7`
+  delta. The first sealing attempt was refused because the manifest named a commit that did not
+  contain the recorded source — a real firing control of the freeze mechanism, recorded in IX.79.
+- [x] **XIX.0.2.** The oracle close is sound and complete up to one missing fact: it eliminates 7
+  internal variables, emits `bitval(carry_s8) = 0`, performs **0 solver calls**, and its own
+  control caught the interval engine proposing a **false** carry value that the proof step refused.
+  Discovery proposes, proof disposes — that separation is now demonstrated, not asserted.
+- [x] **XIX.0.3.** A partial proof-object export is preserved at branch `wip/xxiii-b-proof-objects`
+  (scaffolding only: no export run, no tests). Not cited anywhere.
+
+## XIX.A — P0: the interval engine computes sums wrongly
+
+`bridge_form_bounds()` in `tools/bridge.ml` combines summand bounds with
+`bridge_bound_join_lo`/`bridge_bound_join_hi`, which take a max/min **intersection**. Bounds of a
+sum must be **added**: `0 ≤ x ≤ 3` and `0 ≤ y ≤ 4` give `0 ≤ x+y ≤ 7`, but the current accumulation
+starts at zero and takes minima, so it can report an upper bound of zero. Second defect: a missing
+bound is ignored rather than propagating an unknown endpoint.
+
+The proof step prevented these from being admitted (see XIX.0.2), so no theorem is affected. The
+discovery engine is still wrong and must be fixed.
+
+- [ ] **XIX.A1.** Add bounds for sums (`lo₁+lo₂`, `hi₁+hi₂`); keep max/min only where the operation
+  genuinely is a join (conditionals, selections).
+- [ ] **XIX.A2.** Propagate unknown: a missing endpoint makes the result unknown, never a guess.
+- [ ] **XIX.A3.** Exhaustive small-domain tests (all combinations in a small range) comparing the
+  interval result against brute-force evaluation, so a wrong rule shows up as a counterexample, not
+  as a failing proof.
+- [ ] **XIX.A4.** State what remains unproved: this is tested interval arithmetic, not a verified
+  one. A soundness theorem belongs with the native `LIA` module (`XVII.B3`), not here.
+
+## XIX.B — P0: CI, and a real elaboration gate
+
+Two failures plus a testing weakness:
+
+- [ ] **XIX.B1.** `an_unusable_shim_earlier_on_path_is_skipped` — the selector iterates names but
+  takes only the first `PATH` match per name. Enumerate **every** matching executable path and probe
+  each.
+- [ ] **XIX.B2.** `an_unusable_explicit_tool_is_refused` fails with `Text file busy` when executing a
+  freshly written shim. Separate the **deterministic selector-policy tests** (pure functions over a
+  supplied candidate list) from the **integration tests** that spawn processes; keep both, and make
+  the policy tests independent of filesystem timing.
+- [ ] **XIX.B3. Mandatory real-toolchain elaboration gate.** A Rust test suite cannot detect that
+  HOL Light fails to parse an emitted answer — that happened, and every test stayed green. Add a
+  gate that elaborates one representative emitted answer with the real toolchain (`ocamlc -i` at
+  minimum, as the bench's own syntax check does; a real `loadt` elaboration where affordable), and
+  wire it into CI. Costs seconds, catches the whole class.
+- [ ] **XIX.B4. `curve_check`'s statement count fell 76 → 33** after the latest changes: the
+  heuristic scanner is now miscounting, which means the no-curve-name control is measuring the
+  scanner rather than the proofs. Either fix the scanner or replace it with a structured parse of
+  the emitted answers. A control that silently changes what it counts is not a control.
+
+## XIX.C — P1: the missing aggregate, constructed not recovered
+
+The diagnosis from IX.78: Gauss–Jordan destroys `M + N = W_raw + 2^256·c8` because `carry_s8`
+becomes a pivot with a `2^256` coefficient.
+
+- [ ] **XIX.C1. Don't eliminate, aggregate.** Construct the telescoped sum of the per-limb carry
+  equations **directly**, each weighted by `2^(64i)`. The weights are the digit positions and are
+  known in advance, so nothing needs solving for. This is the `DESUM_RULE`/`DECARRY_RULE` idiom the
+  human proofs use (`BIGNUM_ADD_P256_CORRECT`), and `GEN_DECARRY_RULE`-style projection for the
+  corrected chain.
+- [ ] **XIX.C2.** Emit **both** aggregates (raw and corrected) plus the carry-range fact, so the
+  residual is linear without large coefficients.
+- [ ] **XIX.C3.** Close `arm.bignum_add_p25519` with **0 SAT closes**; measure against
+  **1,848,494** (human), 111,501,987 (sliced SAT), 119,194,788 (full).
+- [ ] **XIX.C4.** If it closes, extend to `sub`, `neg` and the x86 versions to test generality.
+  If it does not, the residual verbatim plus the missing mechanism. No number from a failed route.
+- [ ] **XIX.C5.** If it closes near human cost, the 60× problem for the linear families is solved
+  **without** the new kernel — which sharpens the kernel's purpose to trust, multiple foundations
+  and the Montgomery families. Say so explicitly if that is the outcome.
+
+## XIX.D — P1: the elimination engine must produce certificates, not traces
+
+- [ ] **XIX.D1.** Retain the exact coefficients of the linear combination, not just the supporting
+  theorem list: `LinearCombinationCertificate { premises, coefficients: BigInt[], conclusion }`. The
+  checker then verifies an exact polynomial identity and needs no arithmetic search.
+- [ ] **XIX.D2.** Extend to inequality certificates with nonnegative multipliers, then justified
+  integer cuts and carry integrality — the direct bridge to the native `LIA` module.
+- [ ] **XIX.D3.** Make **canonical sparse arithmetic forms** a first-class representation (the
+  measured 0.205 s flat vs 12 GB nested is the argument; a representation choice, not a speed-up).
+
+## XIX.E — P2: proof objects, native consumption, coverage
+
+- [ ] **XIX.E1.** Proof-object export for the 27 generated and 27 human proofs (per-theorem,
+  streamed, with a size gate; the `wip/xxiii-b-proof-objects` scaffolding may be recovered but must
+  be verified).
+- [ ] **XIX.E2.** Consume the arithmetic certificates in the native kernel, so one representation
+  serves both routes.
+- [ ] **XIX.E3.** Multiplication and Montgomery reduction (`XVII.C1`, assembly-as-hardware).
+
+## XIX.F — Order of execution
+
+1. **XIX.A** (interval defect) and **XIX.B** (CI + elaboration gate). Both are P0, both are small,
+   and the second one closes the hole that let a total library break pass a green suite.
+2. **XIX.C** — weighted-sum aggregate, then `sub`/`neg`/x86 if it closes.
+3. **XIX.E1** — proof-object export, in parallel with 2 rather than after it.
+4. **XIX.D** — coefficients as certificates; then `XIX.E2`, `XIX.E3`.
