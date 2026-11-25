@@ -61,6 +61,36 @@ fn answers_arm() -> PathBuf {
     repo().join(".bench/dropin-gen/answers-arm")
 }
 
+/// Tracked reference answers. `.bench` is git-ignored, so a comparison against
+/// it protects only this machine; the fixtures are what CI can check. They are
+/// re-recorded deliberately when the emitted library text changes (IX.63 added
+/// the LRAT trimmer, which every answer inlines) — see
+/// `research/receipts/ix68-ci-and-integrity.md`.
+fn answers_fixture(arch: &str) -> PathBuf {
+    repo().join("tests/fixtures/answers").join(arch)
+}
+
+/// Set `TEKMERION_RECORD_ANSWERS=1` to (re-)record the fixtures instead of
+/// asserting. Recording is a deliberate act, recorded in a receipt.
+fn recording_answers() -> bool {
+    std::env::var_os("TEKMERION_RECORD_ANSWERS").is_some()
+}
+
+/// The tracked fixture when it exists, otherwise the git-ignored copy.
+fn reference_answer(arch: &str, legacy_dir: &Path, base: &str) -> PathBuf {
+    let fixture = answers_fixture(arch).join(format!("{base}.answer.txt"));
+    if fixture.is_file() {
+        fixture
+    } else {
+        legacy_dir.join(format!("{base}.answer.txt"))
+    }
+}
+
+/// True when either the fixtures or the legacy copy can serve as a reference.
+fn have_reference(arch: &str, legacy_dir: &Path) -> bool {
+    recording_answers() || answers_fixture(arch).is_dir() || legacy_dir.is_dir()
+}
+
 fn sealed_manifest_path() -> PathBuf {
     repo().join("research/receipts/ix55-sealed-manifest.json")
 }
@@ -148,7 +178,7 @@ fn assert_identical(task: &str, got: &[u8], want: &[u8]) {
 
 #[test]
 fn x86_answers_are_byte_identical() {
-    if !answers_x86().is_dir() {
+    if !have_reference("x86", &answers_x86()) {
         return;
     }
     let policy = sealed_policy();
@@ -158,7 +188,15 @@ fn x86_answers_are_byte_identical() {
         let info = emit::build_x86(&parsed.op, task, &policy, &repo())
             .unwrap_or_else(|e| panic!("{task}: {e}"));
         let text = emit::inlined_answer(&info.tactic, &repo()).expect("answer");
-        let path = answers_x86().join(format!("bignum_{}_{}.answer.txt", parsed.op, parsed.family));
+        let base = format!("bignum_{}_{}", parsed.op, parsed.family);
+        if recording_answers() {
+            let dir = answers_fixture("x86");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join(format!("{base}.answer.txt")), text.as_bytes()).unwrap();
+            count += 1;
+            continue;
+        }
+        let path = reference_answer("x86", &answers_x86(), &base);
         let want = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert_identical(task, text.as_bytes(), &want);
         count += 1;
@@ -168,7 +206,7 @@ fn x86_answers_are_byte_identical() {
 
 #[test]
 fn arm_answers_are_byte_identical() {
-    if !answers_arm().is_dir() {
+    if !have_reference("arm", &answers_arm()) {
         return;
     }
     let policy = spent_policy();
@@ -178,7 +216,15 @@ fn arm_answers_are_byte_identical() {
         let info = emit::build_arm(&parsed.op, task, &policy, &repo())
             .unwrap_or_else(|e| panic!("{task}: {e}"));
         let text = emit::inlined_answer(&info.tactic, &repo()).expect("answer");
-        let path = answers_arm().join(format!("bignum_{}_{}.answer.txt", parsed.op, parsed.family));
+        let base = format!("bignum_{}_{}", parsed.op, parsed.family);
+        if recording_answers() {
+            let dir = answers_fixture("arm");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join(format!("{base}.answer.txt")), text.as_bytes()).unwrap();
+            count += 1;
+            continue;
+        }
+        let path = reference_answer("arm", &answers_arm(), &base);
         let want = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert_identical(task, text.as_bytes(), &want);
         count += 1;
@@ -225,7 +271,7 @@ fn x86_dev_mode_refuses_a_sealed_proof_file() {
 /// answer byte for byte.
 #[test]
 fn sealed_freeze_verification_end_to_end() {
-    if !answers_x86().is_dir() {
+    if !have_reference("x86", &answers_x86()) {
         return;
     }
     if Command::new("git").arg("--version").output().is_err() {
@@ -292,7 +338,7 @@ fn sealed_freeze_verification_end_to_end() {
     .expect("frozen tree must be accepted");
     let info = emit::build_x86("add", task, &policy, root).expect("build");
     let text = emit::inlined_answer(&info.tactic, root).expect("answer");
-    let want = fs::read(answers_x86().join("bignum_add_p25519.answer.txt")).unwrap();
+    let want = fs::read(reference_answer("x86", &answers_x86(), "bignum_add_p25519")).unwrap();
     assert_identical(task, text.as_bytes(), &want);
 }
 

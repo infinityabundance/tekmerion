@@ -1,0 +1,2440 @@
+(
+(* ========================================================================= *)
+(* Reading and writing DIMACS ".cnf" files and converting to and from HOL.   *)
+(*                                                                           *)
+(* This does not rigorously enforce many of the syntactic restrictions and   *)
+(* in particular it completely ignores the "p" line (or many "p" lines)      *)
+(* specifying the number of variables and clauses. It also doesn't do any    *)
+(* analysis of the clauses to rule out tautologies etc.                      *)
+(* ========================================================================= *)
+
+(* ------------------------------------------------------------------------- *)
+(* Equivalents of "conjuncts" and "length o conjuncts" but tail recursive.   *)
+(* ------------------------------------------------------------------------- *)
+
+let list_conjuncts =
+  let rec aux acc tm =
+    match tm with
+      Comb(Comb(Const("/\\",_),l),t) -> aux (l::acc) t
+    | _ -> tm::acc in
+  fun tm -> rev(aux [] tm)
+in
+let rec count_conjuncts n tm =
+  match tm with
+    Comb(Comb(Const("/\\",_),_),t) -> count_conjuncts (n+1) t
+  | _ -> n
+in
+(* ------------------------------------------------------------------------- *)
+(* Parsing and processing.                                                   *)
+(* ------------------------------------------------------------------------- *)
+
+let stripcomments s =
+  match String.index_opt s 'c' with
+    Some i -> String.sub s 0 i
+  | None -> s
+in
+let process_lines f p fname =
+  let fd =
+    try open_in fname
+    with Sys_error _ -> failwith("read_dimacs: can't open "^fname) in
+  let rec suck_lines acc =
+    let l = try [input_line fd] with End_of_file -> [] in
+    if l = [] then rev_itlist (@) acc [] else
+    let y = f(hd l) in
+    suck_lines (if p y then y::acc else acc) in
+  let data = suck_lines [] in
+  (close_in fd; data)
+in
+let rec parse_clauses acc cur l =
+  match l with
+    ""::t -> parse_clauses  acc cur t
+  | "0"::t -> parse_clauses (rev cur::acc) [] t
+  | n::t -> parse_clauses acc (int_of_string n::cur) t
+  | [] -> rev acc
+in
+(* ------------------------------------------------------------------------- *)
+(* Reading and writing betweeen DIMACS file and int list list in OCaml       *)
+(* ------------------------------------------------------------------------- *)
+
+let read_dimacs fname =
+  let l = process_lines
+           (String.split_on_char ' ' o
+            String.map (function '\t' -> ' ' | c -> c) o stripcomments)
+           (function "p"::_ -> false | _ -> true) fname in
+  parse_clauses [] [] l
+in
+let write_dimacs =
+  let string_of_clause cl =
+    itlist (fun t s -> string_of_int t ^ " " ^ s) cl "0\n" in
+  fun fname cls ->
+    let fd =
+      try open_out fname
+      with Sys_error _ -> failwith("write_dimacs: can't open "^fname) in
+    let n = rev_itlist (rev_itlist (max o abs)) cls 0
+    and m = rev_itlist (fun _ n -> n + 1) cls 0 in
+    (output_string fd ("p cnf "^string_of_int n^" "^string_of_int m^"\n");
+     do_list (output_string fd o string_of_clause) cls;
+     close_out fd)
+in
+(* ------------------------------------------------------------------------- *)
+(* Translation between HOL terms and int list list, with variable mappings.  *)
+(* ------------------------------------------------------------------------- *)
+
+let clauses_of_term vmap tm =
+  let cnf_of_literal t =
+    match t with
+      Comb(Const("~",_),s) -> -(vmap s)
+    | _ -> vmap t in
+  map (map cnf_of_literal o disjuncts) (list_conjuncts tm)
+in
+let term_of_literal amap n =
+   if n < 0 then mk_neg(amap (-n)) else amap n
+in
+let term_of_clause =
+  let false_tm = `F` in
+  fun amap ->
+    let rec aux tm l =
+      match l with
+        h::t -> aux (mk_disj(term_of_literal amap h,tm)) t
+      | [] -> tm in
+    fun l ->
+      match rev l with
+        [] -> false_tm
+      | h::t -> aux (term_of_literal amap h) t
+in
+let term_of_clauses =
+  let true_tm = `T` in
+  fun amap ->
+    let rec aux tm l =
+      match l with
+        h::t -> aux (mk_conj(term_of_clause amap h,tm)) t
+      | [] -> tm in
+    fun l ->
+      match rev l with
+        [] -> true_tm
+      | h::t -> aux (term_of_clause amap h) t
+in
+(* ------------------------------------------------------------------------- *)
+(* Composite function not directly creating the int list list and picking a  *)
+(* default numbering of the atoms from the call to "atoms".                  *)
+(* ------------------------------------------------------------------------- *)
+
+let dimacs_of_hol fname tm =
+  let m = count_conjuncts 1 tm in
+  let ats = atoms tm in
+  let n = length ats in
+  let _,vmap =
+    rev_itlist (fun a (n,f) -> (n+1,(a |-> n) f)) ats (1,undefined) in
+  let cnf_of_literal t =
+    match t with
+      Comb(Const("~",_),s) -> -(apply vmap s)
+    | _ -> apply vmap t in
+  let string_of_clause cl =
+   itlist (fun t s -> string_of_int(cnf_of_literal t) ^ " " ^ s)
+          (disjuncts cl) "0\n" in
+  let fd =
+    try open_out fname
+    with Sys_error _ -> failwith("dimacs_of_hol: can't open "^fname) in
+  (output_string fd ("p cnf "^string_of_int n^" "^string_of_int m^"\n");
+   do_list (output_string fd o string_of_clause) (list_conjuncts tm);
+   close_out fd)
+in
+(* ========================================================================= *)
+(* Tools to put formulas in definitional (Tseitin) CNF form for SAT solvers. *)
+(* The temporary variables are implicit for actual proof reconstruction; all *)
+(* steps simply use the corresponding expansion directly.                    *)
+(* ========================================================================= *)
+
+let exploit_conjunctive_structure = ref true
+in
+(* ------------------------------------------------------------------------- *)
+(* Split up a theorem according to conjuncts, in a general sense.            *)
+(* ------------------------------------------------------------------------- *)
+
+let GCONJUNCTS =
+  let [pth_ni1; pth_ni2; pth_no1; pth_no2; pth_an1; pth_an2; pth_nn] =
+    (map UNDISCH_ALL o CONJUNCTS o TAUT)
+    `(~(p ==> q) ==> p) /\
+     (~(p ==> q) ==> ~q) /\
+     (~(p \/ q) ==> ~p) /\
+     (~(p \/ q) ==> ~q) /\
+     (p /\ q ==> p) /\
+     (p /\ q ==> q) /\
+     (~ ~p ==> p)` in
+  let p_tm = concl pth_an1 and q_tm = concl pth_an2 in
+  let rec GCONJUNCTS th acc =
+    match (concl th) with
+      Comb(Const("~",_),Comb(Comb(Const("==>",_),p),q)) ->
+       GCONJUNCTS (PROVE_HYP th (INST [p,p_tm; q,q_tm] pth_ni1))
+                  (GCONJUNCTS (PROVE_HYP th (INST [p,p_tm; q,q_tm] pth_ni2))
+                              acc)
+    | Comb(Const("~",_),Comb(Comb(Const("\\/",_),p),q)) ->
+       GCONJUNCTS (PROVE_HYP th (INST [p,p_tm; q,q_tm] pth_no1))
+                  (GCONJUNCTS (PROVE_HYP th (INST [p,p_tm; q,q_tm] pth_no2))
+                              acc)
+    | Comb(Comb(Const("/\\",_),p),q) ->
+       GCONJUNCTS (PROVE_HYP th (INST [p,p_tm; q,q_tm] pth_an1))
+                  (GCONJUNCTS (PROVE_HYP th (INST [p,p_tm; q,q_tm] pth_an2))
+                              acc)
+    | Comb(Const("~",_),Comb(Const("~",_),p)) ->
+          GCONJUNCTS (PROVE_HYP th (INST [p,p_tm] pth_nn)) acc
+    | _ -> th::acc in
+  fun th -> GCONJUNCTS th []
+in
+(* ------------------------------------------------------------------------- *)
+(* Generate fresh variable names (could just use genvars).                   *)
+(* ------------------------------------------------------------------------- *)
+
+let propvar i = mk_var("x"^string_of_int i,bool_ty)
+in
+(* ------------------------------------------------------------------------- *)
+(* Set up the basic definitional arrangement.                                *)
+(* ------------------------------------------------------------------------- *)
+
+let rec localdefs tm (n,defs,lfn) =
+  if is_neg tm then
+    let n1,v1,defs1,lfn1 = localdefs (rand tm) (n,defs,lfn) in
+    let tm' = mk_neg v1 in
+    try (n1,apply defs1 tm',defs1,lfn1) with Failure _ ->
+    let n2 = n1 + 1 in
+    let v2 = propvar n2 in
+    n2,v2,(tm' |-> v2) defs1,(v2 |-> tm) lfn1
+  else if is_conj tm || is_disj tm || is_imp tm || is_iff tm then
+    let n1,v1,defs1,lfn1 = localdefs (lhand tm) (n,defs,lfn) in
+    let n2,v2,defs2,lfn2 = localdefs (rand tm) (n1,defs1,lfn1) in
+    let tm' = mk_comb(mk_comb(rator(rator tm),v1),v2) in
+    try (n2,apply defs2 tm',defs2,lfn2) with Failure _ ->
+    let n3 = n2 + 1 in
+    let v3 = propvar n3 in
+    n3,v3,(tm' |-> v3) defs2,(v3 |-> tm) lfn2
+  else try (n,apply defs tm,defs,lfn) with Failure _ ->
+       let n1 = n + 1 in
+       let v1 = propvar n1 in
+       n1,v1,(tm |-> v1) defs,(v1 |-> tm) lfn
+in
+(* ------------------------------------------------------------------------- *)
+(* Just translate to fresh variables, but otherwise leave unchanged.         *)
+(* ------------------------------------------------------------------------- *)
+
+let rec transvar (n,tm,vdefs,lfn) =
+  if is_neg tm then
+    let n1,tm1,vdefs1,lfn1 = transvar (n,rand tm,vdefs,lfn) in
+    n1,mk_comb(rator tm,tm1),vdefs1,lfn1
+  else if is_conj tm || is_disj tm || is_imp tm || is_iff tm then
+    let n1,tm1,vdefs1,lfn1 = transvar (n,lhand tm,vdefs,lfn) in
+    let n2,tm2,vdefs2,lfn2 = transvar (n1,rand tm,vdefs1,lfn1) in
+    n2,mk_comb(mk_comb(rator(rator tm),tm1),tm2),vdefs2,lfn2
+  else try n,apply vdefs tm,vdefs,lfn with Failure _ ->
+       let n1 = n + 1 in
+       let v1 = propvar n1 in
+       n1,v1,(tm |-> v1) vdefs,(v1 |-> tm) lfn
+in
+(* ------------------------------------------------------------------------- *)
+(* Determine if a term is (strictly) clausal, i.e. is a conjunction of       *)
+(* disjunctions of literals, all of which are right-associated.              *)
+(* ------------------------------------------------------------------------- *)
+
+let is_atom tm =
+  match tm with
+    Comb(Comb(Const("/\\",_),l),r)
+  | Comb(Comb(Const("\\/",_),l),r)
+  | Comb(Comb(Const("==>",_),l),r)
+  | Comb(Comb(Const("=",Tyapp("fun",[Tyapp("bool",[]);_])),l),r)
+        -> false
+  | Comb(Const("~",_),l) -> false
+  | _ -> true
+in
+let is_literal tm =
+  match tm with
+    Comb(Const("~",_),t) -> is_atom t
+  | _ -> is_atom tm
+in
+let rec is_clausal tm =
+  match tm with
+    Comb(Comb(Const("\\/",_),l),r) -> is_literal l && is_clausal r
+  | _ -> is_literal tm
+in
+let rec is_strictcnf tm =
+  match tm with
+    Comb(Comb(Const("/\\",_),l),r) -> is_clausal l && is_strictcnf r
+  | _ -> is_clausal tm
+in
+(* ------------------------------------------------------------------------- *)
+(* Now do the definitional arrangement but not wastefully at the top.        *)
+(* ------------------------------------------------------------------------- *)
+
+let definitionalize =
+  let transform_imp =
+    let pth = TAUT `(p ==> q) <=> ~p \/ q` in
+    let ptm = rand(concl pth) in
+    let p_tm = rand(lhand ptm) and q_tm = rand ptm in
+    fun th -> let ip,q = dest_comb(concl th) in
+              let p = rand ip in
+              EQ_MP (INST [p,p_tm; q,q_tm] pth) th
+  and transform_iff_1 =
+    let pth = UNDISCH(TAUT `(p <=> q) ==> (p \/ ~q)`) in
+    let ptm = concl pth in
+    let p_tm = lhand ptm and q_tm = rand(rand ptm) in
+    fun th -> let ip,q = dest_comb(concl th) in
+              let p = rand ip in
+              PROVE_HYP th (INST [p,p_tm; q,q_tm] pth)
+  and transform_iff_2 =
+    let pth = UNDISCH(TAUT `(p <=> q) ==> (~p \/ q)`) in
+    let ptm = concl pth in
+    let p_tm = rand(lhand ptm) and q_tm = rand ptm in
+    fun th -> let ip,q = dest_comb(concl th) in
+              let p = rand ip in
+              PROVE_HYP th (INST [p,p_tm; q,q_tm] pth) in
+  let definitionalize th (n,tops,defs,lfn) =
+    let t = concl th in
+    if is_clausal t then
+      let n',v,defs',lfn' = transvar (n,t,defs,lfn) in
+      (n',(v,th)::tops,defs',lfn')
+    else if is_neg t then
+       let n1,v1,defs1,lfn1 = localdefs (rand t) (n,defs,lfn) in
+       (n1,(mk_neg v1,th)::tops,defs1,lfn1)
+    else if is_disj t then
+      let n1,v1,defs1,lfn1 = localdefs (lhand t) (n,defs,lfn) in
+      let n2,v2,defs2,lfn2 = localdefs (rand t) (n1,defs1,lfn1) in
+      (n2,(mk_disj(v1,v2),th)::tops,defs2,lfn2)
+    else if is_imp t then
+      let n1,v1,defs1,lfn1 = localdefs (lhand t) (n,defs,lfn) in
+      let n2,v2,defs2,lfn2 = localdefs (rand t) (n1,defs1,lfn1) in
+      (n2,(mk_disj(mk_neg v1,v2),transform_imp th)::tops,defs2,lfn2)
+    else if is_iff t then
+      let n1,v1,defs1,lfn1 = localdefs (lhand t) (n,defs,lfn) in
+      let n2,v2,defs2,lfn2 = localdefs (rand t) (n1,defs1,lfn1) in
+      (n2,(mk_disj(v1,mk_neg v2),transform_iff_1 th)::
+          (mk_disj(mk_neg v1,v2),transform_iff_2 th)::tops,defs2,lfn2)
+    else
+      let n',v,defs',lfn' = localdefs t (n,defs,lfn) in
+      (n',(v,th)::tops,defs',lfn') in
+  definitionalize
+in
+(* ========================================================================= *)
+(* Translate .lrat proof file into HOL inferences and prove a .cnf formula.  *)
+(*                                                                           *)
+(* This is designed for the .lrat proofs produced by Cadical; those do not   *)
+(* use proper RAT lemmas, and have a particularly clean and simple syntax.   *)
+(* This might not work for the .lrat files produced by other provers.        *)
+(*                                                                           *)
+(* The first argument "amap" is the mapping from .cnf variable numbers to    *)
+(* HOL propositions, e.g. 123 |-> `p123:bool`.                               *)
+(*                                                                           *)
+(* For the _GEN functions there are two filename arguments, one for the CNF  *)
+(* problem file and the other for the corresponding LRAT proof file. For the *)
+(* non-GEN forms there is a single argument that is the root "filename"      *)
+(* for the corresponding CNF file "filename.cnf" and LRAT "filename.lrat".   *)
+(*                                                                           *)
+(* In all cases, non-absolute filenames are interpreted relative to the      *)
+(* directory pointed at by the reference "problem_dir".                      *)
+(* ========================================================================= *)
+
+let problem_dir = ref "/tmp"
+in
+let LRAT_PROVE_GEN =
+  let ptm = `p:bool` and qtm = `q:bool` in
+  let orth = REFL(rator(rator(mk_disj(ptm,ptm)))) in
+  let number_clauses =
+    let rec aux f n (cl,th) =
+      match cl with
+        [c] -> (n |-> (c,th)) f
+      | c::cs ->
+          let th1,th2 = CONJ_PAIR th in
+          aux ((n |-> (c,th1)) f) (n + 1) (cs,th2)
+      | _ -> failwith "number_clauses: there are no clauses" in
+    aux undefined 1 in
+  let DEDRUP_RULE =
+    let pth = SPEC ptm (TAUT `!p. (~p ==> F) <=> p`) in
+    fun th -> EQ_MP (INST [rand(lhand(concl th)),ptm] pth) th in
+  let ORIFY (c,th) uths = (-c |-> (th,MK_COMB(orth,th))) uths in
+  let EQUIFY =
+    let nth = SPEC ptm (TAUT `!p. ~p <=> (p <=> F)`)
+    and pth = SPEC ptm (TAUT `!p. p <=> (~p <=> F)`) in
+    fun (c,th) uths ->
+      let tm = concl th in
+      let th' =
+        if c < 0 then EQ_MP (INST [rand tm,ptm] nth) th
+        else EQ_MP (INST [tm,ptm] pth) th in
+      let th'' = MK_COMB(orth,th') in
+      (-c |-> (th',th'')) uths in
+    let upth_l = SPEC ptm (TAUT `!p. F \/ p <=> p`)
+    and upth_r = SPEC ptm (TAUT `!p. p \/ F <=> p`)
+    and upth_b = TAUT `F \/ F <=> F` in
+  fun amap cnfname lratname ->
+    let adjust s =
+      if Filename.is_relative s
+      then Filename.concat (!problem_dir) s else s in
+    let probfile = adjust cnfname and lratfile = adjust lratname in
+    let prb = read_dimacs probfile in
+    let ctm = term_of_clauses amap prb in
+    let nvars = rev_itlist (rev_itlist (max o abs)) prb 0 in
+    let upth_l_pos = Array.init (nvars+1)
+      (fun v -> if v = 0 then upth_b else INST [amap v,ptm] upth_l)
+    and upth_l_neg = Array.init (nvars+1)
+      (fun v -> if v = 0 then upth_b else INST [mk_neg(amap v),ptm] upth_l)
+    and upth_r_pos = Array.init (nvars+1)
+      (fun v -> if v = 0 then upth_b else INST [amap v,ptm] upth_r)
+    and upth_r_neg = Array.init (nvars+1)
+      (fun v -> if v = 0 then upth_b else INST [mk_neg(amap v),ptm] upth_r) in
+    let upth_t_pos = Array.init (nvars+1)
+        (fun v -> REFL(rator(lhand(concl(Array.get upth_r_pos v)))))
+    and upth_t_neg = Array.init (nvars+1)
+        (fun v -> REFL(rator(lhand(concl(Array.get upth_r_neg v))))) in
+    let UNITPROP =
+      fun uths ->
+        let rec conv (cl,tm) =
+            match (cl,tm) with
+              [c],_ -> (try 0,fst(apply uths c) with Failure _ -> c,REFL tm)
+            | (c::cs,Comb(Comb(_,l),r)) ->
+                (let rl,rth = conv(cs,r) in
+                 try let lth,lth' = apply uths c in
+                     let th = MK_COMB(lth',rth) in
+                     rl,TRANS th (if rl < 0 then Array.get upth_l_neg (-rl)
+                                  else Array.get upth_l_pos rl)
+                 with Failure _ ->
+                   c,
+                (if c < 0 then
+                   TRANS (MK_COMB(Array.get upth_t_neg (-c),rth))
+                         (Array.get upth_r_neg (-c))
+                 else
+                   TRANS (MK_COMB(Array.get upth_t_pos c,rth))
+                         (Array.get upth_r_pos c)))
+            | _ -> failwith "UNITPROP: Sanity check" in
+      fun (cl,th) -> let d,th' = conv(cl,concl th) in d,EQ_MP th' th in
+    let UNITPROPS cls =
+      let rec rule uths pf =
+        match pf with
+          c::ops -> let p,th = UNITPROP uths (apply cls c) in
+                    if p = 0 then th else rule (EQUIFY (p,th) uths) ops
+        | [] -> failwith "UNITPROPS: did not reach a contradiction" in
+      fun dths -> rule (rev_itlist ORIFY dths undefined) in
+    let NEGATE_CLAUSE =
+      let pth_lor = UNDISCH(SPECL[ptm;qtm]
+       (TAUT `!p q. ~(p \/ q) ==> (p <=> F)`))
+      and pth_ror = UNDISCH(SPECL[ptm;qtm] (TAUT `!p q. ~(p \/ q) ==> ~q`))
+      and pth_ide = SPEC ptm (TAUT `!p. ~p <=> (p <=> F)`) in
+      let nrule (c,th) =
+        let Comb(_,t) = concl th in
+        -c,EQ_MP (INST [t,ptm] pth_ide) th in
+      let rec rule (cl,th) =
+        match (cl,concl th) with
+          [c],_ -> [nrule(c,th)]
+        | (c::cs,Comb(_,Comb(Comb(_,l),r))) ->
+            let iptho = INST [l,ptm; r,qtm] in
+            let th1 = EQ_MP (DEDUCT_ANTISYM_RULE th (iptho pth_lor)) th
+            and th2 = EQ_MP (DEDUCT_ANTISYM_RULE th (iptho pth_ror)) th in
+            (-c,th1)::rule (cs,th2)
+        | [],_ -> []
+        | _ -> failwith "NEGATE_CLAUSE: sanity check" in
+      rule in
+      let LRAT_ADD (n,cl,pf) cls =
+        let ctm = term_of_clause amap cl in
+        let ctm' = mk_neg ctm in
+        let dths = NEGATE_CLAUSE (cl,ASSUME ctm') in
+        let fth = UNITPROPS cls dths pf in
+        let th = DEDRUP_RULE(DISCH ctm' fth) in
+        (n |-> (cl,th)) cls in
+      let rec PROCESS_LRAT fd m cls =
+        match (try Some(input_line fd) with End_of_file -> None) with
+         Some s ->
+           (match String.split_on_char ' ' s with
+             ns::"d"::dnums ->
+                  let n = int_of_string ns
+                  and cls' = rev_itlist (undefine o int_of_string) dnums cls in
+                  PROCESS_LRAT fd n cls'
+            | ns::clap ->
+                  let n = int_of_string ns
+                  and clans = map int_of_string clap in
+                  let i = index 0 clans in
+                  let c,u = chop_list i clans in
+                  let cls' = LRAT_ADD (n,c,butlast(tl u)) cls in
+                  PROCESS_LRAT fd n cls'
+            | _ -> failwith "PROCESS_LRAT: Can't parse input line")
+        | None -> apply cls m in
+    let cls = number_clauses(prb,ASSUME ctm) in
+    let fd =
+      try open_in lratfile
+      with Sys_error _ -> failwith("LRAT_PROVE: can't open "^lratfile) in
+    let _,fth = PROCESS_LRAT fd 0 cls in
+    let _ = close_in fd in
+    NOT_INTRO(DISCH ctm fth)
+in
+let LRAT_PROVE amap basename =
+  LRAT_PROVE_GEN amap (basename^".cnf") (basename^".lrat")
+in
+let LRAT_REFUTE_GEN amap cnfname lratname =
+    UNDISCH(NOT_ELIM(LRAT_PROVE_GEN amap cnfname lratname))
+in
+let LRAT_REFUTE amap basename =
+   LRAT_REFUTE_GEN amap (basename^".cnf") (basename^".lrat")
+in
+(* ========================================================================= *)
+(* csat_lib.ml -- certified-SAT close for HOL Light word goals.               *)
+(*                                                                           *)
+(* Connects the missing BITBLAST_THEN -> CADICAL_PROVE edge.  The pinned     *)
+(* Examples/bitblast.ml defines BITBLAST_CADICAL only inside a (**** ...     *)
+(* ****) block, so it is never loaded.  This file supplies it.               *)
+(*                                                                           *)
+(* Kernel trust: every SAT refutation is replayed by LRAT_REFUTE_GEN inside  *)
+(* the HOL Light kernel (Cadical/ldrup.ml).  No solver certificate is trusted *)
+(* and no compiler enters the trusted base.                                  *)
+(*                                                                           *)
+(* CaDiCaL 2.1.2 emits LRAT text directly with --no-binary --lrat; the       *)
+(* lrat-trim post-pass used by Cadical/cadical.ml is therefore optional.     *)
+(* CSAT_PROVE is CADICAL_PROVE with that native-LRAT refuter substituted.    *)
+(* ========================================================================= *)
+
+(* Unix (wall-clock) is loaded by the driver before this file is loadt-ed. *)
+let csat_now () = Unix.gettimeofday ()
+in
+let csat_debug = ref false
+in
+(* --- backward-closure LRAT trim (IX.63) ---------------------------------- *)
+(*
+   Between the solver writing its LRAT and the kernel replaying it, keep only
+   the additions the empty clause depends on through positive RUP hints, in
+   the original file order, and drop every deletion line.  A kept clause may
+   still be hinted by a kept clause, so the replay is the same kernel code on
+   a smaller file.
+
+   Conservative by construction.  If any hint in the file is negative (RAT),
+   or the last addition does not assert the empty clause, or the file is not
+   understood (blank/duplicate ids/malformed line/IO error), the file is left
+   untouched and `CSAT_TRIM skipped=<reason>` is printed.  There is no
+   fallback on replay failure: a wrong closure makes LRAT_REFUTE_GEN fail,
+   which is the intended behaviour.
+
+   This block is delimited by BEGIN/END CSAT_TRIM_STANDALONE so that
+   tests/csat_trim_selftest.sh can exercise exactly the shipped text outside
+   HOL Light.  Keep it free of HOL Light names and of structure items other
+   than `let` (the emitted answer inlines each phrase as a nested binding). *)
+(* BEGIN CSAT_TRIM_STANDALONE *)
+let csat_lrat_tokens s =
+  let n = String.length s and out = ref [] and buf = Buffer.create 24 in
+  let flush () =
+    if Buffer.length buf > 0 then
+      (out := Buffer.contents buf :: !out; Buffer.clear buf) in
+  for i = 0 to n - 1 do
+    match s.[i] with
+    | ' ' | '\t' | '\r' -> flush ()
+    | c -> Buffer.add_char buf c
+  done;
+  flush ();
+  List.rev !out
+in
+let csat_lrat_parse raw toks =
+  let all_nonneg ts =
+    List.for_all
+      (fun t -> try int_of_string t >= 0 with _ -> false) ts in
+  match toks with
+  | id_s :: "d" :: rest ->
+      (try
+         if int_of_string id_s = 0 || not (all_nonneg rest) then None
+         else Some (int_of_string id_s, None, raw)
+       with _ -> None)
+  | id_s :: rest ->
+      (try
+         let id = int_of_string id_s in
+         if id = 0 then None else
+         let rec first_zero acc = function
+           | [] -> None
+           | "0" :: tl -> Some (List.rev acc, tl)
+           | t :: tl -> first_zero (t :: acc) tl in
+         match first_zero [] rest with
+         | None -> None
+         | Some (lits, tail) ->
+             List.iter (fun t -> ignore (int_of_string t)) lits;
+             let hs = List.fold_left
+               (fun acc t ->
+                  let v = int_of_string t in
+                  if v = 0 then acc else v :: acc)
+               [] tail in
+             Some (id, Some (Array.of_list (List.rev hs)), raw)
+       with _ -> None)
+  | [] -> None
+in
+(* (id, hints option, raw) for every non-blank line, plus the file size. *)
+let csat_lrat_read path =
+  try
+    let ic = open_in_bin path in
+    let n = in_channel_length ic in
+    let text = really_input_string ic n in
+    close_in ic;
+    let parsed = ref [] and start = ref 0 and bad = ref None in
+    let add_line stop =
+      let raw = String.sub text !start (stop - !start) in
+      let toks = csat_lrat_tokens raw in
+      if toks <> [] then
+        (match csat_lrat_parse raw toks with
+         | None -> bad := Some "malformed"
+         | Some p -> parsed := p :: !parsed) in
+    for i = 0 to n - 1 do
+      if text.[i] = '\n' then (add_line i; start := i + 1)
+    done;
+    if !start < n then add_line n;
+    match !bad with
+    | Some r -> Error r
+    | None -> Ok (Array.of_list (List.rev !parsed), n)
+  with _ -> Error "io_error"
+in
+let csat_trim_lrat path =
+  let skipped reason =
+    Printf.printf "CSAT_TRIM skipped=%s\n%!" reason in
+  match csat_lrat_read path with
+  | Error reason -> skipped reason
+  | Ok (parsed, before_bytes) ->
+      let m = Array.length parsed in
+      if m = 0 then skipped "empty_lrat" else
+      let ids = Array.init m (fun i -> let (x,_,_) = parsed.(i) in x)
+      and hints = Array.init m (fun i -> let (_,x,_) = parsed.(i) in x)
+      and raws = Array.init m (fun i -> let (_,_,x) = parsed.(i) in x) in
+      let additions = ref 0 and last = ref (-1) in
+      for i = 0 to m - 1 do
+        if hints.(i) <> None then (incr additions; last := i)
+      done;
+      if !additions = 0 then skipped "no_additions" else
+      let root = !last in
+      let root_lits =
+        match csat_lrat_tokens raws.(root) with
+        | _ :: rest ->
+            let rec count = function
+              | "0" :: _ -> 0
+              | _ :: tl -> 1 + count tl
+              | [] -> 0 in
+            count rest
+        | [] -> 0 in
+      if root_lits <> 0 then skipped "no_empty_clause" else
+      let has_negative =
+        let found = ref false in
+        Array.iter
+          (function
+            | None -> ()
+            | Some hs -> Array.iter (fun v -> if v < 0 then found := true) hs)
+          hints;
+        !found in
+      if has_negative then skipped "negative_hint" else
+      let index = Hashtbl.create (2 * !additions + 1) in
+      let dup = ref false in
+      for i = 0 to m - 1 do
+        if hints.(i) <> None then
+          (if Hashtbl.mem index ids.(i) then dup := true;
+           Hashtbl.replace index ids.(i) i)
+      done;
+      if !dup then skipped "duplicate_id" else
+      let keep = Array.make m false in
+      let steps_after = ref 0 in
+      let stack = ref [root] in
+      while !stack <> [] do
+        match !stack with
+        | [] -> ()
+        | pos :: rest ->
+            stack := rest;
+            if not keep.(pos) then
+              (keep.(pos) <- true;
+               incr steps_after;
+               match hints.(pos) with
+               | None -> ()
+               | Some hs ->
+                   Array.iter
+                     (fun h ->
+                        if h > 0 then
+                          try
+                            let j = Hashtbl.find index h in
+                            if not keep.(j) then stack := j :: !stack
+                          with Not_found -> ())
+                     hs)
+      done;
+      let buf = Buffer.create (before_bytes / 2 + 1) in
+      for i = 0 to m - 1 do
+        if keep.(i) then
+          (Buffer.add_string buf raws.(i); Buffer.add_char buf '\n')
+      done;
+      let out = Buffer.contents buf in
+      (try
+         let tmp = path ^ ".trim" in
+         let oc = open_out_bin tmp in
+         output_string oc out;
+         close_out oc;
+         Sys.rename tmp path;
+         Printf.printf
+           "CSAT_TRIM before=%d after=%d steps_before=%d steps_after=%d\n%!"
+           before_bytes (String.length out) !additions !steps_after
+       with _ ->
+         (try Sys.remove (path ^ ".trim") with _ -> ());
+         skipped "write_error")
+in
+(* END CSAT_TRIM_STANDALONE *)
+
+(* Disabled only by a controlled comparison run (T4), never by the emitter. *)
+let csat_trim_enabled = ref true
+in
+(* --- phase markers (IX.65; measurement mode only) -------------------------
+   `csat_mark label` is the identity on the goal.  A measurement answer is
+   emitted with
+     `csat_mark_reader := inference_count; csat_mark_enabled := true;`
+   in front of the tactic; each marker then prints
+     `PHASE_MARK <label> <primitive inferences at this point>`
+   A normal answer never enables them, so nothing is printed and no inference
+   is added anywhere.  `csat_mark_reader` defaults to a function that raises,
+   so enabling a marker without a reader fails loudly instead of reporting a
+   fabricated count.
+
+   `CSAT_REFUTE_GEN` also brackets `LRAT_REFUTE_GEN` with two markers when
+   measurement mode is on, so the bridge block can be split into the certified
+   replay and the bridge's own rewriting.  The bracket is inert in every normal
+   answer.  This block adds phrases to every inlined answer, exactly as the
+   IX.63 trimmer did; see that receipt for why byte identity with the Python-era
+   answers is already retired. *)
+
+let csat_mark_enabled = ref false
+in
+let csat_mark_reader : (unit -> int) ref =
+  ref (fun () -> failwith "csat_mark: no inference reader set")
+in
+let csat_mark (label : string) : tactic =
+  fun g ->
+    if !csat_mark_enabled then
+      Printf.printf "PHASE_MARK %s %d\n%!" label (!csat_mark_reader ());
+    ALL_TAC g
+in
+(* --- native-LRAT refuter ------------------------------------------------- *)
+
+let CSAT_REFUTE_GEN amap tm =
+  let cnfname = Filename.temp_file "csathol" ".cnf"
+  and lratname = Filename.temp_file "csathol" ".lrat"
+  and logname = Filename.temp_file "csathol" ".log" in
+  let _ = dimacs_of_hol cnfname tm in
+  let command =
+    "(cadical --no-binary --lrat "^cnfname^" "^lratname^") >"^logname in
+  let rc = Sys.command command in
+  if rc <> 20 then
+    (ignore (Sys.command ("rm -f "^cnfname^" "^lratname^" "^logname));
+     failwith ("CSAT: cadical did not report UNSAT, exit "^string_of_int rc));
+  let _ = if !csat_trim_enabled then csat_trim_lrat lratname in
+  let _ = if !csat_mark_enabled then
+            Printf.printf "PHASE_MARK bridge:pre-replay %d\n%!"
+              (!csat_mark_reader ()) in
+  let res = LRAT_REFUTE_GEN amap cnfname lratname in
+  let _ = if !csat_mark_enabled then
+            Printf.printf "PHASE_MARK bridge:post-replay %d\n%!"
+              (!csat_mark_reader ()) in
+  let _ = if !csat_debug then ()
+          else ignore (Sys.command
+                 ("rm -f "^cnfname^" "^lratname^" "^logname)) in
+  res
+in
+let CSAT_REFUTE =
+  let false_tm = `F` in
+  fun tm ->
+    let aar = Array.of_list (false_tm::atoms tm) in
+    let th = CSAT_REFUTE_GEN (Array.get aar) tm in
+    if hyp th = [tm] && concl th = false_tm then th
+    else failwith "CSAT_REFUTE: Sanity check failure"
+in
+(* --- definitional-CNF prover (mirrors CADICAL_PROVE) --------------------- *)
+
+let CSAT_PROVE =
+  let false_tm = `F`
+  and p_tm = `p:bool` and q_tm = `q:bool`
+  and pth_triv = TAUT `(~p <=> F) <=> p`
+  and pth_main = UNDISCH_ALL(TAUT `(~p <=> q) ==> (q ==> F) ==> p`) in
+  let presimp_conv = GEN_REWRITE_CONV DEPTH_CONV
+    [NOT_CLAUSES; AND_CLAUSES; OR_CLAUSES; IMP_CLAUSES; EQ_CLAUSES]
+  and triv_rule p th = EQ_MP(INST [p,p_tm] pth_triv) th
+  and main_rule p q sth th =
+    itlist PROVE_HYP [sth; DISCH_ALL th] (INST [p,p_tm; q,q_tm] pth_main) in
+  fun tm ->
+    if is_neg tm && is_strictcnf (rand tm) then
+      NOT_INTRO(DISCH_ALL(CSAT_REFUTE(rand tm)))
+    else if is_imp tm && rand tm = false_tm && is_strictcnf (lhand tm) then
+      DISCH_ALL(CSAT_REFUTE(lhand tm))
+    else
+      let sth = presimp_conv(mk_neg tm) in
+      let stm = rand(concl sth) in
+      if stm = false_tm then triv_rule tm sth else
+      let th = ASSUME stm in
+      let ths = if !exploit_conjunctive_structure then GCONJUNCTS th
+                else [th] in
+      let n,tops,defs,lfn =
+        itlist definitionalize ths (-1,[],undefined,undefined) in
+      let defg = foldl (fun a t nv -> (t,nv)::a) [] defs in
+      let mdefs = filter (fun (r,_) -> not (is_atom r)) defg in
+      let eqs = map (fun (r,l) -> mk_iff(l,r)) mdefs in
+      let clausify eq cls =
+        let fvs = frees eq and eth = (NNFC_CONV THENC CNF_CONV) eq in
+        let tth = INST (map (fun v -> apply lfn v,v) fvs) eth in
+        let xth = ADD_ASSUM stm (EQ_MP tth (REFL(apply lfn (lhand eq)))) in
+        zip (conjuncts(rand(concl eth))) (CONJUNCTS xth) @ cls in
+      let all_clauses = itlist clausify eqs tops in
+      let ntdcnf = list_mk_conj (map fst all_clauses) in
+      let expat = map (apply lfn) (atoms ntdcnf) in
+      let rar = Array.of_list(false_tm::expat) in
+      let cth = CSAT_REFUTE_GEN (Array.get rar) ntdcnf in
+      let dth = PROVE_HYP (end_itlist CONJ (map snd all_clauses)) cth in
+      let fth = main_rule tm stm sth dth in
+      if concl fth = tm && hyp fth = [] then fth
+      else failwith "CSAT_PROVE: Sanity check"
+in
+let CSAT_TAC = BITBLAST_THEN (CONV_TAC o K CSAT_PROVE)
+in
+(* --- attempt a goal and report ------------------------------------------- *)
+
+(* A goal (asl,w) becomes the theorem |- asl ==> w, closed with the
+   certified-SAT tactic.  Returns (closed, seconds, message, theorem-term). *)
+let csat_list_mk_imp (l,t) = itlist (fun a b -> mk_imp(a,b)) l t
+in
+let csat_attempt_goal (asl,w) =
+  let tm = if asl = [] then w else
+    csat_list_mk_imp (map (fun (_,th) -> concl th) asl, w) in
+  let t0 = csat_now () in
+  let closed,msg =
+    try
+      let th = prove(tm, REPEAT STRIP_TAC THEN CSAT_TAC) in
+      (hyp th = [] && concl th = tm, "")
+    with Failure s -> (false, s)
+       | _ -> (false, "unknown exception") in
+  (closed, csat_now () -. t0, msg, tm)
+in
+let report_attempt tag (closed,dt,msg,_) =
+  if closed then
+    Printf.printf "CSAT_RESULT %s closed=1 seconds=%.3f\n" tag dt
+  else
+    let s = String.concat " " (String.split_on_char '\n' msg) in
+    Printf.printf "CSAT_RESULT %s closed=0 seconds=%.3f reason=%s\n" tag dt s
+in
+(* ========================================================================= *)
+(* bridge.ml -- generic bridge lemmas from a num/MOD (or int/rem, real/&)    *)
+(* specification to a word-level circuit statement that certified SAT can    *)
+(* discharge.                                                                *)
+(*                                                                           *)
+(* Parameterisation: the modulus `p` is an argument of every lemma, the limb *)
+(* width (64) enters only through the numerals that appear in the shifts,    *)
+(* and the number of limbs enters only through the nesting depth of the      *)
+(* joins.  There is no P-256 constant, no P-256 limb list and no transposed  *)
+(* human tactic fragment in this file: the arithmetic below is the general   *)
+(* statement that `(m + n) MOD p`, `(&m - &n) rem &p` and `(p - n) MOD p`    *)
+(* are what the machine's written residue is, for any `p`.                   *)
+(*                                                                           *)
+(* Provenance of the mathematics used:                                       *)
+(*   MOD_ADD_CASES / MOD_LT / MOD_REFL / EXP_ADD / LT_MULT_LCANCEL  (arith)  *)
+(*   INT_REM_UNIQ / INT_OF_NUM_* / INT_POW_ADD / INT_*_DISTRIB      (int)    *)
+(*   VAL_WORD_JOIN_SIMPLE / VAL_WORD_0 / VAL_BOUND / VAL_WORD_BITVAL (words) *)
+(*   MOD_UNIQ / SUB_ADD / VAL_WORD_ADD / VAL_WORD_SUB               (arith)  *)
+(*                                                                           *)
+(* The reference route: `ref_add' is the modular specification in one word    *)
+(* operation, and ADD_REF_VAL is the only lemma that carries MOD.  SAT       *)
+(* instances built on it are pure word statements.                          *)
+(*                                                                           *)
+(* Conversion note: INT_SHIFT_TO_JOIN_CONV accepts a *numeral* operand, not   *)
+(* only `&(val x)' and `&(bitval b)'.  The case split substitutes a carry    *)
+(* by the literal 0 or 1, so `&2 pow 64 * &0' must still become a join; if   *)
+(* it does not, the accumulator equation is left as an opaque int atom and   *)
+(* the flag it constrains is free.                                          *)
+(*                                                                           *)
+(* Kernel trust: every SAT refutation is replayed by the LCF kernel inside   *)
+(* CSAT_REFUTE (csat_lib.ml); no solver certificate is trusted and no         *)
+(* compiler enters the trusted base.                                         *)
+(*                                                                           *)
+(* DEVELOPMENT_ONLY (not lemmas; recorded so they cannot hide):             *)
+(*   BRIDGE_ADD_TAC / BRIDGE_SUB_TAC / BRIDGE_NEG_TAC are *shape dispatch*.  *)
+(*   They inspect the postcondition shape (sum MOD p, difference rem p,      *)
+(*   complement MOD p), split at the single conditional that shape admits,   *)
+(*   and call the generic lemmas above.  The old human tail (DECARRY_RULE,   *)
+(*   DESUM_RULE, BOUNDER_TAC, EQUAL_FROM_CONGRUENT_MOD_MOD,                 *)
+(*   REAL_INTEGER_TAC) is not used anywhere in this file.                    *)
+(* ========================================================================= *)
+
+(* ------------------------------------------------------------------------- *)
+(* 1. The modular specification, split at its single conditional correction. *)
+(*                                                                           *)
+(* Each lemma states the spec side in terms of the value the machine writes, *)
+(* so the machine-side obligation that reaches SAT is a pure *sum* identity: *)
+(* no MOD, no rem, no subtraction.                                           *)
+(* ------------------------------------------------------------------------- *)
+
+(* add: (m + n) MOD p, at most one correction because m < p and n < p. *)
+let ADD_MOD_LT = prove
+ (`!p m n. m < p /\ n < p /\ m + n < p ==> (m + n) MOD p = m + n`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(m + n) MOD p = (if m + n < p then m + n else (m + n) - p)`
+    (fun th -> REWRITE_TAC[th]) THENL
+   [MATCH_MP_TAC MOD_ADD_CASES THEN ASM_REWRITE_TAC[];
+    ASM_REWRITE_TAC[]])
+in
+let ADD_MOD_GE = prove
+ (`!p m n. m < p /\ n < p /\ p <= m + n ==> (m + n) MOD p = (m + n) - p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(m + n) MOD p = (if m + n < p then m + n else (m + n) - p)`
+    (fun th -> REWRITE_TAC[th]) THENL
+   [MATCH_MP_TAC MOD_ADD_CASES THEN ASM_REWRITE_TAC[];
+    SUBGOAL_THEN `~(m + n < p)` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+    ASM_REWRITE_TAC[]])
+in
+(* `t = (m + n) - p' in sum form, so that the residue has no subtraction *)
+let ADD_GE_SUM = prove
+ (`!p m n t. p <= m + n ==> ((t = (m + n) - p) <=> (t + p = m + n))`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  MP_TAC(ISPECL [`m + n:num`; `p:num`] SUB_ADD) THEN
+  ANTS_TAC THENL [ASM_REWRITE_TAC[]; DISCH_TAC] THEN
+  EQ_TAC THENL
+   [DISCH_THEN SUBST1_TAC THEN ASM_REWRITE_TAC[];
+    DISCH_TAC THEN UNDISCH_TAC `((m + n) - p) + p = m + n` THEN
+    ASM_ARITH_TAC])
+in
+(* the same bridge, stated once in the shape a caller applies *)
+let ADD_MOD_SPLIT = prove
+ (`!p m n s t.
+       0 < p /\ m < p /\ n < p /\
+       (m + n < p ==> s = m + n) /\
+       (p <= m + n ==> t + p = m + n)
+       ==> (m + n) MOD p = (if m + n < p then s else t)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  ASM_CASES_TAC `m + n < p` THENL
+   [ASM_SIMP_TAC[ADD_MOD_LT] THEN ASM_ARITH_TAC;
+    SUBGOAL_THEN `p <= m + n` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+    ASM_SIMP_TAC[ADD_MOD_GE] THEN CONV_TAC SYM_CONV THEN
+    ASM_SIMP_TAC[ADD_GE_SUM] THEN ASM_ARITH_TAC])
+in
+(* sub: (&m - &n) rem &p, split at the borrow. *)
+let SUB_REM_LT = prove
+ (`!p m n. 0 < p /\ m < p /\ n < p /\ m < n
+           ==> ((&m:int) - &n) rem (&p) = &((m + p) - n)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `n <= m + p` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  SUBGOAL_THEN `&((m + p) - n):int = (&m + &p) - &n` ASSUME_TAC THENL
+   [ASM_SIMP_TAC[INT_OF_NUM_SUB; INT_OF_NUM_ADD]; ALL_TAC] THEN
+  MATCH_MP_TAC INT_REM_UNIQ THEN EXISTS_TAC `--(&1):int` THEN
+  REWRITE_TAC[INT_ABS_NUM] THEN REPEAT CONJ_TAC THENL
+   [UNDISCH_TAC `&((m + p) - n):int = (&m + &p) - &n` THEN CONV_TAC INT_ARITH;
+    REWRITE_TAC[INT_OF_NUM_LE] THEN ARITH_TAC;
+    REWRITE_TAC[INT_OF_NUM_LT] THEN ASM_ARITH_TAC])
+in
+let SUB_REM_GE = prove
+ (`!p m n. 0 < p /\ m < p /\ n < p /\ ~(m < n)
+           ==> ((&m:int) - &n) rem (&p) = &(m - n)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `n <= m` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  SUBGOAL_THEN `&(m - n):int = &m - &n` ASSUME_TAC THENL
+   [ASM_SIMP_TAC[INT_OF_NUM_SUB]; ALL_TAC] THEN
+  MATCH_MP_TAC INT_REM_UNIQ THEN EXISTS_TAC `(&0):int` THEN
+  REWRITE_TAC[INT_ABS_NUM] THEN REPEAT CONJ_TAC THENL
+   [UNDISCH_TAC `&(m - n):int = &m - &n` THEN CONV_TAC INT_ARITH;
+    REWRITE_TAC[INT_OF_NUM_LE] THEN ARITH_TAC;
+    REWRITE_TAC[INT_OF_NUM_LT] THEN ASM_ARITH_TAC])
+in
+let SUB_LT_SUM = prove
+ (`!p m n t. n < p /\ m < n ==> ((t = (m + p) - n) <=> (t + n = m + p))`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `n <= m + p` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  MP_TAC(ISPECL [`m + p:num`; `n:num`] SUB_ADD) THEN
+  ANTS_TAC THENL [ASM_REWRITE_TAC[]; DISCH_TAC] THEN
+  EQ_TAC THENL
+   [DISCH_THEN SUBST1_TAC THEN ASM_REWRITE_TAC[];
+    DISCH_TAC THEN UNDISCH_TAC `((m + p) - n) + n = m + p` THEN
+    ASM_ARITH_TAC])
+in
+let SUB_GE_SUM = prove
+ (`!m n t. ~(m < n) ==> ((t = m - n) <=> (t + n = m))`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  SUBGOAL_THEN `n <= m` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  MP_TAC(ISPECL [`m:num`; `n:num`] SUB_ADD) THEN
+  ANTS_TAC THENL [ASM_REWRITE_TAC[]; DISCH_TAC] THEN
+  EQ_TAC THENL
+   [DISCH_THEN SUBST1_TAC THEN ASM_REWRITE_TAC[];
+    DISCH_TAC THEN UNDISCH_TAC `(m - n) + n = m` THEN ASM_ARITH_TAC])
+in
+let SUB_REM_SPLIT = prove
+ (`!p m n s.
+       0 < p /\ m < p /\ n < p /\
+       (m < n ==> s + n = m + p) /\
+       (~(m < n) ==> s + n = m)
+       ==> ((&m:int) - &n) rem (&p) = &s`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  ASM_CASES_TAC `m < n` THENL
+   [ASM_SIMP_TAC[SUB_REM_LT] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+    CONV_TAC SYM_CONV THEN ASM_SIMP_TAC[SUB_LT_SUM];
+    ASM_SIMP_TAC[SUB_REM_GE] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+    CONV_TAC SYM_CONV THEN ASM_SIMP_TAC[SUB_GE_SUM]])
+in
+(* neg: (p - n) MOD p, split at n = 0. *)
+let NEG_MOD_ZERO = prove
+ (`!p n. 0 < p /\ n = 0 ==> (p - n) MOD p = 0`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN ASM_REWRITE_TAC[SUB_0; MOD_REFL])
+in
+let NEG_MOD_NZ = prove
+ (`!p n. 0 < p /\ n <= p /\ ~(n = 0) ==> (p - n) MOD p = (p - n)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC)
+in
+let NEG_NZ_SUM = prove
+ (`!p n t. n <= p ==> ((t = p - n) <=> (t + n = p))`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  MP_TAC(ISPECL [`p:num`; `n:num`] SUB_ADD) THEN
+  ANTS_TAC THENL [ASM_REWRITE_TAC[]; DISCH_TAC] THEN
+  EQ_TAC THENL
+   [DISCH_THEN SUBST1_TAC THEN ASM_REWRITE_TAC[];
+    DISCH_TAC THEN UNDISCH_TAC `(p - n) + n = p` THEN ASM_ARITH_TAC])
+in
+let NEG_MOD_SPLIT = prove
+ (`!p n s.
+       0 < p /\ n <= p /\
+       (n = 0 ==> s = 0) /\
+       (~(n = 0) ==> s + n = p)
+       ==> (p - n) MOD p = s`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  ASM_CASES_TAC `n = 0` THENL
+   [ASM_SIMP_TAC[NEG_MOD_ZERO] THEN ASM_ARITH_TAC;
+    ASM_SIMP_TAC[NEG_MOD_NZ] THEN CONV_TAC SYM_CONV THEN
+    ASM_SIMP_TAC[NEG_NZ_SUM] THEN ASM_ARITH_TAC])
+in
+let BRIDGE_SPEC_LEMMAS =
+  [ADD_MOD_LT; ADD_MOD_GE; ADD_GE_SUM; ADD_MOD_SPLIT;
+   SUB_REM_LT; SUB_REM_GE; SUB_LT_SUM; SUB_GE_SUM; SUB_REM_SPLIT;
+   NEG_MOD_ZERO; NEG_MOD_NZ; NEG_NZ_SUM; NEG_MOD_SPLIT]
+in
+(* ------------------------------------------------------------------------- *)
+(* 1b. The reference function.                                               *)
+(*                                                                           *)
+(* `ref_add pw x y' is the whole modular specification of addition in one     *)
+(* word operation: add, and subtract pw once if the sum overflowed or        *)
+(* reached pw.  There is no curve constant here and no MOD: the single       *)
+(* generic lemma ADD_REF_VAL carries the MOD, so every per-curve SAT         *)
+(* instance is a pure word statement (`output = ref_add (word p) x y`) with  *)
+(* `x < p' and `y < p' as bit-level hypotheses.                              *)
+(* ------------------------------------------------------------------------- *)
+
+let ref_add = new_definition
+ `ref_add (pw:W word) (x:W word) (y:W word) =
+    let s = word_add x y in
+    if word_ult s x \/ word_ule pw s then word_sub s pw else s`
+in
+let MOD_SUB_ONE = prove
+ (`!s q:num. q <= s /\ s < 2 * q ==> s MOD q = (s - q)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  MATCH_MP_TAC MOD_UNIQ THEN EXISTS_TAC `1` THEN
+  REWRITE_TAC[MULT_CLAUSES] THEN CONJ_TAC THENL
+   [ASM_ARITH_TAC; ASM_ARITH_TAC])
+in
+let SUB_MOD = prove
+ (`!s q m:num. q <= s /\ s < m ==> ((s + (m - q)) MOD m) = (s - q)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  MATCH_MP_TAC MOD_UNIQ THEN EXISTS_TAC `1` THEN
+  REWRITE_TAC[MULT_CLAUSES] THEN CONJ_TAC THENL
+   [ASM_ARITH_TAC; ASM_ARITH_TAC])
+in
+(* Case: the sum overflowed or reached pw, so the machine subtracts. *)
+let MOD_SUB_REF_A1 = prove
+ (`!p a b m:num.
+      0 < p /\ p < m /\ a < p /\ b < p /\ ((a + b) MOD m) < a
+      ==> ((((a + b) MOD m) + (m - p)) MOD m) = (a + b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(a + b) < (2 * p)` ASSUME_TAC THENL
+   [ASM_ARITH_TAC; ALL_TAC] THEN
+  ASM_CASES_TAC `(a + b) < m` THENL
+   [ SUBGOAL_THEN `(a + b) MOD m = (a + b)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
+     SUBGOAL_THEN `(a + b) < a` ASSUME_TAC THENL
+      [MP_TAC (ASSUME `((a + b) MOD m) < a`) THEN
+       ASM_REWRITE_TAC[] THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_ARITH_TAC;
+     SUBGOAL_THEN `(a + b) MOD m = ((a + b) - m)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_SUB_ONE THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[] THEN
+     SUBGOAL_THEN `((((a + b) - m) + (m - p)) = ((a + b) - p))`
+       ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `(((a + b) - p) MOD m) = ((a + b) - p)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `(a + b) MOD p = ((a + b) - p)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_SUB_ONE THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[] ])
+in
+let MOD_SUB_REF_A2 = prove
+ (`!p a b m:num.
+      0 < p /\ p < m /\ a < p /\ b < p /\ p <= ((a + b) MOD m)
+      ==> ((((a + b) MOD m) + (m - p)) MOD m) = (a + b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(a + b) < (2 * p)` ASSUME_TAC THENL
+   [ASM_ARITH_TAC; ALL_TAC] THEN
+  ASM_CASES_TAC `(a + b) < m` THENL
+   [ SUBGOAL_THEN `(a + b) MOD m = (a + b)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
+     SUBGOAL_THEN `p <= (a + b)` ASSUME_TAC THENL
+      [MP_TAC (ASSUME `p <= ((a + b) MOD m)`) THEN
+       ASM_REWRITE_TAC[] THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[] THEN
+     SUBGOAL_THEN `(((a + b) + (m - p)) MOD m) = ((a + b) - p)`
+       ASSUME_TAC THENL
+      [MATCH_MP_TAC SUB_MOD THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `(a + b) MOD p = ((a + b) - p)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_SUB_ONE THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[];
+     SUBGOAL_THEN `(a + b) MOD m = ((a + b) - m)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_SUB_ONE THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[] THEN
+     SUBGOAL_THEN `((((a + b) - m) + (m - p)) = ((a + b) - p))`
+       ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `(((a + b) - p) MOD m) = ((a + b) - p)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `(a + b) MOD p = ((a + b) - p)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_SUB_ONE THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[] ])
+in
+(* Case: neither, so the machine keeps the sum. *)
+let MOD_KEEP_REF = prove
+ (`!p a b m:num.
+      0 < p /\ p < m /\ a < p /\ b < p /\
+      ~(((a + b) MOD m) < a) /\ ~(p <= ((a + b) MOD m))
+      ==> (a + b) MOD m = (a + b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  ASM_CASES_TAC `(a + b) < m` THENL
+   [ SUBGOAL_THEN `(a + b) MOD m = (a + b)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
+     SUBGOAL_THEN `(a + b) < p` ASSUME_TAC THENL
+      [MP_TAC (ASSUME `~(p <= ((a + b) MOD m))`) THEN
+       ASM_REWRITE_TAC[] THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `(a + b) MOD p = (a + b)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[];
+     SUBGOAL_THEN `(a + b) MOD m = ((a + b) - m)` ASSUME_TAC THENL
+      [MATCH_MP_TAC MOD_SUB_ONE THEN ASM_ARITH_TAC; ALL_TAC] THEN
+     SUBGOAL_THEN `((a + b) MOD m) < a` ASSUME_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     UNDISCH_TAC `~(((a + b) MOD m) < a)` THEN ASM_REWRITE_TAC[] ])
+in
+(* The one lemma that carries MOD; proved for every width and every pw. *)
+let ADD_REF_VAL = prove
+ (`!(pw:W word) (x:W word) (y:W word).
+       0 < val pw /\ val x < val pw /\ val y < val pw
+       ==> val(ref_add pw x y) = (val x + val y) MOD val pw`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `0 < 2 EXP dimindex(:W)` ASSUME_TAC THENL
+   [REWRITE_TAC[EXP_LT_0; ARITH]; ALL_TAC] THEN
+  SUBGOAL_THEN
+   `val(pw:W word) < 2 EXP dimindex(:W) /\
+    val(x:W word) < 2 EXP dimindex(:W) /\
+    val(y:W word) < 2 EXP dimindex(:W)`
+    STRIP_ASSUME_TAC THENL
+   [REWRITE_TAC[VAL_BOUND]; ALL_TAC] THEN
+  REWRITE_TAC[ref_add; LET_DEF; LET_END_DEF] THEN BETA_TAC THEN
+  REWRITE_TAC[WORD_ULT; WORD_ULE; VAL_WORD_ADD] THEN
+  ASM_CASES_TAC
+   `((val(x:W word) + val(y:W word)) MOD (2 EXP dimindex(:W))) < val(x:W word)`
+   THENL
+   [ ASM_REWRITE_TAC[] THEN
+     REWRITE_TAC[VAL_WORD_SUB; VAL_WORD_ADD] THEN
+     MATCH_MP_TAC MOD_SUB_REF_A1 THEN REPEAT CONJ_TAC THEN ASM_REWRITE_TAC[];
+     ASM_CASES_TAC
+      `val(pw:W word) <=
+       ((val(x:W word) + val(y:W word)) MOD (2 EXP dimindex(:W)))`
+      THENL
+      [ ASM_REWRITE_TAC[] THEN
+        REWRITE_TAC[VAL_WORD_SUB; VAL_WORD_ADD] THEN
+        MATCH_MP_TAC MOD_SUB_REF_A2 THEN REPEAT CONJ_TAC THEN ASM_REWRITE_TAC[];
+        ASM_REWRITE_TAC[] THEN
+        REWRITE_TAC[VAL_WORD_ADD] THEN
+        MATCH_MP_TAC MOD_KEEP_REF THEN REPEAT CONJ_TAC THEN ASM_REWRITE_TAC[] ] ])
+in
+(* the same statement for a modulus supplied as a numeral *)
+let ADD_REF_VAL_WORD = prove
+ (`!p (x:W word) (y:W word).
+       0 < p /\ p < 2 EXP dimindex(:W) /\ val x < p /\ val y < p
+       ==> val(ref_add (word p : W word) x y) = (val x + val y) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `val(word p : W word) = p` ASSUME_TAC THENL
+   [REWRITE_TAC[VAL_WORD] THEN MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[];
+    ALL_TAC] THEN
+  (* instantiate ADD_REF_VAL at pw = word p, then rewrite val(word p) = p in
+     the theorem so its conclusion is syntactically the goal. *)
+  FIRST_ASSUM(fun th ->
+    MATCH_MP_TAC (REWRITE_RULE[th]
+      (SPECL [`(word p : W word)`; `(x:W word)`; `(y:W word)`] ADD_REF_VAL))) THEN
+  ASM_REWRITE_TAC[])
+in
+let BRIDGE_REF_LEMMAS = [ADD_REF_VAL; ADD_REF_VAL_WORD]
+in
+let BRIDGE_SPEC_LEMMAS = BRIDGE_SPEC_LEMMAS @ BRIDGE_REF_LEMMAS
+in
+(* ------------------------------------------------------------------------- *)
+(* 2. Power-of-two scaling as a word join.                                   *)
+(*                                                                           *)
+(* `word_join' is free under bit-blasting (BIT_WORD_JOIN); a product by a    *)
+(* power of two is instead expanded by WORDIFY_CONV into a full multiplier,  *)
+(* which dominates the SAT cost.  Rewriting the shifts to joins is what      *)
+(* makes the residue cheap, and it is also what removes the unconstrained-   *)
+(* width problem: `word_join' has a free result type, so the width must be   *)
+(* supplied here (`mk_word_ty').                                            *)
+(* ------------------------------------------------------------------------- *)
+
+let EXP2_NZ = prove
+ (`!j:num. ~(2 EXP j = 0)`,
+  GEN_TAC THEN REWRITE_TAC[EXP_EQ_0] THEN ARITH_TAC)
+in
+let LT_EXP_MULT = prove
+ (`!x j k:num. x < 2 EXP k ==> 2 EXP j * x < 2 EXP (j + k)`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN REWRITE_TAC[EXP_ADD] THEN
+  REWRITE_TAC[LT_MULT_LCANCEL] THEN
+  REWRITE_TAC[EXP_EQ_0; ARITH] THEN ASM_REWRITE_TAC[])
+in
+(* val(join x 0) = 2^w * val x, i.e. shifting left by a zero word. *)
+let VAL_JOIN_ZERO = prove
+ (`!x:M word. dimindex(:M) + dimindex(:N) = dimindex(:P)
+              ==> val((word_join:M word->N word->P word) x (word 0)) =
+                  2 EXP dimindex(:N) * val x`,
+  REPEAT STRIP_TAC THEN
+  ASM_SIMP_TAC[VAL_WORD_JOIN_SIMPLE; VAL_WORD_0; ADD_0])
+in
+(* the same statement one type level up, in the shape the residue has *)
+let INT_JOIN_ZERO = prove
+ (`!x:M word. dimindex(:M) + dimindex(:N) = dimindex(:P)
+              ==> (&2:int) pow dimindex(:N) * &(val x) =
+                  &(val((word_join:M word->N word->P word) x (word 0)))`,
+  REPEAT STRIP_TAC THEN
+  ASM_SIMP_TAC[VAL_JOIN_ZERO; GSYM INT_OF_NUM_MUL; INT_OF_NUM_POW])
+in
+let BITVAL_AS_VAL = prove
+ (`!b. bitval b = val(word(bitval b):1 word)`,
+  GEN_TAC THEN CONV_TAC SYM_CONV THEN
+  MATCH_ACCEPT_TAC (INST_TYPE [`:1`, `:N`] VAL_WORD_BITVAL))
+in
+(* ------------------------------------------------------------------------- *)
+(* 3. Conversions.                                                           *)
+(* ------------------------------------------------------------------------- *)
+
+(* real equation over integer-valued atoms -> integer equation *)
+let REAL_TO_INT_CONV =
+  GEN_REWRITE_CONV DEPTH_CONV
+   [GSYM int_of_num_th; GSYM int_neg_th; GSYM int_add_th; GSYM int_sub_th;
+    GSYM int_mul_th; GSYM int_pow_th; GSYM int_eq]
+in
+(* num equation -> int equation, with `&' pushed inside sum/product/power.    *)
+(* INT_OF_NUM_ADD/MUL/POW are stated with `&' *outside* (`&m + &n = &(m + n)`), *)
+(* so they must be used in the GSYM direction here; using them forwards folds  *)
+(* the whole bignum back into a single `&(...)', which the shift-to-join       *)
+(* conversion cannot see (measured: every post-simulation stage stayed SAT).   *)
+let NUM_TO_INT_CONV =
+  GEN_REWRITE_CONV TOP_DEPTH_CONV
+   [GSYM INT_OF_NUM_EQ; GSYM INT_OF_NUM_LT; GSYM INT_OF_NUM_LE;
+    GSYM INT_OF_NUM_ADD; GSYM INT_OF_NUM_MUL; GSYM INT_OF_NUM_POW]
+in
+(* (a + b) * c = a * c + b * c, needed because bignum_of_wordlist nests     *)
+(* its shifts around a sum, not around a single digit.                       *)
+let INT_DISTRIB_CONV =
+  GEN_REWRITE_CONV TOP_DEPTH_CONV [INT_ADD_LDISTRIB; INT_ADD_RDISTRIB]
+in
+(* (&2) pow k * &(val x) -> &(val(join x 0)) at the width this x forces.     *)
+(* Bottom-up application gives 2^(64*(j+1)) for j nested shifts for free.     *)
+let INT_JOIN_ZERO_TH x k =
+  (* `dest_word_ty' is shadowed by Library/bitmatch.ml once the ARM base is
+     loaded, so the width is read off the type constructor directly. *)
+  let m = Num.int_of_num
+    (dest_finty(match type_of x with
+                | Tyapp("word",[n]) -> n
+                | _ -> failwith "INT_JOIN_ZERO_TH: not a word")) in
+  let inst = INST_TYPE
+    [mk_finty(Num.num_of_int m), `:M`;
+     mk_finty(Num.num_of_int k), `:N`;
+     mk_finty(Num.num_of_int(m + k)), `:P`] INT_JOIN_ZERO in
+  let th1 = SPEC x inst in
+  let cond = lhand(concl th1) in
+  let side =
+    prove(cond,
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+  (* reduce dimindex(:N) on the left so the rule is syntactically applicable.  *)
+  (* The left side of the equation is `&2 pow dimindex(:N) * &(val x)'; the     *)
+  (* exponent is the *left* operand of that product, so the path is            *)
+  (* LAND (LAND (RAND DIMINDEX)).  The old single LAND reached `&(val x)' and  *)
+  (* raised DIMINDEX_CONV, which DEPTH_CONV silently swallowed, leaving every  *)
+  (* shift unconverted and every SAT call SATISFIABLE.                        *)
+  CONV_RULE (LAND_CONV(LAND_CONV(RAND_CONV DIMINDEX_CONV))) (MP th1 side)
+in
+(* smallest b with n < 2^b, at least 1; used to place a literal operand in a
+   word narrow enough that `val(word n)' is exact. *)
+let bits_of_num n =
+  let two = Num.num_of_int 2 and one = Num.num_of_int 1 in
+  let rec go b m = if Num.le_num m n then go (b + 1) (Num.mult_num two m) else b in
+  let b = go 0 one in
+  Num.num_of_int (if b < 1 then 1 else b)
+in
+let INT_SHIFT_TO_JOIN_CONV : conv =
+  (* the second operand is `&(val x)', `&(bitval b)', or a *numeral*.  The
+     numeral case matters: BRIDGE_SPLIT_CONDITIONS_TAC substitutes a carry by
+     the literal 0 or 1, turning `&2 pow 64 * &(bitval c)' into
+     `&2 pow 64 * &0'.  Without this case that equation could not be wordified
+     at all, BITBLAST left it opaque, and the selected limb was free. *)
+  let operand q =
+    match q with
+      Comb(Const("int_of_num",_),Comb(Const("val",_),x)) -> (x, REFL q)
+    | Comb(Const("int_of_num",_),Comb(Const("bitval",_),_)) ->
+        let bth = RAND_CONV (GEN_REWRITE_CONV I [BITVAL_AS_VAL]) q in
+        (rand(rand(rand(concl bth))), bth)
+    | Comb(Const("int_of_num",_),n) when is_numeral n ->
+        let bits = bits_of_num (dest_numeral n) in
+        let w = mk_comb(mk_const("word",[mk_finty bits, `:N`]), n)
+        and v = mk_comb(mk_const("val",[mk_finty bits, `:N`]),
+                        mk_comb(mk_const("word",[mk_finty bits, `:N`]), n)) in
+        let val_th = prove(mk_eq(v,n),
+          REWRITE_TAC[VAL_WORD] THEN
+          CONV_TAC(LAND_CONV(RAND_CONV(RAND_CONV DIMINDEX_CONV))) THEN
+          MATCH_MP_TAC MOD_LT THEN
+          CONV_TAC(RAND_CONV NUM_EXP_CONV THENC NUM_LT_CONV)) in
+        (w, AP_TERM `int_of_num:num->int` (SYM val_th))
+    | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: operand" in
+  let pow2 tm =
+    match tm with
+      Comb(Comb(Const("int_pow",_),two),n)
+        when aconv two `(&2):int` && is_numeral n -> dest_small_numeral n
+    | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: multiplier" in
+  let mul_left p th =
+    AP_TERM (mk_comb(`int_mul:int->int->int`, p)) th in
+  let conv tm =
+    match tm with
+      Comb(Comb(Const("int_mul",_),p),q) when type_of tm = `:int` ->
+        (match p with
+           Comb(Comb(Const("int_pow",_),_),_) ->
+             let k = pow2 p in
+             let (x,bth) = operand q in
+             TRANS (mul_left p bth) (INT_JOIN_ZERO_TH x k)
+         | Comb(Const("int_neg",_),pt) ->
+             (* accumulator equations carry the shifted flag negatively       *)
+             let k = pow2 pt in
+             let (x,bth) = operand q in
+             let q' = rand(concl bth) in
+             let bth2 = mul_left p bth in
+             let negth = AP_TERM `(int_neg):int->int` (INT_JOIN_ZERO_TH x k) in
+             TRANS bth2 (TRANS (SPECL [pt; q'] INT_MUL_LNEG) negth)
+         | _ -> failwith "INT_SHIFT_TO_JOIN_CONV: multiplier") 
+    | _ -> failwith "INT_SHIFT_TO_JOIN_CONV" in
+  conv
+in
+let BRIDGE_SHIFTS_TO_JOINS_CONV = DEPTH_CONV INT_SHIFT_TO_JOIN_CONV
+in
+(* ------------------------------------------------------------------------- *)
+(* 2b. A bignum digit sum as one word.                                       *)
+(*                                                                           *)
+(* `bignum_of_wordlist' and BIGNUM_DIGITIZE both hand back a flat sum        *)
+(*                                                                           *)
+(*   val w0 + 2^k * val w1 + 2^(2k) * val w2 + ... + 2^(k*(n-1)) * val w{n-1} *)
+(*                                                                           *)
+(* over words w0..w{n-1} of one limb width k.  The reference lemmas are      *)
+(* stated about ONE word, so the sum has to become a word.  Folding the      *)
+(* digits from the most significant end through `word_join' does that:       *)
+(*                                                                           *)
+(*   val(w1)                  = val w1                                        *)
+(*   val(join(acc) w0)        = 2^k * val acc + val w0                       *)
+(*                                                                           *)
+(* by VAL_WORD_JOIN_SIMPLE, whose only side condition is the dimindex one.   *)
+(* The limb width k is read off the words and the limb count from the sum,   *)
+(* so nothing here assumes 64 bits or four limbs.                            *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_word_width ty =
+  match ty with
+  | Tyapp("word",[n]) -> Num.int_of_num (dest_finty n)
+  | _ -> failwith "bridge_word_width: not a word type"
+in
+let bridge_finty k = mk_finty (Num.num_of_int k)
+in
+(* word_join with the result width made explicit: it is a type argument, not  *)
+(* something HOL infers, so it must be supplied (the same reason             *)
+(* INT_JOIN_ZERO_TH supplies `:P').                                          *)
+let BRIDGE_WJOIN (x:term) (y:term) =
+  let mx = bridge_word_width (type_of x)
+  and my = bridge_word_width (type_of y) in
+  mk_comb(mk_comb(mk_const("word_join",
+      [bridge_finty mx, `:M`; bridge_finty my, `:N`;
+       bridge_finty (mx + my), `:P`]), x), y)
+in
+(* |- val(join x y) = 2 EXP k * val x + val y, with k = width of y reduced  *)
+let BRIDGE_VAL_JOIN_STEP (x:term) (y:term) =
+  let mx = bridge_word_width (type_of x)
+  and my = bridge_word_width (type_of y) in
+  let inst = INST_TYPE [bridge_finty mx, `:M`; bridge_finty my, `:N`;
+                        bridge_finty (mx + my), `:P`] VAL_WORD_JOIN_SIMPLE in
+  let th = SPECL [x; y] inst in
+  let side = prove(lhand (concl th),
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+  CONV_RULE (RAND_CONV(LAND_CONV(LAND_CONV(RAND_CONV DIMINDEX_CONV))))
+            (MP th side)
+in
+(* the little-endian word list of a flat digit sum, in either associativity  *)
+let BRIDGE_DIGIT_TERMS tm =
+  let rec addends t =
+    match t with
+    | Comb(Comb(Const("+",_),_),_) -> addends (lhand t) @ addends (rand t)
+    | _ -> [t] in
+  let dest_val t =
+    match t with
+    | Comb(Const("val",_),w) -> w
+    | _ -> failwith "BRIDGE_DIGIT_TERMS: not `val w'" in
+  let dest_pow t =
+    match t with
+    | Comb(Comb(Const("EXP",_),two),n) when aconv two `2` ->
+        (ignore (dest_small_numeral n); ())
+    | _ -> failwith "BRIDGE_DIGIT_TERMS: not `2 EXP k'" in
+  match addends tm with
+  | [] -> failwith "BRIDGE_DIGIT_TERMS: empty"
+  | first :: rest ->
+      let w0 = dest_val first in
+      let ws = map (fun t ->
+          match t with
+          | Comb(Comb(Const("*",_),p),v) -> (dest_pow p; dest_val v)
+          | _ -> failwith "BRIDGE_DIGIT_TERMS: not `2^k * val w'") rest in
+      w0 :: ws
+in
+let bridge_join_of_words ws =
+  match List.rev ws with
+  | [] -> failwith "bridge_join_of_words: empty"
+  | last :: rest ->
+      List.fold_left (fun acc w -> BRIDGE_WJOIN acc w) last rest
+in
+(* |- val(join of ws) = flat                                                      *)
+let BRIDGE_VAL_JOIN_FOLD (ws:term list) (flat:term) =
+  let j = bridge_join_of_words ws in
+  let rec steps = function
+    | [] | [_] -> []
+    | w :: (_ :: _ as rest) ->
+        BRIDGE_VAL_JOIN_STEP (bridge_join_of_words rest) w :: steps rest in
+  let sts = steps ws in
+  prove(mk_eq(mk_comb(mk_const("val",
+      [bridge_finty (bridge_word_width (type_of j)), `:N`]), j), flat),
+    REWRITE_TAC sts THEN CONV_TAC NUM_REDUCE_CONV THEN ARITH_TAC)
+in
+(* (the word, |- val word = flat sum)                                            *)
+let BRIDGE_WORD_OF_DIGITS tm =
+  let ws = BRIDGE_DIGIT_TERMS tm in
+  (bridge_join_of_words ws, BRIDGE_VAL_JOIN_FOLD ws tm)
+in
+(* whole-term conversion from any of the three spec types to a word residue *)
+let BRIDGE_TO_WORD_CONV =
+  REAL_TO_INT_CONV THENC NUM_TO_INT_CONV THENC INT_DISTRIB_CONV THENC
+  BRIDGE_SHIFTS_TO_JOINS_CONV
+in
+(* ------------------------------------------------------------------------- *)
+(* 4. Case splitting on the conditionals the simulator leaves behind.        *)
+(*                                                                           *)
+(* The conditions may sit in the goal (the selected limb of the written      *)
+(* value) or in an accumulator equation (a selected mask word).  Both are    *)
+(* reduced by the same recursive split, and the condition itself stays as a *)
+(* bit-blastable hypothesis, so SAT can see that the branch is consistent.   *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_conditions tm =
+  map (fun t -> rand(rator(rator t))) (find_terms is_cond tm)
+in
+let rec BRIDGE_SPLIT_CONDITIONS_TAC (asl,w) =
+  let conds = bridge_conditions w @
+              List.concat (map (fun (_,th) -> bridge_conditions(concl th)) asl) in
+  match conds with
+  | [] -> ALL_TAC (asl,w)
+  | c::_ ->
+      let truerule = ASSUME c
+      and falserule = EQF_INTRO (ASSUME (mk_neg c)) in
+      let close rule =
+        RULE_ASSUM_TAC(REWRITE_RULE[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        CONV_TAC(REWRITE_CONV[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        BRIDGE_SPLIT_CONDITIONS_TAC in
+      (ASM_CASES_TAC c THENL [close truerule; close falserule]) (asl,w)
+in
+(* The same split, but the branch condition is *retained* as a hypothesis.
+   REWRITE_RULE reads a non-equational theorem `|- c' as the rule `c -> T', so
+   the version above rewrites the case hypothesis itself to `true' and the
+   branch information is lost from the assumptions (it survives only where a
+   lemma restates it arithmetically, as ADD_MOD_LT / SUB_LT_SUM do).  A route
+   that carries the condition in the word goal -- the reference route's
+   `ref_add' conditional -- needs the fact itself in the SAT instance. *)
+let rec BRIDGE_SPLIT_CONDITIONS_KEEP_TAC (asl,w) =
+  let conds = bridge_conditions w @
+              List.concat (map (fun (_,th) -> bridge_conditions(concl th)) asl) in
+  match conds with
+  | [] -> ALL_TAC (asl,w)
+  | c::_ ->
+      let close rule fact =
+        RULE_ASSUM_TAC(REWRITE_RULE[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        CONV_TAC(REWRITE_CONV[rule; COND_CLAUSES; BITVAL_CLAUSES]) THEN
+        ASSUME_TAC fact THEN
+        BRIDGE_SPLIT_CONDITIONS_KEEP_TAC in
+      (ASM_CASES_TAC c THENL
+        [close (ASSUME c) (ASSUME c);
+         close (EQF_INTRO (ASSUME (mk_neg c))) (ASSUME (mk_neg c))])
+      (asl,w)
+in
+(* ------------------------------------------------------------------------- *)
+(* 5. Eliminate the specification variables from their digit expansions.     *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_HAS_VAL tm =
+  mem "val" (map (fst o dest_const)
+    (find_terms (fun t -> can (fst o dest_const) t) tm))
+in
+let rec ELIM_DIGIT_EQS_TAC (asl,w) =
+  let pick = ref None in
+  do_list (fun (_,th) ->
+    let tm = concl th in
+    if is_eq tm && type_of (lhand tm) = `:num` && not (is_var tm) then
+      let (l,r) = dest_eq tm in
+      if is_var l && free_in l w && not (free_in l r) then pick := Some th
+      else if is_var r && free_in r w && not (free_in r l) then
+        pick := Some (SYM th)) asl;
+  match !pick with
+  | None -> ALL_TAC (asl,w)
+  | Some th -> (SUBST_ALL_TAC th THEN ELIM_DIGIT_EQS_TAC) (asl,w)
+in
+(* ------------------------------------------------------------------------- *)
+(* 6. Certified-SAT close of the word residue.                               *)
+(*                                                                           *)
+(* BITBLAST_THEN consumes only word-level content; any atom it cannot expand *)
+(* becomes a free proposition and the residue comes back SAT, so everything  *)
+(* that is not word-level must be gone before the call.  The residue is      *)
+(* presented as one closed implication so that no hypothesis is lost.        *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_CSAT_TAC : tactic =
+  fun (asl,w) ->
+    let hths = map snd asl in
+    let hyps = map concl hths in
+    let imp = itlist (fun a b -> mk_imp(a,b)) hyps w in
+    let th = prove(imp, CSAT_TAC) in
+    (* The old tail was `MP_TAC th THEN ASM_REWRITE_TAC[]'.  That rewrites the
+       antecedents away but leaves `w` itself as the goal, so the tactic
+       reported success while never closing anything (measured: the four SAT
+       refutations all succeeded and four goals remained).  Chaining MP with
+       the assumption theorems yields `|- w` directly. *)
+    let th' = List.fold_left (fun acc hth -> MP acc hth) th hths in
+    ACCEPT_TAC th' (asl,w)
+in
+(* everything that precedes the SAT call, on the goal *)
+let BRIDGE_PREPARE_TAC (expand:tactic) : tactic =
+  fun g ->
+    (BRIDGE_SPLIT_CONDITIONS_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV) g
+in
+let BRIDGE_FINISH_TAC expand : tactic =
+  fun g -> (BRIDGE_PREPARE_TAC expand THEN BRIDGE_CSAT_TAC) g
+in
+(* the same, keeping every branch condition as a hypothesis *)
+let BRIDGE_FINISH_KEEP_TAC expand : tactic =
+  fun g ->
+    (BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV THEN
+     BRIDGE_CSAT_TAC) g
+in
+(* ------------------------------------------------------------------------- *)
+(* 7. Entry points.  `pth' is the definition theorem of the modulus, so the  *)
+(* numeral replaces the constant before anything is decided.                 *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_ZERO_LT_TAC p : tactic =
+  SUBGOAL_THEN (mk_comb(mk_comb(`(<):num->num->bool`, `0`), p))
+   (fun th -> ASSUME_TAC th) THENL [ARITH_TAC; ALL_TAC]
+in
+(* the modulus constant has to be replaced in the assumptions as well as in   *)
+(* the goal: the range hypotheses are stated about the constant.            *)
+let BRIDGE_REWRITE_MODULUS pth : tactic =
+  RULE_ASSUM_TAC(REWRITE_RULE[pth]) THEN REWRITE_TAC[pth]
+in
+(* add: the spec is `(m + n) MOD p = <written value>' *)
+let BRIDGE_ADD_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
+  (fun (asl,w) ->
+    let (lhs,_) = dest_eq w in
+    let (sum,p) = dest_binop `(MOD):num->num->num` lhs in
+    let cond = mk_comb(mk_comb(`(<):num->num->bool`, sum), p) in
+    (BRIDGE_ZERO_LT_TAC p THEN
+     ASM_CASES_TAC cond THENL
+      [ASM_SIMP_TAC[ADD_MOD_LT] THEN BRIDGE_FINISH_TAC expand;
+       SUBGOAL_THEN (mk_comb(mk_comb(`(<=):num->num->bool`, p), sum))
+         ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+       ASM_SIMP_TAC[ADD_MOD_GE] THEN CONV_TAC SYM_CONV THEN
+       ASM_SIMP_TAC[ADD_GE_SUM] THEN BRIDGE_FINISH_TAC expand]) (asl,w))
+in
+(* add, through the reference function.  The split above decides `(m+n) MOD p'
+   by cases on the modulus; this route carries the MOD inside ADD_REF_VAL_WORD
+   instead, so the only per-curve obligation is a pure word equation
+
+     val(ref_add (word p) x y) = val w
+
+   with `x < p' and `y < p' among the bit-level hypotheses.  `expand' is the
+   caller's bignum expansion (BIGNUM_OF_WORDLIST_CONV), applied first so the
+   written value is a flat digit sum we can fold into one word. *)
+let BRIDGE_ADD_REF_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,wv) = dest_eq w in
+    let (sum,p) = dest_binop `(MOD):num->num->num` lhs in
+    let (bx,by) = dest_binop `(+):num->num->num` sum in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS bx in
+    let (yw,thy) = BRIDGE_WORD_OF_DIGITS by in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS wv in
+    (* the bounds are ambient hypotheses, stated about the digit sums *)
+    let lt tm = mk_comb(mk_comb(`(<):num->num->bool`, tm), p) in
+    let bound tm =
+      try snd(List.find (fun (_,th) -> aconv (concl th) (lt tm)) asl)
+      with Not_found ->
+        failwith "BRIDGE_ADD_REF_TAC: missing `x < p' hypothesis" in
+    let hltx = REWRITE_RULE[GSYM thx] (bound bx)
+    and hlty = REWRITE_RULE[GSYM thy] (bound by) in
+    (* ADD_REF_VAL_WORD at the operand width, with the two bounds discharged *)
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] ADD_REF_VAL_WORD) in
+    let ants = conjuncts (lhand (concl lem)) in
+    if List.length ants <> 4 then
+      failwith "BRIDGE_ADD_REF_TAC: unexpected antecedent shape";
+    let s1 = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+    let s2 = prove(List.nth ants 1,
+      CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC
+               RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
+    (* the two bounds stay as hypotheses of the rewrite: they are exactly the
+       ambient `val x < p' / `val y < p' assumptions, and ASM_REWRITE_TAC
+       below discharges the subgoals they create *)
+    let rth = MP lem (end_itlist CONJ [s1; s2; hltx; hlty]) in
+    let rth = SYM (REWRITE_RULE[thx; thy] rth) in
+    (ASM_REWRITE_TAC[rth; SYM thw; ref_add; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_TAC expand) (asl,w))
+in
+(* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
+let BRIDGE_SUB_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
+  (fun (asl,w) ->
+    let (lhs,rhs) = dest_eq w in
+    let (diff,p) = dest_binop `(rem):int->int->int` rhs in
+    let (m,n) = dest_binop `(-):int->int->int` diff in
+    let cond = mk_comb(mk_comb(`(<):num->num->bool`, rand m), rand n) in
+    (BRIDGE_ZERO_LT_TAC (rand p) THEN
+     ASM_CASES_TAC cond THENL
+      [ASM_SIMP_TAC[SUB_REM_LT] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+       ASM_SIMP_TAC[SUB_LT_SUM] THEN BRIDGE_FINISH_TAC expand;
+       ASM_SIMP_TAC[SUB_REM_GE] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+       ASM_SIMP_TAC[SUB_GE_SUM] THEN BRIDGE_FINISH_TAC expand])
+    (asl,w))
+in
+(* neg: the spec is `&<written value> = &((p - n) MOD p)' *)
+let BRIDGE_NEG_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN
+  CONV_TAC REAL_TO_INT_CONV THEN
+  (fun (asl,w) ->
+    let (_,rhs) = dest_eq w in
+    let modtm = rand rhs in
+    let (diff,p) = dest_binop `(MOD):num->num->num` modtm in
+    let n = rand diff in
+    let cond = mk_comb(mk_comb(`(=):num->num->bool`, n), `0`) in
+    (BRIDGE_ZERO_LT_TAC p THEN
+     ASM_CASES_TAC cond THENL
+      [ASM_SIMP_TAC[NEG_MOD_ZERO] THEN BRIDGE_FINISH_KEEP_TAC expand;
+       ASM_SIMP_TAC[NEG_MOD_NZ] THEN
+       (* NEG_MOD_NZ leaves `&(p - n)' with `&' applied to a *num*
+          subtraction.  That atom cannot be wordified (BITBLAST leaves it
+          opaque and the equation comes back SAT, measured 24.728 s), and
+          INT_OF_NUM_SUB rewrites the wrong way -- its statement is
+          `&n - &m = &(n - m)'.  GSYM is the direction that exposes the
+          subtraction to the conversion, with `n <= p' the ambient bound. *)
+       ASM_SIMP_TAC[GSYM INT_OF_NUM_SUB] THEN
+       BRIDGE_FINISH_KEEP_TAC expand])
+    (asl,w))
+in
+(* ========================================================================= *)
+(* 8. Reference route for `sub` and `neg`.                                   *)
+(*                                                                           *)
+(* Same shape as `ref_add': the whole modular specification of the operation *)
+(* is one word function, and a single generic lemma carries the MOD (or the  *)
+(* int `rem'), so every per-task SAT instance is a pure word equation        *)
+(*                                                                           *)
+(*   val(<written words>) = val(ref_sub (word p) x y)                        *)
+(*   val(<written words>) = val(ref_neg (word p) x)                          *)
+(*                                                                           *)
+(* with `val x < p', `val y < p' (`val x <= p' for neg) among the hypotheses *)
+(* and the machine's own accumulator equations (including the flag word's    *)
+(* defining equation) among the assumptions.  No flag *meaning* is derived,  *)
+(* so no curve-specific comparison has to be proved in real arithmetic: the  *)
+(* hardware carry and the reference's word comparison are related inside the *)
+(* bit-level instance.                                                       *)
+(*                                                                           *)
+(* Note on HOL Light parsing: `-` binds tighter than `+', so `a + p - b' is  *)
+(* `a + (p - b)'.  Every statement below is written in that form on purpose; *)
+(* SUB_REARRANGE is the bridge between it and the `(a + p) - b' form the     *)
+(* subtraction lemmas produce.                                               *)
+(* ========================================================================= *)
+
+(* sub: subtract, and add pw back exactly when the subtraction borrowed.    *)
+let ref_sub = new_definition
+ `ref_sub (pw:W word) (x:W word) (y:W word) =
+    let d = word_sub x y in
+    if word_ult x y then word_add d pw else d`
+in
+let MOD_ADD_SELF = prove
+ (`!a p:num. (a + p) MOD p = a MOD p`,
+  REPEAT GEN_TAC THEN MATCH_MP_TAC MOD_EQ THEN
+  EXISTS_TAC `1` THEN REWRITE_TAC[MULT_CLAUSES])
+in
+let SUB_REARRANGE = prove
+ (`!m n p:num. n <= p ==> (m + p) - n = m + (p - n)`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN ASM_ARITH_TAC)
+in
+(* without borrow the machine keeps x - y, which is already the residue *)
+let REF_SUB_KEEP = prove
+ (`!a b p:num. b <= a /\ a < p ==> a - b = (a + p - b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(a + p - b) = (a - b) + p` SUBST1_TAC THENL
+   [ASM_ARITH_TAC; ALL_TAC] THEN
+  REWRITE_TAC[MOD_ADD_SELF] THEN
+  CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC)
+in
+(* with borrow the machine writes (x - y mod 2^k) + p, which wraps to x+p-y *)
+let REF_SUB_BORROW = prove
+ (`!a b p t s:num.
+     a < b /\ b < p /\ p < t /\ s = a + (t - b)
+     ==> (s + p) MOD t = (a + p - b) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `(s + p) = (a + p - b) + t` SUBST1_TAC THENL
+   [ASM_ARITH_TAC; ALL_TAC] THEN
+  REWRITE_TAC[MOD_ADD_SELF] THEN
+  SUBGOAL_THEN `(a + p - b) < p` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  SUBGOAL_THEN `(a + p - b) < t` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  ASM_SIMP_TAC[MOD_LT])
+in
+(* The one lemma that carries MOD for subtraction; every width, every pw. *)
+let SUB_REF_VAL = prove
+ (`!(pw:W word) (x:W word) (y:W word).
+       0 < val pw /\ val x < val pw /\ val y < val pw
+       ==> val(ref_sub pw x y) = (val x + val pw - val y) MOD val pw`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN
+   `val(pw:W word) < 2 EXP dimindex(:W) /\
+    val(x:W word) < 2 EXP dimindex(:W) /\
+    val(y:W word) < 2 EXP dimindex(:W)`
+    STRIP_ASSUME_TAC THENL [REWRITE_TAC[VAL_BOUND]; ALL_TAC] THEN
+  REWRITE_TAC[ref_sub; LET_DEF; LET_END_DEF] THEN BETA_TAC THEN
+  REWRITE_TAC[WORD_ULT] THEN
+  ASM_CASES_TAC `val(x:W word) < val(y:W word)` THENL
+   [ SUBGOAL_THEN `~(val(y:W word) <= val(x:W word))` ASSUME_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_REWRITE_TAC[VAL_WORD_ADD] THEN
+     MATCH_MP_TAC REF_SUB_BORROW THEN REPEAT CONJ_TAC THENL
+      [ ASM_REWRITE_TAC[]; ASM_REWRITE_TAC[]; ASM_REWRITE_TAC[];
+        ASM_SIMP_TAC[VAL_WORD_SUB_CASES] ];
+     SUBGOAL_THEN `val(y:W word) <= val(x:W word)` ASSUME_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     ASM_SIMP_TAC[VAL_WORD_SUB_CASES] THEN
+     MATCH_MP_TAC REF_SUB_KEEP THEN ASM_REWRITE_TAC[]])
+in
+let SUB_REF_VAL_WORD = prove
+ (`!p (x:W word) (y:W word).
+       0 < p /\ p < 2 EXP dimindex(:W) /\ val x < p /\ val y < p
+       ==> val(ref_sub (word p : W word) x y) = (val x + p - val y) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `val(word p : W word) = p` ASSUME_TAC THENL
+   [REWRITE_TAC[VAL_WORD] THEN MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[];
+    ALL_TAC] THEN
+  FIRST_ASSUM(fun th ->
+    MATCH_MP_TAC (REWRITE_RULE[th]
+      (SPECL [`(word p : W word)`; `(x:W word)`; `(y:W word)`] SUB_REF_VAL))) THEN
+  ASM_REWRITE_TAC[])
+in
+(* neg: zero if the input is zero, pw - x otherwise. *)
+let ref_neg = new_definition
+ `ref_neg (pw:W word) (x:W word) =
+    if x = word(0:num) then word(0:num) else word_sub pw x`
+in
+let NEG_REF_VAL = prove
+ (`!(pw:W word) (x:W word).
+       0 < val pw /\ val x <= val pw
+       ==> val(ref_neg pw x) = (val pw - val x) MOD val pw`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN
+   `val(pw:W word) < 2 EXP dimindex(:W) /\
+    val(x:W word) < 2 EXP dimindex(:W)`
+    STRIP_ASSUME_TAC THENL [REWRITE_TAC[VAL_BOUND]; ALL_TAC] THEN
+  REWRITE_TAC[ref_neg; GSYM VAL_EQ_0] THEN
+  ASM_CASES_TAC `val(x:W word) = 0` THENL
+   [ ASM_REWRITE_TAC[VAL_WORD_0; SUB_0] THEN REWRITE_TAC[MOD_REFL];
+     ASM_SIMP_TAC[VAL_WORD_SUB_CASES] THEN
+     CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC])
+in
+let NEG_REF_VAL_WORD = prove
+ (`!p (x:W word).
+       0 < p /\ p < 2 EXP dimindex(:W) /\ val x <= p
+       ==> val(ref_neg (word p : W word) x) = (p - val x) MOD p`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `val(word p : W word) = p` ASSUME_TAC THENL
+   [REWRITE_TAC[VAL_WORD] THEN MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[];
+    ALL_TAC] THEN
+  FIRST_ASSUM(fun th ->
+    MATCH_MP_TAC (REWRITE_RULE[th]
+      (SPECL [`(word p : W word)`; `(x:W word)`] NEG_REF_VAL))) THEN
+  ASM_REWRITE_TAC[])
+in
+(* the int `rem' specification of sub, brought to the ref_sub residue *)
+let SUB_INT_REM_MOD = prove
+ (`!p m n:num. 0 < p /\ m < p /\ n < p
+    ==> ((&m:int) - &n) rem &p = &((m + p - n) MOD p)`,
+  REPEAT GEN_TAC THEN STRIP_TAC THEN
+  SUBGOAL_THEN `n <= p` ASSUME_TAC THENL [ASM_ARITH_TAC; ALL_TAC] THEN
+  ASM_CASES_TAC `m < n` THENL
+   [ ASM_SIMP_TAC[SUB_REM_LT] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+     ASM_SIMP_TAC[SUB_REARRANGE] THEN
+     CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC;
+     ASM_SIMP_TAC[SUB_REM_GE] THEN REWRITE_TAC[INT_OF_NUM_EQ] THEN
+     SUBGOAL_THEN `m + p - n = (m - n) + p` SUBST1_TAC THENL
+      [ASM_ARITH_TAC; ALL_TAC] THEN
+     REWRITE_TAC[MOD_ADD_SELF] THEN
+     CONV_TAC SYM_CONV THEN MATCH_MP_TAC MOD_LT THEN ASM_ARITH_TAC])
+in
+let BRIDGE_REF2_LEMMAS =
+  [MOD_ADD_SELF; SUB_REARRANGE; REF_SUB_KEEP; REF_SUB_BORROW; SUB_REF_VAL;
+   SUB_REF_VAL_WORD; NEG_REF_VAL; NEG_REF_VAL_WORD; SUB_INT_REM_MOD]
+in
+let BRIDGE_SPEC_LEMMAS = BRIDGE_SPEC_LEMMAS @ BRIDGE_REF2_LEMMAS
+in
+(* A numeral can reach the goal in two shapes: the tagged form the parser and
+   `mk_numeral` build, `NUMERAL(BIT1(BIT0(...)))`, and the same bit chain with
+   the tag stripped.  Both print as the decimal literal, so the mismatch is
+   invisible in a log and `aconv` alone misses the range hypothesis (measured:
+   `neg_p25519`, hypothesis present, `aconv` false, `p` not `is_numeral`).
+   Compare modulo the tag. *)
+let rec BRIDGE_STRIP_NUMERAL tm =
+  match tm with
+  | Comb(Const("NUMERAL",_),x) -> BRIDGE_STRIP_NUMERAL x
+  | _ -> tm
+in
+let rec BRIDGE_TERM_EQ (s:term) (t:term) =
+  let s = BRIDGE_STRIP_NUMERAL s and t = BRIDGE_STRIP_NUMERAL t in
+  aconv s t ||
+  (try dest_numeral s = dest_numeral t with Failure _ -> false) ||
+  (is_comb s && is_comb t &&
+   BRIDGE_TERM_EQ (rator s) (rator t) && BRIDGE_TERM_EQ (rand s) (rand t))
+in
+(* Find `tm < p` (or `tm <= p`) in the context.  Returns the hypothesis, the
+   modulus term actually written there (a tagged numeral) and, when the goal's
+   copy of the modulus is the untagged shape, the equation that puts the tagged
+   one into the goal.  The word-level lemma's side conditions are arithmetic on
+   the numeral, so the tagged form is the one to work with. *)
+let BRIDGE_FIND_BOUND tag rel p tm asl =
+  let pat = mk_comb(mk_comb(rel, tm), p) in
+  let th =
+    try snd(List.find (fun (_,th) -> BRIDGE_TERM_EQ (concl th) pat) asl)
+    with Not_found ->
+      failwith (tag^": missing hypothesis "^(string_of_term pat)) in
+  let ph = rand (concl th) in
+  let eqs =
+    if aconv ph p then [] else [prove(mk_eq(p, ph), REWRITE_TAC[NUMERAL])] in
+  (th, ph, eqs)
+in
+let BRIDGE_BOUND_HYP tag p tm asl =
+  BRIDGE_FIND_BOUND tag `(<):num->num->bool` p tm asl
+in
+let BRIDGE_LE_HYP tag p tm asl =
+  BRIDGE_FIND_BOUND tag `(<=):num->num->bool` p tm asl
+in
+(* zero and width side conditions of the word-level ref lemmas *)
+let BRIDGE_REF_SIDES tag p (lem:thm) : thm * thm =
+  let ants = conjuncts (lhand (concl lem)) in
+  if List.length ants < 2 then
+    failwith (tag^": unexpected ref-lemma shape");
+  let pos = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+  let width = prove(List.nth ants 1,
+    CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC
+             RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
+  (pos,width)
+in
+(* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
+let BRIDGE_SUB_REF_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (_,rhs) = dest_eq w in
+    let (diff,pt) = dest_binop `(rem):int->int->int` rhs in
+    let (mt,nt) = dest_binop `(-):int->int->int` diff in
+    let m = rand mt and n = rand nt and p0 = rand pt in
+    let (hm,pm,eqm) = BRIDGE_BOUND_HYP "BRIDGE_SUB_REF_TAC" p0 m asl
+    and (hn,pn,eqn) = BRIDGE_BOUND_HYP "BRIDGE_SUB_REF_TAC" p0 n asl in
+    if not (aconv pm pn) then
+      failwith "BRIDGE_SUB_REF_TAC: bounds use different moduli";
+    let p = pm in
+    let lem = SPECL [p; m; n] SUB_INT_REM_MOD in
+    let ants = conjuncts (lhand (concl lem)) in
+    if List.length ants <> 3 then
+      failwith "BRIDGE_SUB_REF_TAC: unexpected spec-lemma shape";
+    let zpos = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+    let sth = MP lem (end_itlist CONJ [zpos; hm; hn]) in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS m in
+    let (yw,thy) = BRIDGE_WORD_OF_DIGITS n in
+    let (lhs,_) = dest_eq w in
+    let wv = rand lhs in
+    let (_,thw) = BRIDGE_WORD_OF_DIGITS wv in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem2 = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] SUB_REF_VAL_WORD) in
+    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_SUB_REF_TAC" p lem2 in
+    let hx = REWRITE_RULE[GSYM thx] hm and hy = REWRITE_RULE[GSYM thy] hn in
+    let rth = MP lem2 (end_itlist CONJ [a0; a1; hx; hy]) in
+    let rth = SYM (REWRITE_RULE[thx; thy] rth) in
+    (REWRITE_TAC(eqm @ eqn) THEN
+     ASM_REWRITE_TAC[sth; INT_OF_NUM_EQ; rth; SYM thw; ref_sub;
+                     LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_TAC expand) (asl,w))
+in
+(* neg: the spec is `bignum_from_memory (...) s = (p - n) MOD p' *)
+let BRIDGE_NEG_REF_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,rhs) = dest_eq w in
+    let (dif,pt) = dest_binop `(MOD):num->num->num` rhs in
+    let n = rand dif and p0 = rand pt in
+    let (hn,p,eqn) = BRIDGE_LE_HYP "BRIDGE_NEG_REF_TAC" p0 n asl in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS n in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS lhs in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw] (INST_TYPE [wt,`:W`] NEG_REF_VAL_WORD) in
+    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_NEG_REF_TAC" p lem in
+    let hx = REWRITE_RULE[GSYM thx] hn in
+    let rth = MP lem (end_itlist CONJ [a0; a1; hx]) in
+    let rth = SYM (REWRITE_RULE[thx] rth) in
+    (REWRITE_TAC eqn THEN
+     REWRITE_TAC[rth; SYM thw; ref_neg; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_TAC expand) (asl,w))
+in
+(* ========================================================================= *)
+(* 9. Deriving the simulator's carry and flag facts.                        *)
+(*                                                                           *)
+(* The routines that compare-and-mask (P-384, and the same shape elsewhere)  *)
+(* leave the proof with three obligations that used to be transcribed from   *)
+(* the human proof: a per-limb carry telescope, the meaning of the compare   *)
+(* flag, and the value of the CSETM mask.  The lemmas below are the general  *)
+(* telescope; the tactics read the accumulator equations the simulator emits *)
+(* and instantiate the lemmas at the limb words and carries actually present. *)
+(* No curve constant occurs in any lemma: the modulus is an argument of the  *)
+(* flag tactic and enters only as an *evaluated* instance.                   *)
+(*                                                                           *)
+(* The telescope is stated over `bignum_of_wordlist' because that is how the *)
+(* simulator hands the limb sums back.  `LENGTH (CONS x xs)' is kept in the  *)
+(* conclusion on purpose: the step lemma must compose with the previous      *)
+(* step, whose exponent is `LENGTH' of the list it already built.            *)
+(* ========================================================================= *)
+
+let EXP64_SUC = prove
+ (`!n:num. 2 EXP (64 * SUC n) = 2 EXP 64 * 2 EXP (64 * n)`,
+  GEN_TAC THEN SUBGOAL_THEN `64 * SUC n = 64 * n + 64` SUBST1_TAC THENL
+   [ARITH_TAC; ALL_TAC] THEN REWRITE_TAC[EXP_ADD] THEN ARITH_TAC)
+in
+(* addition: one limb, carrying `b' in and `c' out *)
+let CARRY_CHAIN_ADD_STEP = prove
+ (`!(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
+    (xs:int64 list) (ys:int64 list) (ss:int64 list).
+      val x + val y + bitval b = val s + 2 EXP 64 * bitval c /\
+      bignum_of_wordlist xs + bignum_of_wordlist ys + bitval c =
+        bignum_of_wordlist ss + 2 EXP (64 * LENGTH xs) * bitval cf
+      ==> bignum_of_wordlist (CONS x xs) + bignum_of_wordlist (CONS y ys) +
+            bitval b =
+          bignum_of_wordlist (CONS s ss) +
+            2 EXP (64 * LENGTH (CONS x xs)) * bitval cf`,
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP64_SUC] THEN
+  REPEAT STRIP_TAC THEN ASM_ARITH_TAC)
+in
+let CARRY_CHAIN_ADD_BASE = prove
+ (`!(c:bool) (cf:bool).
+      c = cf
+      ==> bignum_of_wordlist ([]:int64 list) +
+            bignum_of_wordlist ([]:int64 list) + bitval c =
+          bignum_of_wordlist ([]:int64 list) +
+            2 EXP (64 * LENGTH ([]:int64 list)) * bitval cf`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP; MULT_CLAUSES; ADD_CLAUSES] THEN
+  ASM_REWRITE_TAC[])
+in
+(* subtraction: one limb, borrowing `b' in and `c' out *)
+let CARRY_CHAIN_SUB_STEP = prove
+ (`!(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
+    (xs:int64 list) (ys:int64 list) (ss:int64 list).
+      val x + 2 EXP 64 * bitval c = val y + bitval b + val s /\
+      bignum_of_wordlist xs + 2 EXP (64 * LENGTH xs) * bitval cf =
+        bignum_of_wordlist ys + bignum_of_wordlist ss + bitval c
+      ==> bignum_of_wordlist (CONS x xs) +
+            2 EXP (64 * LENGTH (CONS x xs)) * bitval cf =
+          bignum_of_wordlist (CONS y ys) +
+            bignum_of_wordlist (CONS s ss) + bitval b`,
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP64_SUC] THEN
+  REPEAT STRIP_TAC THEN ASM_ARITH_TAC)
+in
+let CARRY_CHAIN_SUB_BASE = prove
+ (`!(c:bool) (cf:bool).
+      c = cf
+      ==> bignum_of_wordlist ([]:int64 list) +
+            2 EXP (64 * LENGTH ([]:int64 list)) * bitval cf =
+          bignum_of_wordlist ([]:int64 list) +
+            bignum_of_wordlist ([]:int64 list) + bitval c`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  REWRITE_TAC[bignum_of_wordlist; LENGTH; EXP; MULT_CLAUSES; ADD_CLAUSES] THEN
+  ASM_REWRITE_TAC[])
+in
+(* the borrow produced by a subtract chain is the comparison *)
+let SUB_FLAG_ARITH = prove
+ (`!A B S E:num (cf:bool).
+      A + E * bitval cf = B + S /\ S < E ==> (cf <=> A < B)`,
+  REPEAT GEN_TAC THEN BOOL_CASES_TAC `cf:bool` THEN
+  REWRITE_TAC[BITVAL_CLAUSES; MULT_CLAUSES; ADD_CLAUSES; EQ_CLAUSES] THEN
+  STRIP_TAC THEN ASM_ARITH_TAC)
+in
+let SUB_CHAIN_FLAG = prove
+ (`!(xs:int64 list) (ys:int64 list) (ss:int64 list) (cf:bool).
+      bignum_of_wordlist xs + 2 EXP (64 * LENGTH xs) * bitval cf =
+        bignum_of_wordlist ys + bignum_of_wordlist ss /\
+      LENGTH ss = LENGTH xs /\
+      bignum_of_wordlist ss < 2 EXP (64 * LENGTH xs)
+      ==> (cf <=> bignum_of_wordlist xs < bignum_of_wordlist ys)`,
+  REPEAT STRIP_TAC THEN
+  MATCH_MP_TAC (ISPECL [`bignum_of_wordlist (xs:int64 list)`;
+                        `bignum_of_wordlist (ys:int64 list)`;
+                        `bignum_of_wordlist (ss:int64 list)`;
+                        `2 EXP (64 * LENGTH (xs:int64 list))`] SUB_FLAG_ARITH) THEN
+  ASM_REWRITE_TAC[])
+in
+let BIGNUM_BOUND = prove
+ (`!l:int64 list k. LENGTH l = k ==> bignum_of_wordlist l < 2 EXP (64 * k)`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  MP_TAC (ISPEC `l:int64 list` BIGNUM_OF_WORDLIST_BOUND_LENGTH) THEN
+  ASM_REWRITE_TAC[])
+in
+(* the final borrow is a negation of the carry the simulator names *)
+let FLAG_LE = prove
+ (`!b:bool A B:num. (~b <=> A < B) ==> (b <=> B <= A)`,
+  MESON_TAC[NOT_LT])
+in
+(* numeral normalisation of the simulator's real accumulator equations *)
+let ADD_ACC_NUM_0 = prove
+ (`!(x:int64) (y:int64) (z:int64) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real = &(val x) + &(val y)
+      ==> val x + val y + bitval F = val z + 2 EXP 64 * bitval c`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW; BITVAL_CLAUSES] THEN
+  REWRITE_TAC[REAL_ADD_LID] THEN DISCH_TAC THEN ASM_REAL_ARITH_TAC)
+in
+let ADD_ACC_NUM = prove
+ (`!(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real =
+        &(val x) + &(val y) + &(bitval b)
+      ==> val x + val y + bitval b = val z + 2 EXP 64 * bitval c`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC)
+in
+let SBC_ACC_NUM_0 = prove
+ (`!(x:int64) (y:int64) (z:int64) (c:bool).
+      --(&2 pow 64) * &(bitval c) + &(val z):real =
+        &(val x) - &(val y)
+      ==> val x + 2 EXP 64 * bitval c = val y + bitval F + val z`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW; BITVAL_CLAUSES] THEN
+  REWRITE_TAC[REAL_ADD_RID] THEN DISCH_TAC THEN ASM_REAL_ARITH_TAC)
+in
+let SBC_ACC_NUM = prove
+ (`!(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
+      --(&2 pow 64) * &(bitval c) + &(val z):real =
+        &(val x) - &(val y) - &(bitval b)
+      ==> val x + 2 EXP 64 * bitval c = val y + bitval b + val z`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC)
+in
+let ADC_NUM = prove
+ (`!(x:int64) (z:int64) (b:bool) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real =
+        &(val x) + &(bitval b)
+      ==> val z + 2 EXP 64 * bitval c = val x + bitval b`,
+  REPEAT GEN_TAC THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC)
+in
+let BRIDGE_REAL_BITVAL_NOT = prove
+ (`!b:bool. &(bitval(~b)):real = &1 - &(bitval b)`,
+  GEN_TAC THEN BOOL_CASES_TAC `b:bool` THEN
+  REWRITE_TAC[BITVAL_CLAUSES; NOT_CLAUSES; REAL_SUB_RZERO; REAL_SUB_REFL])
+in
+let REAL_EXP64_SUB1 = prove
+ (`&(2 EXP 64 - 1):real = &2 pow 64 - &1`,
+  CONV_TAC SYM_CONV THEN
+  MP_TAC (MATCH_MP REAL_OF_NUM_SUB (ARITH_RULE `1 <= 2 EXP 64`)) THEN
+  REWRITE_TAC[REAL_OF_NUM_POW] THEN DISCH_TAC THEN ASM_REWRITE_TAC[])
+in
+let VAL_WORD_ALLONES = prove
+ (`val(word (2 EXP 64 - 1):int64) = 2 EXP 64 - 1`,
+  REWRITE_TAC[VAL_WORD; DIMINDEX_64] THEN
+  SUBGOAL_THEN `2 EXP 64 - 1 < 2 EXP 64` ASSUME_TAC THENL
+   [ARITH_TAC; ASM_SIMP_TAC[MOD_LT]])
+in
+(* an all-ones limb written by ADCS x XZR is a subtract-with-borrow limb *)
+let ADC_ALLONES_NUM = prove
+ (`!(x:int64) (z:int64) (b:bool) (c:bool).
+      &2 pow 64 * &(bitval c) + &(val z):real =
+        &(val x) + &(bitval b)
+      ==> val x + 2 EXP 64 * bitval(~c) =
+          val(word (2 EXP 64 - 1):int64) + bitval(~b) + val z`,
+  REPEAT GEN_TAC THEN REWRITE_TAC[VAL_WORD_ALLONES] THEN
+  REWRITE_TAC[GSYM REAL_OF_NUM_EQ; GSYM REAL_OF_NUM_ADD;
+              GSYM REAL_OF_NUM_MUL; GSYM REAL_OF_NUM_POW] THEN
+  REWRITE_TAC[BRIDGE_REAL_BITVAL_NOT; REAL_EXP64_SUB1] THEN
+  DISCH_TAC THEN ASM_REAL_ARITH_TAC)
+in
+(* a two-bit CSETM condition and its mask word *)
+let VAL_WORD_ADD_BITVAL = prove
+ (`!a b:bool.
+      val(word_add (word (0 + bitval a):int64) (word (bitval b):int64)) =
+      bitval a + bitval b`,
+  REPEAT GEN_TAC THEN
+  SUBGOAL_THEN `bitval a + bitval b < 2 EXP 64` ASSUME_TAC THENL
+   [MP_TAC (SPEC `a:bool` BITVAL_BOUND) THEN
+    MP_TAC (SPEC `b:bool` BITVAL_BOUND) THEN ARITH_TAC;
+    ASM_SIMP_TAC[VAL_WORD_ADD; VAL_WORD_BITVAL; DIMINDEX_64; MOD_LT;
+                 ADD_CLAUSES]])
+in
+let BITVAL_ADD_ZERO = prove
+ (`!a b:bool. bitval a + bitval b = 0 <=> ~a /\ ~b`,
+  REPEAT GEN_TAC THEN ASM_CASES_TAC `a:bool` THEN
+  ASM_CASES_TAC `b:bool` THEN
+  ASM_REWRITE_TAC[BITVAL_CLAUSES; ADD_CLAUSES; NOT_CLAUSES; EQ_CLAUSES] THEN
+  ARITH_TAC)
+in
+let CSETM_EQ = prove
+ (`!p:bool. (if p then (word 0:int64) else word (2 EXP 64 - 1)) =
+            word_neg(word (bitval(~p)))`,
+  GEN_TAC THEN BOOL_CASES_TAC `p:bool` THEN
+  REWRITE_TAC[BITVAL_CLAUSES; word_neg] THEN
+  REWRITE_TAC[ARITH_RULE `2 EXP 64 - 1 = 18446744073709551615`] THEN
+  CONV_TAC WORD_REDUCE_CONV)
+in
+(* ========================================================================= *)
+(* 9b. Parsing the accumulator state.                                        *)
+(* ========================================================================= *)
+
+let PAT_ADD0 = `&2 pow 64 * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) + &(val (y:int64))`
+in
+let PAT_ADD1 = `&2 pow 64 * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) + &(val (y:int64)) + &(bitval (b:bool))`
+in
+let PAT_SBC0 = `--(&2 pow 64) * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) - &(n:num)`
+in
+let PAT_SBC1 = `--(&2 pow 64) * &(bitval (c:bool)) + &(val (z:int64)):real =
+                &(val (x:int64)) - &(n:num) - &(bitval (b:bool))`
+in
+let PAT_ADC = `&2 pow 64 * &(bitval (c:bool)) + &(val (z:int64)):real =
+               &(val (x:int64)) + &(bitval (b:bool))`
+in
+let PAT_NSUB = `val (x:int64) + 2 EXP 64 * bitval (c:bool) =
+                val (y:int64) + bitval (b:bool) + val (z:int64)`
+in
+let BRIDGE_MATCH_BIND pat tm names =
+  let (_,tmin,_) = term_match [] pat tm in
+  map (fun v -> rev_assoc v tmin) names
+in
+(* the limb words the routine actually keeps in registers *)
+let BRIDGE_OUTPUT_REGS asl =
+  let regset = ref [] in
+  List.iter (fun (_,th) ->
+    match concl th with
+    | Comb(Comb(Const("=",_),
+                Comb(Comb(Const("read",_), Const(nm,_)), _)), rhs)
+        when String.length nm > 0 && nm.[0] = 'X' ->
+        if not (List.exists (aconv rhs) !regset) then regset := rhs :: !regset
+    | _ -> ()) asl;
+  !regset
+in
+(* ========================================================================= *)
+(* 9c. The three tactics.                                                    *)
+(* ========================================================================= *)
+
+(* Fold the per-limb addition equations into the one telescope. *)
+let BRIDGE_CARRY_CONSERVE_TAC : tactic = fun (asl,w) ->
+  let recs = ref [] in
+  List.iter (fun (_,th) ->
+    let t = concl th in
+    try
+      let [c;z;x;y;b] =
+        BRIDGE_MATCH_BIND PAT_ADD1 t
+          [`c:bool`; `z:int64`; `x:int64`; `y:int64`; `b:bool`] in
+      recs := ("A1",th,c,z,x,y,Some b) :: !recs
+    with _ ->
+    try
+      let [c;z;x;y] =
+        BRIDGE_MATCH_BIND PAT_ADD0 t
+          [`c:bool`; `z:int64`; `x:int64`; `y:int64`] in
+      recs := ("A0",th,c,z,x,y,None) :: !recs
+    with _ -> ()) asl;
+  let regset = BRIDGE_OUTPUT_REGS asl in
+  let isreg z = List.exists (aconv z) regset in
+  let rec chain_build remaining prev acc =
+    let cands = List.filter (fun (_,_,_,z,_,_,_) -> isreg z) remaining in
+    let cands = List.filter (fun (_,_,_,_,_,_,b) ->
+        match b with Some bb -> aconv bb prev | None -> false) cands in
+    match cands with
+    | [] -> List.rev acc
+    | [r] -> let (_,_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) remaining) c (r :: acc)
+    | _ -> failwith "BRIDGE_CARRY_CONSERVE_TAC: ambiguous chain" in
+  let start = List.filter (fun (_,_,_,_,_,_,b) -> b = None) !recs in
+  let limbs = match start with
+    | [r] -> let (_,_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) !recs) c [r]
+    | _ -> failwith "BRIDGE_CARRY_CONSERVE_TAC: no unique first limb" in
+  if limbs = [] then failwith "BRIDGE_CARRY_CONSERVE_TAC: empty chain";
+  let numeq (_,th,_,z,x,y,b) =
+    match b with None -> MATCH_MP ADD_ACC_NUM_0 th
+    | Some _ -> MATCH_MP ADD_ACC_NUM th in
+  let arr = Array.of_list limbs in
+  let k = Array.length arr in
+  let lastc = let (_,_,c,_,_,_,_) = arr.(k-1) in c in
+  let base = MP (ISPECL [lastc; lastc] CARRY_CHAIN_ADD_BASE) (REFL lastc) in
+  let rec fold i =
+    if i >= k then base
+    else MATCH_MP CARRY_CHAIN_ADD_STEP (CONJ (numeq arr.(i)) (fold (i+1))) in
+  let th = REWRITE_RULE[BITVAL_CLAUSES; ADD_CLAUSES; LENGTH] (fold 0) in
+  ASSUME_TAC th (asl,w)
+in
+(* Fold the compare equations and read off what the final flag means. *)
+let BRIDGE_CMP_FLAG_TAC (pth:thm) : tactic = fun (asl,w) ->
+  let recs = ref [] in
+  let numeral_word n =
+    let valth = WORD_VAL_CONV
+        (mk_comb(`val:int64->num`, mk_comb(`word:num->int64`, n))) in
+    (mk_comb(`word:num->int64`, n),
+     AP_TERM `real_of_num:num->real` (SYM valth)) in
+  let subtrahend th n =
+    match n with
+    | Comb(Const("val",_),w) -> (w,th)
+    | _ when is_numeral n ->
+        let (y,rw) = numeral_word n in (y, REWRITE_RULE[rw] th)
+    | _ -> failwith "BRIDGE_CMP_FLAG_TAC: unexpected subtrahend" in
+  List.iter (fun (_,th) ->
+    let t = concl th in
+    let addrec kind th c z x y b =
+      recs := (kind,th,c,z,x,y,b) :: !recs in
+    try
+      let [c;z;x;n;b] =
+        BRIDGE_MATCH_BIND PAT_SBC1 t
+          [`c:bool`; `z:int64`; `x:int64`; `n:num`; `b:bool`] in
+      let (y,th') = subtrahend th n in
+      addrec "S" th' c z x y (Some b)
+    with _ ->
+    try
+      let [c;z;x;n] =
+        BRIDGE_MATCH_BIND PAT_SBC0 t
+          [`c:bool`; `z:int64`; `x:int64`; `n:num`] in
+      let (y,th') = subtrahend th n in
+      addrec "S" th' c z x y None
+    with _ ->
+    try
+      let [c;z;x;b] =
+        BRIDGE_MATCH_BIND PAT_ADC t
+          [`c:bool`; `z:int64`; `x:int64`; `b:bool`] in
+      addrec "C" th c z x `word 0` (Some b)
+    with _ -> ()) asl;
+  let nrecs = List.map (fun (kind,th,c,z,x,y,b) ->
+      match kind with
+      | "S" -> (match b with
+                | None -> MATCH_MP SBC_ACC_NUM_0 th
+                | Some _ -> MATCH_MP SBC_ACC_NUM th)
+      | _ -> REWRITE_RULE[NOT_CLAUSES] (MATCH_MP ADC_ALLONES_NUM th)) !recs in
+  let nrecs = List.map (fun th ->
+      let [x;c;y;b;z] =
+        BRIDGE_MATCH_BIND PAT_NSUB (concl th)
+          [`x:int64`; `c:bool`; `y:int64`; `b:bool`; `z:int64`] in
+      (th,c,z,x,y,b)) nrecs in
+  let rec chain_build remaining prev acc =
+    let cands = List.filter (fun (_,_,_,_,_,b) -> aconv b prev) remaining in
+    match cands with
+    | [] -> List.rev acc
+    | [r] -> let (_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) remaining) c (r :: acc)
+    | _ -> failwith "BRIDGE_CMP_FLAG_TAC: ambiguous chain" in
+  let start = List.filter (fun (_,_,_,_,_,b) -> aconv b `F`) nrecs in
+  let limbs = match start with
+    | [r] -> let (_,c,_,_,_,_) = r in
+             chain_build (List.filter (fun r' -> r' <> r) nrecs) c [r]
+    | _ -> failwith "BRIDGE_CMP_FLAG_TAC: no unique first limb" in
+  if limbs = [] then failwith "BRIDGE_CMP_FLAG_TAC: empty chain";
+  let arr = Array.of_list limbs in
+  let k = Array.length arr in
+  let lastc = let (_,c,_,_,_,_) = arr.(k-1) in c in
+  let base = MP (ISPECL [lastc; lastc] CARRY_CHAIN_SUB_BASE) (REFL lastc) in
+  let rec fold i =
+    if i >= k then base
+    else MATCH_MP CARRY_CHAIN_SUB_STEP
+           (CONJ (let (th,_,_,_,_,_) = arr.(i) in th) (fold (i+1))) in
+  let cons = REWRITE_RULE[BITVAL_CLAUSES; ADD_CLAUSES] (fold 0) in
+  let tys = `:int64` in
+  let xs = mk_list (List.map (fun (_,_,_,x,_,_) -> x) limbs, tys) in
+  let ys = mk_list (List.map (fun (_,_,_,_,y,_) -> y) limbs, tys) in
+  let ss = mk_list (List.map (fun (_,_,z,_,_,_) -> z) limbs, tys) in
+  let cf = let (_,c,_,_,_,_) = arr.(k-1) in c in
+  let pconst = lhand (concl pth) in
+  let big_conv = BIGNUM_OF_WORDLIST_CONV THENC
+                 DEPTH_CONV WORD_VAL_CONV THENC
+                 REWRITE_CONV[VAL_WORD_ALLONES] THENC
+                 NUM_REDUCE_CONV in
+  let pval = prove(mk_eq(mk_comb(`bignum_of_wordlist`,ys), pconst),
+    REWRITE_TAC[pth] THEN CONV_TAC (LAND_CONV big_conv) THEN
+    CONV_TAC NUM_EQ_CONV) in
+  let lenf = prove(
+    subst [ss, `ll:int64 list`; xs, `mm:int64 list`]
+      `LENGTH (ll:int64 list) = LENGTH (mm:int64 list)`,
+    REWRITE_TAC[LENGTH]) in
+  let ktm = subst [xs, `mm:int64 list`] `LENGTH (mm:int64 list)` in
+  let boundf = MP (ISPECL [ss; ktm] BIGNUM_BOUND) lenf in
+  let lem = ISPECL [xs; ys; ss; cf] SUB_CHAIN_FLAG in
+  let th = MP lem (end_itlist CONJ [cons; lenf; boundf]) in
+  let th = REWRITE_RULE[pval] th in
+  let th = MATCH_MP FLAG_LE th in
+  ASSUME_TAC th (asl,w)
+in
+(* Read the CSETM result back as a mask over the two bits it tested. *)
+let PAT_MASKCOND =
+ `val (word_add (word (0 + bitval (a:bool)):int64) (word (bitval (b:bool)):int64)) = 0`
+in
+let BRIDGE_MASK_SELECT_TAC : tactic = fun (asl,w) ->
+  let pick = ref None in
+  List.iter (fun (_,th) ->
+    if !pick = None then
+      match concl th with
+      | Comb(Comb(Const("=",_), Comb(Comb(Const("read",_), _), _)), rhs) ->
+          (try
+             let (cnd,_) = dest_cond rhs in
+             if can (BRIDGE_MATCH_BIND PAT_MASKCOND cnd)
+                    [`a:bool`; `b:bool`]
+             then pick := Some (th, cnd)
+           with _ -> ())
+      | _ -> ()) asl;
+  match !pick with
+  | None -> failwith "BRIDGE_MASK_SELECT_TAC: no two-bit CSETM assumption"
+  | Some (th0, cnd) ->
+      let [a;b] = BRIDGE_MATCH_BIND PAT_MASKCOND cnd [`a:bool`; `b:bool`] in
+      let cond_eq = prove(mk_eq(cnd, mk_neg(mk_disj(a,b))),
+        REWRITE_TAC[VAL_WORD_ADD_BITVAL; BITVAL_ADD_ZERO] THEN MESON_TAC[]) in
+      let cth = REWRITE_RULE[NOT_CLAUSES]
+                  (ISPEC (mk_neg(mk_disj(a,b))) CSETM_EQ) in
+      let th = REWRITE_RULE[cond_eq] th0 in
+      ASSUME_TAC (TRANS th cth) (asl,w)
+in
+(* ========================================================================= *)
+(* 10. The zero test: `word_join' and `word_or' agree on being zero.          *)
+(*                                                                           *)
+(* A complement routine tests its input for zero with an OR of its limbs,    *)
+(* while the reference function's guard is an equality on the whole word     *)
+(* built by `word_join'.  BITBLAST does not connect those two encodings       *)
+(* (measured: `word_join a b = word 0 ==> word_or a b = word 0' comes back    *)
+(* SATISFIABLE), so the link is made here, as a word identity valid for every *)
+(* width and every pair of limbs, and both folded zero tests are left in the *)
+(* limb-wise form BITBLAST does decide.  No curve constant occurs below.     *)
+(* ========================================================================= *)
+
+let WORD_JOIN_EQ_0 = prove
+ (`!x:M word y:N word.
+     dimindex(:M) + dimindex(:N) = dimindex(:P)
+     ==> (((word_join:M word->N word->P word) x y = word 0) <=>
+          (x = word 0 /\ y = word 0))`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  SUBGOAL_THEN
+   `val((word_join:M word->N word->P word) x y) =
+    2 EXP dimindex(:N) * val(x:M word) + val(y:N word)`
+  ASSUME_TAC THENL
+   [MATCH_MP_TAC VAL_WORD_JOIN_SIMPLE THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
+  REWRITE_TAC[GSYM VAL_EQ_0] THEN
+  ASM_REWRITE_TAC[] THEN
+  REWRITE_TAC[ADD_EQ_0; MULT_EQ_0; EXP_EQ_0; ARITH_EQ] THEN
+  SUBGOAL_THEN `~(2 EXP dimindex(:N) = 0)` (fun th -> REWRITE_TAC[th]) THENL
+   [REWRITE_TAC[EXP_EQ_0; ARITH_EQ]; ALL_TAC] THEN
+  CONV_TAC TAUT)
+in
+(* the same statement instantiated at the actual limb/result widths, so the
+   width side condition is discharged here and the rewrite needs no subgoal *)
+let BRIDGE_JOIN_ZERO_CONV : conv =
+  let conv tm =
+    let (l,r) = dest_eq tm in
+    let (j,args) = strip_comb l in
+    if name_of j <> "word_join" || List.length args <> 2 then
+      failwith "BRIDGE_JOIN_ZERO_CONV: not a join equation" else
+    let x = List.nth args 0 and y = List.nth args 1 in
+    (match r with
+       Comb(Const("word",_),n) when n = `0` -> ()
+     | _ -> failwith "BRIDGE_JOIN_ZERO_CONV: right side is not `word 0'");
+    let mx = bridge_word_width (type_of x)
+    and my = bridge_word_width (type_of y)
+    and mp = bridge_word_width (type_of l) in
+    let inst = INST_TYPE
+      [bridge_finty mx, `:M`; bridge_finty my, `:N`; bridge_finty mp, `:P`]
+      WORD_JOIN_EQ_0 in
+    let th = SPECL [x;y] inst in
+    let side = lhand(concl th) in
+    let side_th = prove(side,
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+    MP th side_th in
+  conv
+in
+(* fold both the OR zero test and the joined-word zero test to a conjunction
+   of limb-wise `= word 0', in the goal and in the hypotheses *)
+let BRIDGE_ZERO_TEST_TAC : tactic = fun (asl,w) ->
+  (RULE_ASSUM_TAC(REWRITE_RULE[WORD_OR_EQ_0]) THEN
+   REWRITE_TAC[WORD_OR_EQ_0] THEN
+   RULE_ASSUM_TAC(CONV_RULE (TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV)) THEN
+   CONV_TAC(TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV) THEN
+   RULE_ASSUM_TAC(REWRITE_RULE[CONJ_ACI]) THEN
+   REWRITE_TAC[CONJ_ACI]) (asl,w)
+in
+(* `BRIDGE_FINISH_KEEP_TAC` with the zero-test fold applied first, so that the
+   branch condition the reference's `if x = word 0` leaves behind is the same
+   limb-wise conjunction the machine's OR zero test has been folded to. *)
+let BRIDGE_FINISH_KEEP_ZERO_TAC expand : tactic =
+  fun g ->
+    (BRIDGE_ZERO_TEST_TAC THEN
+     BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV THEN
+     BRIDGE_CSAT_TAC) g
+in
+(* neg through the reference function, with the zero test folded.  Same body as
+   BRIDGE_NEG_REF_TAC; only the finish differs. *)
+let BRIDGE_NEG_REF_ZERO_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,rhs) = dest_eq w in
+    let (dif,pt) = dest_binop `(MOD):num->num->num` rhs in
+    let n = rand dif and p0 = rand pt in
+    let (hn,p,eqn) = BRIDGE_LE_HYP "BRIDGE_NEG_REF_ZERO_TAC" p0 n asl in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS n in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS lhs in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw] (INST_TYPE [wt,`:W`] NEG_REF_VAL_WORD) in
+    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_NEG_REF_ZERO_TAC" p lem in
+    let hx = REWRITE_RULE[GSYM thx] hn in
+    let rth = MP lem (end_itlist CONJ [a0; a1; hx]) in
+    let rth = SYM (REWRITE_RULE[thx] rth) in
+    (REWRITE_TAC eqn THEN
+     REWRITE_TAC[rth; SYM thw; ref_neg; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_ZERO_TAC expand) (asl,w))
+in
+(fun g ->
+  try
+    (MAP_EVERY X_GEN_TAC [`z:int64`; `x:int64`; `y:int64`; `m:num`; `n:num`; `pc:num`] THEN
+REWRITE_TAC[C_ARGUMENTS; C_RETURN; SOME_FLAGS; NONOVERLAPPING_CLAUSES] THEN
+DISCH_THEN(REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) THEN
+REWRITE_TAC[BIGNUM_FROM_MEMORY_BYTES] THEN ENSURES_INIT_TAC "s0" THEN
+BIGNUM_DIGITIZE_TAC "m_" `read (memory :> bytes (x,8 * 4)) s0` THEN
+BIGNUM_DIGITIZE_TAC "n_" `read (memory :> bytes (y,8 * 4)) s0` THEN
+ARM_ACCSTEPS_TAC BIGNUM_SUB_SM2_EXEC [3;4;7;8;10;12;13;15] (1--17) THEN
+ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN
+CONV_TAC(LAND_CONV(RAND_CONV BIGNUM_EXPAND_CONV)) THEN
+ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC "s17" THEN
+BRIDGE_SUB_REF_TAC (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) p_sm2) g
+  with e ->
+    Printf.printf "ANSWER_EXCEPTION: %s\n%!" (Printexc.to_string e);
+    raise e)
+)

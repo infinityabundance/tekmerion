@@ -698,109 +698,6 @@ let BRIDGE_CSAT_TAC : tactic =
     let th' = List.fold_left (fun acc hth -> MP acc hth) th hths in
     ACCEPT_TAC th' (asl,w);;
 
-(* ------------------------------------------------------------------------- *)
-(* 6b. The algebraic close (IX.67).                                          *)
-(*                                                                           *)
-(* The residue `BRIDGE_CSAT_TAC' decides is a value-level identity whose      *)
-(* hypotheses are the accumulator's per-limb equations.  It does not need a  *)
-(* bit-level reading: every fact needed is a library lemma about `val' plus  *)
-(* integer linear arithmetic over the limbs.  `INT_VAL_WORD_ADD_CASES' and    *)
-(* `INT_VAL_WORD_SUB_CASES' (Library/words.ml) state the machine's          *)
-(* add/sub exactly in that shape, with the wrap-around as a conditional      *)
-(* rather than a MOD.  What follows therefore expands the joins               *)
-(* (`BRIDGE_VAL_JOIN_CONV', from VAL_WORD_JOIN_SIMPLE) and the two int       *)
-(* cases, pushes `&' inside, and closes by linear arithmetic.  Nothing here   *)
-(* depends on the limb width or on the number of limbs: the recursion is the *)
-(* join nesting, and `ASM_INT_ARITH_TAC' sees whatever coefficients result.   *)
-(*                                                                           *)
-(* No new lemma is introduced; the only new theorem terms are the instances  *)
-(* of those library lemmas at this goal's own width.                          *)
-(* ------------------------------------------------------------------------- *)
-
-(* |- val(join x y) = 2 EXP k * val x + val y, unconditionally, at the width
-   the join actually has.  BRIDGE_VAL_JOIN_STEP already discharges the
-   dimindex side condition.  TOP_DEPTH_CONV, not DEPTH_CONV: the rewrite
-   produces new `val ...' subterms on its right-hand side, and a join nested
-   four deep only unfolds completely if the result is visited again. *)
-let rec BRIDGE_VAL_JOIN_CONV (tm:term) : thm =
-  match tm with
-  | Comb(Const("val",_), Comb(Comb(Const("word_join",_),a),b)) ->
-      CONV_RULE (RAND_CONV (TRY_CONV BRIDGE_VAL_JOIN_CONV) THENC
-                 LAND_CONV (RAND_CONV (TRY_CONV BRIDGE_VAL_JOIN_CONV)))
-                (BRIDGE_VAL_JOIN_STEP a b)
-  | _ -> failwith "BRIDGE_VAL_JOIN_CONV";;
-
-let BRIDGE_VAL_JOIN_DEPTH_CONV : conv = DEPTH_CONV BRIDGE_VAL_JOIN_CONV;;
-
-(* |- val(word n) = n for a numeral n that fits the word, at that word's
-   width.  VAL_WORD_EQ is the library lemma; only its side condition is
-   discharged here, numerically. *)
-let BRIDGE_VAL_WORD_CONV : conv =
-  let one tm =
-    match tm with
-    | Comb(Const("val",_), (Comb(Const("word",_), n) as w)) when is_numeral n ->
-        let bits = bridge_word_width (type_of w) in
-        let th0 = ISPEC n (INST_TYPE [bridge_finty bits, `:N`] VAL_WORD_EQ) in
-        let side = prove(lhand (concl th0),
-          CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC NUM_REDUCE_CONV)) in
-        MP th0 side
-    | _ -> failwith "BRIDGE_VAL_WORD_CONV" in
-  DEPTH_CONV one;;
-
-(* The linear decision procedure sees `&(val w)' and `&(bitval b)' as atoms of
-   unknown sign.  They are not: a `val' is non-negative and a `bitval' is 0 or
-   1.  Without these two facts the carry out of the addition cannot be pinned
-   to 0 and nothing is decided (measured: `linear_ineqs: no contradiction'). *)
-let BRIDGE_ATOM_BOUNDS_TAC : tactic =
-  fun (asl,w) ->
-    let int_atoms pred t = find_terms pred t in
-    let is_val t = match t with
-      | Comb(Const("int_of_num",_), Comb(Const("val",_),_)) -> true
-      | _ -> false
-    and is_bitval t = match t with
-      | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) -> true
-      | _ -> false in
-    let terms = setify
-      (int_atoms is_val w @ int_atoms is_bitval w @
-       List.concat (map (fun (_,th) -> int_atoms is_val (concl th) @
-                                       int_atoms is_bitval (concl th)) asl)) in
-    let le_int a b = mk_comb(mk_comb(`(<=):int->int->bool`, a), b) in
-    let bound a b = prove(le_int a b, REWRITE_TAC[INT_OF_NUM_LE] THEN
-                                    REWRITE_TAC[bitval] THEN TRY COND_CASES_TAC THEN
-                                    ARITH_TAC) in
-    let facts = List.concat (map (fun t ->
-      if is_bitval t then [bound `(&0):int` t; bound t `(&1):int`]
-      else [bound `(&0):int` t]) terms) in
-    if facts = [] then ALL_TAC (asl,w)
-    else (MP_TAC (end_itlist CONJ facts) THEN STRIP_TAC) (asl,w);;
-
-(* A hypothesis as integer linear arithmetic: joins to weighted `val' sums,
-   `&' pushed inside, numerals reduced.  The join expansion has to come first:
-   it is what *creates* the `val(word 0)' and `val(word(bitval c))' atoms. *)
-let BRIDGE_INT_NORM (th:thm) : thm =
-  let th = CONV_RULE BRIDGE_VAL_JOIN_DEPTH_CONV th in
-  let th = REWRITE_RULE [VAL_WORD_0; VAL_WORD_BITVAL] th in
-  let th = CONV_RULE BRIDGE_VAL_WORD_CONV th in
-  let th = CONV_RULE NUM_TO_INT_CONV th in
-  CONV_RULE INT_REDUCE_CONV th;;
-
-let BRIDGE_ALGEBRA_TAC : tactic =
-  fun (asl,w) ->
-    (RULE_ASSUM_TAC BRIDGE_INT_NORM THEN
-     REWRITE_TAC[INT_VAL_WORD_ADD_CASES; INT_VAL_WORD_SUB_CASES] THEN
-     CONV_TAC (DEPTH_CONV DIMINDEX_CONV) THEN
-     CONV_TAC BRIDGE_VAL_JOIN_DEPTH_CONV THEN
-     REWRITE_TAC[VAL_WORD_0; VAL_WORD_BITVAL] THEN
-     CONV_TAC BRIDGE_VAL_WORD_CONV THEN
-     CONV_TAC NUM_TO_INT_CONV THEN
-     CONV_TAC INT_REDUCE_CONV THEN
-     REPEAT COND_CASES_TAC THEN
-     TRY (CONV_TAC BRIDGE_VAL_WORD_CONV THEN
-          CONV_TAC NUM_TO_INT_CONV THEN
-          CONV_TAC INT_REDUCE_CONV) THEN
-     BRIDGE_ATOM_BOUNDS_TAC THEN
-     ASM_INT_ARITH_TAC) (asl,w);;
-
 (* everything that precedes the SAT call, on the goal *)
 let BRIDGE_PREPARE_TAC (expand:tactic) : tactic =
   fun g ->
@@ -820,15 +717,6 @@ let BRIDGE_FINISH_KEEP_TAC expand : tactic =
      RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
      CONV_TAC BRIDGE_TO_WORD_CONV THEN
      BRIDGE_CSAT_TAC) g;;
-
-(* the same, with the residue closed algebraically (IX.67) and no SAT call *)
-let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =
-  fun g ->
-    (BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
-     expand THEN
-     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
-     CONV_TAC BRIDGE_TO_WORD_CONV THEN
-     BRIDGE_ALGEBRA_TAC) g;;
 
 (* ------------------------------------------------------------------------- *)
 (* 7. Entry points.  `pth' is the definition theorem of the modulus, so the  *)
@@ -902,40 +790,6 @@ let BRIDGE_ADD_REF_TAC expand pth : tactic =
     let rth = SYM (REWRITE_RULE[thx; thy] rth) in
     (ASM_REWRITE_TAC[rth; SYM thw; ref_add; LET_DEF; LET_END_DEF] THEN
      BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;
-
-(* the same route with the word residue closed by BRIDGE_ALGEBRA_TAC instead of
-   by certified SAT (IX.67).  A separate entry point, so that the SAT-free
-   close is opt-in per theorem: every other task keeps the emitted tactic it
-   had, and its inference count is unchanged. *)
-let BRIDGE_ADD_REF_ALG_TAC expand pth : tactic =
-  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
-  (fun (asl,w) ->
-    let (lhs,wv) = dest_eq w in
-    let (sum,p) = dest_binop `(MOD):num->num->num` lhs in
-    let (bx,by) = dest_binop `(+):num->num->num` sum in
-    let (xw,thx) = BRIDGE_WORD_OF_DIGITS bx in
-    let (yw,thy) = BRIDGE_WORD_OF_DIGITS by in
-    let (ww,thw) = BRIDGE_WORD_OF_DIGITS wv in
-    let lt tm = mk_comb(mk_comb(`(<):num->num->bool`, tm), p) in
-    let bound tm =
-      try snd(List.find (fun (_,th) -> aconv (concl th) (lt tm)) asl)
-      with Not_found ->
-        failwith "BRIDGE_ADD_REF_ALG_TAC: missing `x < p' hypothesis" in
-    let hltx = REWRITE_RULE[GSYM thx] (bound bx)
-    and hlty = REWRITE_RULE[GSYM thy] (bound by) in
-    let wt = bridge_finty (bridge_word_width (type_of xw)) in
-    let lem = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] ADD_REF_VAL_WORD) in
-    let ants = conjuncts (lhand (concl lem)) in
-    if List.length ants <> 4 then
-      failwith "BRIDGE_ADD_REF_ALG_TAC: unexpected antecedent shape";
-    let s1 = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
-    let s2 = prove(List.nth ants 1,
-      CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC
-               RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
-    let rth = MP lem (end_itlist CONJ [s1; s2; hltx; hlty]) in
-    let rth = SYM (REWRITE_RULE[thx; thy] rth) in
-    (ASM_REWRITE_TAC[rth; SYM thw; ref_add; LET_DEF; LET_END_DEF] THEN
-     BRIDGE_FINISH_KEEP_ALG_TAC expand) (asl,w));;
 
 (* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
 let BRIDGE_SUB_TAC expand pth : tactic =
