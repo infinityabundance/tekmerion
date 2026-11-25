@@ -3279,3 +3279,24 @@ proof objects + a kernel that certifies its own binary.
 5. **XVII.C5, XVII.C6** — the two claims engineers cannot argue with.
 6. **XVII.B4–B8** — `EVAL`/`STEP`, Lean rules, finitary guest, `IDEAL`, self-certification.
 7. **XVII.C2, C3, C9, C11–C13** in whatever order the measurements favour.
+
+## XVII.E — Follow-ups from IX.78 (2026-11-25)
+
+The oracle-guided close was built and is sound; it fails at one precisely identified step. Two
+items come out of it, one of them a process defect that matters more than the mathematics.
+
+- [ ] **XVII.E1. Gate that an emitted answer parses.** XVI.D's classifier returned polymorphic
+  variants, which `camlp5r` cannot parse, so **no emitted answer built at all** — and every test
+  passed, because no test elaborates a real answer with the real toolchain. Add a cheap gate: for
+  one representative answer, run the bench's own syntax/type check (`ocamlc -i` on the inlined
+  answer, as `combine-answer-and-setup.py` does) in CI. It needs OCaml, not HOL Light, so it can be
+  offline. This class of regression must be caught by the suite, not by a 49-second proof.
+- [ ] **XVII.E2. The missing step is the second aggregate.** The residual carries the corrected
+  chain and `c8 = 0`, but not the raw chain aggregate `M + N = W_raw + 2^256·c8`; `c8`'s definition
+  encodes it with accumulated `2^256` coefficients, and handing those to `INT_ARITH` fired the 12 GB
+  cap (recorded, not retried). The next attempt is the `GEN_DECARRY_RULE`-style projection: project
+  `carry_s8`'s definition onto the goal's atoms and emit **both** aggregates, so the residual is
+  linear without the coefficients. Then re-measure against 111,501,987 and 1,848,494.
+- [ ] **XVII.E3. A certificate-producing bounder.** The oracle currently *proposes* facts proved by
+  `INT_ARITH` from the definition's cone; for the generic mechanism the bound must come with a
+  checkable certificate (the `XVI.F2` range certificate), not from a decision procedure's success.
