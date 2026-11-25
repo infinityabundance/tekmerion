@@ -3534,3 +3534,60 @@ becomes a pivot with a `2^256` coefficient.
 2. **XIX.C** — weighted-sum aggregate, then `sub`/`neg`/x86 if it closes.
 3. **XIX.E1** — proof-object export, in parallel with 2 rather than after it.
 4. **XIX.D** — coefficients as certificates; then `XIX.E2`, `XIX.E3`.
+
+## XIX.G — Intake 2026-11-25 (after `424478b`): proof-object checker mentorship
+
+From review of the WIP branch `wip/xxiii-b-proof-objects` (`800316a`, ~2,900 lines) and the
+`424478b` revision. Recorded before any of it acquires authority: the branch is **unverified** —
+no export run, no tests.
+
+### XIX.G.1 — The checker must not define its own standard of validity
+
+- [ ] **G1.1. `Rule::Import` reconstructs a theorem from the object's own payload.** It does not
+  establish that the imported theorem was previously justified; a digest supplied *by the object*
+  cannot establish it. Require an external, validated environment:
+  `validate(expected, object, theory: &ValidatedTheory, imports: &CheckedTheoremStore, budget)`.
+- [ ] **G1.2. Axiom acceptance is checked against the object's own declared set.** The theory must
+  say which axioms and definitions are authorised; the certificate may not.
+- [ ] **G1.3. Definitions must establish constant-name freshness** (a definition may not silently
+  rebind an existing constant).
+- [ ] **G1.4. Type definitions need a complete theory-extension registry** (which types exist, and
+  under which witness).
+- [ ] **G1.5. Statement identity must bind the complete theory environment**, not just the term.
+- [ ] **G1.6. Finalisation accumulates compacted nodes and serialised output in memory** — a
+  scalability defect; stream it.
+
+### XIX.G.2 — Export one derivation first, not fifty-four
+
+The review's instruction, adopted: a single complete, resource-bounded export-and-replay, with
+hostile-input rejection and explicit foundational dependencies, **then** scale.
+
+- [ ] **G2.1.** Export one small real derivation end to end; replay it; reconstruct the exact
+  judgment in Rust; publish bytes, peak RSS, node count, wall time.
+- [ ] **G2.2.** Controls: truncated object refused; spliced object refused; wrong conclusion
+  refused; an object importing an unjustified theorem refused (this is the `G1.1` defect as a test).
+- [ ] **G2.3.** Only then the remaining 53.
+
+### XIX.G.3 — Metrics the recorder now makes possible
+
+- [ ] **G3.1.** Per theorem: attempted inferences (search) vs reachable derivation nodes (evidence);
+  unique terms; repeated derivation patterns (lemma-discovery candidates); imported dependencies;
+  certificate bytes; native replay cost. This is the measurement base for Proof Archaeology and for
+  actually separating search from derivation (`XIV.B3`, still open).
+- [ ] **G3.2.** State the difference from today's counter: it counts invocations, including
+  discarded search; the DAG counts what the theorem needs. Report both.
+
+### XIX.G.4 — Gate and manifest repairs
+
+- [ ] **G4.1.** The elaboration gate's optional full path currently selects an existing combined
+  file and checks for `BRIDGE_ADD_REF_TAC`, which does not establish that the file contains the
+  current answer. Generate a fresh combined file from current source, bind its digest, then
+  elaborate.
+- [ ] **G4.2.** `freeze-closure-v7.json` has no runtime digests and names the *parent* of the
+  implementation commit. Regenerate with `--runtime` at the commit that contains the code, and do
+  not tag until the aggregate lands.
+
+### XIX.G.5 — Still the two that matter most
+
+- [ ] **G5.1.** Weighted-sum aggregate on `arm/add_p25519`, measured against 1,848,494 (`XIX.C`).
+- [ ] **G5.2.** Proof-object export started in parallel, not after (`XIX.E1`).
