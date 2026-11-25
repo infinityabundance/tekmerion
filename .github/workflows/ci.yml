@@ -1,9 +1,10 @@
 name: CI
 
 # Offline checks only. This workflow never runs HOL Light, never touches the
-# 20 GB s2n-bignum bench, and never needs a model API key. The single step that
-# uses the network is "Prime crate cache", which populates the local cargo
-# registry so that every check below can run with --offline.
+# 20 GB s2n-bignum bench, and never needs a model API key. The steps that use
+# the network are image provisioning (the two apt installs below) and "Prime
+# crate cache", which populates the local cargo registry so that every check
+# can run with --offline.
 
 on:
   push:
@@ -48,6 +49,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ocaml-nox
           ocamlc -version
+
+      # The ARM tests disassemble AArch64 objects, and the runner's GNU objdump
+      # is x86-only: without this package they fail inside objdump with
+      # "can't disassemble for architecture UNKNOWN!". This provisions the
+      # tool; src/tools/disasm.rs still *probes* it on the committed fixture
+      # `tests/fixtures/aarch64_add.o` before selecting it, so a package that
+      # does not work is refused rather than trusted. No test is skipped.
+      - name: Install AArch64 binutils (disassembler for the ARM tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binutils-aarch64-linux-gnu
+          aarch64-linux-gnu-objdump --version | head -1
 
       # Bootstrap only. Every check below runs with --offline and therefore
       # needs no further network access.

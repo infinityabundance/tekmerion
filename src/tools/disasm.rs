@@ -21,6 +21,8 @@
 //! read destination-first, matching the operand indices in `derive`.
 
 use crate::tools::derive::Step;
+use crate::tools::sha256;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,6 +30,30 @@ use std::process::Command;
 const DEFAULT_OBJDUMP_NAMES_ARM: &[&str] =
     &["aarch64-linux-gnu-objdump", "llvm-objdump", "objdump"];
 const DEFAULT_OBJDUMP_NAMES_X86: &[&str] = &["objdump", "llvm-objdump", "x86_64-linux-gnu-objdump"];
+
+/// Committed objects that decode to `add`. Selection runs each candidate on
+/// the fixture and accepts it only when the output decodes that mnemonic: an
+/// executable named `objdump` is not evidence that it knows the architecture
+/// (XVII.A1).
+const ARM_PROBE_FIXTURE: &str = "tests/fixtures/aarch64_add.o";
+const X86_PROBE_FIXTURE: &str = "tests/fixtures/x86_add.o";
+const PROBE_MNEMONIC: &str = "add";
+
+/// What the selection probe saw of the chosen tool. Recorded in the producer's
+/// run record so a `Running time` can be tied to the disassembler that produced
+/// the step list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisassemblerIdentity {
+    pub arch: String,
+    /// The candidate token that succeeded, e.g. `llvm-objdump`.
+    pub name: String,
+    pub path: String,
+    pub version: String,
+    /// SHA-256 of the executable's bytes.
+    pub sha256: String,
+    /// The fixture the probe decoded (`add`).
+    pub probe: String,
+}
 
 // ELF e_machine values we can name.
 const EM_386: u16 = 0x03;
@@ -85,13 +111,17 @@ fn is_executable(path: &Path) -> bool {
 }
 
 /// A `shutil.which` equivalent: an explicit path is checked directly, a bare
-/// name is searched on `PATH`.
-fn which(name: &str) -> Option<PathBuf> {
+/// name is searched on `PATH` (or on `search_path` when one is supplied, so
+/// tests can exercise selection without mutating the process environment).
+fn which_in(name: &str, search_path: Option<&OsStr>) -> Option<PathBuf> {
     if name.contains('/') {
         let p = PathBuf::from(name);
         return if is_executable(&p) { Some(p) } else { None };
     }
-    let path = std::env::var_os("PATH")?;
+    let path = match search_path {
+        Some(path) => path.to_os_string(),
+        None => std::env::var_os("PATH")?,
+    };
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(name);
         if is_executable(&candidate) {
@@ -101,7 +131,106 @@ fn which(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn find_objdump(explicit: Option<&str>, arch: &str) -> Result<Vec<String>, String> {
+fn probe_fixture(arch: &str) -> Result<PathBuf, String> {
+    let rel = match arch {
+        "arm" => ARM_PROBE_FIXTURE,
+        "x86" => X86_PROBE_FIXTURE,
+        other => return Err(format!("disasm_steps: unknown architecture {other:?}")),
+    };
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+    if !path.is_file() {
+        return Err(format!(
+            "disasm_steps: capability probe fixture {} is missing",
+            path.display()
+        ));
+    }
+    Ok(path)
+}
+
+/// The argument vector this module uses to disassemble an object. The probe
+/// uses exactly the same flags, so a tool that passes the probe will be invoked
+/// the same way on the real object.
+fn objdump_args(tool: &str, arch: &str, object: &Path) -> Vec<String> {
+    let mut argv = vec![
+        tool.to_string(),
+        "-d".to_string(),
+        "--no-show-raw-insn".to_string(),
+    ];
+    if arch == "x86" {
+        argv.push("-M".to_string());
+        argv.push("intel".to_string());
+    }
+    argv.push(object.display().to_string());
+    argv
+}
+
+fn one_line(text: &str) -> String {
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("<no output>");
+    if line.chars().count() > 200 {
+        format!("{}...", line.chars().take(200).collect::<String>())
+    } else {
+        line.to_string()
+    }
+}
+
+/// Run the candidate on the fixture and require a decoded `add`.
+fn probe_candidate(path: &Path, arch: &str, fixture: &Path) -> Result<(), String> {
+    let argv = objdump_args(&path.display().to_string(), arch, fixture);
+    let output = Command::new(&argv[0])
+        .args(&argv[1..])
+        .output()
+        .map_err(|e| format!("cannot run: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(format!(
+            "rc={} on the {arch} probe: {}",
+            output.status.code().unwrap_or(-1),
+            one_line(if stderr.trim().is_empty() {
+                &stdout
+            } else {
+                &stderr
+            })
+        ));
+    }
+    if parse_disassembly(&stdout)
+        .iter()
+        .any(|s| s.mnemonic == PROBE_MNEMONIC)
+    {
+        return Ok(());
+    }
+    Err(format!(
+        "decoded no `{PROBE_MNEMONIC}` from the {arch} fixture: {}",
+        one_line(if stdout.trim().is_empty() {
+            &stderr
+        } else {
+            &stdout
+        })
+    ))
+}
+
+fn install_hint(arch: &str) -> &'static str {
+    if arch == "arm" {
+        "install an AArch64 disassembler: `sudo apt-get install binutils-aarch64-linux-gnu` \
+         (provides aarch64-linux-gnu-objdump), or install LLVM's llvm-objdump"
+    } else {
+        "install a disassembler: `sudo apt-get install binutils` (objdump), \
+         or install LLVM's llvm-objdump"
+    }
+}
+
+/// Try each candidate in order and return the first one that decodes the
+/// architecture's fixture. `explicit` (from `--objdump`) is still probed: a
+/// named tool that cannot decode is refused rather than trusted.
+fn select_disassembler(
+    explicit: Option<&str>,
+    arch: &str,
+    search_path: Option<&OsStr>,
+) -> Result<(String, PathBuf), String> {
     let defaults = match arch {
         "arm" => DEFAULT_OBJDUMP_NAMES_ARM,
         "x86" => DEFAULT_OBJDUMP_NAMES_X86,
@@ -111,23 +240,82 @@ fn find_objdump(explicit: Option<&str>, arch: &str) -> Result<Vec<String>, Strin
         Some(name) => vec![name],
         None => defaults.to_vec(),
     };
-    for name in &candidates {
-        if name.is_empty() {
-            continue;
-        }
-        if let Some(path) = which(name) {
-            return Ok(vec![path.display().to_string()]);
+    let fixture = probe_fixture(arch)?;
+    let mut notes: Vec<String> = Vec::new();
+    for name in candidates.iter().copied().filter(|n| !n.is_empty()) {
+        match which_in(name, search_path) {
+            None => notes.push(format!("{name}: not found on PATH")),
+            Some(path) => match probe_candidate(&path, arch, &fixture) {
+                Ok(()) => return Ok((name.to_string(), path)),
+                Err(why) => notes.push(format!("{} ({why})", path.display())),
+            },
         }
     }
-    let tried: Vec<&str> = candidates
-        .iter()
-        .copied()
-        .filter(|c| !c.is_empty())
-        .collect();
+    if notes.is_empty() {
+        notes.push("no candidate was given".to_string());
+    }
     Err(format!(
-        "disasm_steps: no {arch} objdump found; pass --objdump PATH (tried: {})",
-        tried.join(", ")
+        "disasm_steps: no working {arch} disassembler (probe fixture {}); tried:\n  {}\n{}\n\
+         pass --objdump PATH to name one explicitly",
+        fixture.display(),
+        notes.join("\n  "),
+        install_hint(arch)
     ))
+}
+
+/// The working disassembler for `arch`, selected by capability.
+pub fn disassembler_for(arch: &str) -> Result<PathBuf, String> {
+    select_disassembler(None, arch, None).map(|(_, path)| path)
+}
+/// Selection with test-injectable inputs: an explicit candidate and the search
+/// path to use instead of the live `PATH`.
+pub fn disassembler_for_with(
+    arch: &str,
+    explicit: Option<&str>,
+    search_path: Option<&OsStr>,
+) -> Result<PathBuf, String> {
+    select_disassembler(explicit, arch, search_path).map(|(_, path)| path)
+}
+
+fn first_line(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The chosen tool's name, version and executable digest, for the producer's
+/// environment record. `sha256` covers the executable file's bytes; it is
+/// computed in Rust (no `sha256sum` shell-out).
+pub fn disassembler_identity(arch: &str) -> Result<DisassemblerIdentity, String> {
+    let (name, path) = select_disassembler(None, arch, None)?;
+    let version = match Command::new(&path).arg("--version").output() {
+        Ok(out) => {
+            let text = first_line(&String::from_utf8_lossy(&out.stdout));
+            if text.is_empty() {
+                "unavailable (empty --version output)".to_string()
+            } else {
+                text
+            }
+        }
+        Err(e) => format!("unavailable ({e})"),
+    };
+    let bytes = fs::read(&path)
+        .map_err(|e| format!("disasm_steps: cannot read {}: {e}", path.display()))?;
+    Ok(DisassemblerIdentity {
+        arch: arch.to_string(),
+        name,
+        path: path.display().to_string(),
+        version,
+        sha256: sha256::hex(&bytes),
+        probe: probe_fixture(arch)?.display().to_string(),
+    })
+}
+
+fn find_objdump(explicit: Option<&str>, arch: &str) -> Result<Vec<String>, String> {
+    let path = disassembler_for_with(arch, explicit, None)?;
+    Ok(vec![path.display().to_string()])
 }
 
 /// Split an operand list on commas that are not inside `[...]`.
@@ -366,14 +554,8 @@ pub fn disassemble(
             ));
         }
     }
-    let mut cmd = find_objdump(objdump, &arch)?;
-    cmd.push("-d".to_string());
-    cmd.push("--no-show-raw-insn".to_string());
-    if arch == "x86" {
-        cmd.push("-M".to_string());
-        cmd.push("intel".to_string());
-    }
-    cmd.push(path.display().to_string());
+    let tool = find_objdump(objdump, &arch)?;
+    let cmd = objdump_args(&tool[0], &arch, path);
 
     let mut command = Command::new(&cmd[0]);
     command.args(&cmd[1..]);

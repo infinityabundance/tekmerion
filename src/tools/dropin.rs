@@ -14,10 +14,137 @@
 //! three operations on p25519, p256, p256k1, p384, p521, sm2); `--arch all`
 //! runs ARM then x86 in one pass.
 
-use crate::tools::{config, json, sha256};
+use crate::tools::{config, disasm, json, sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+
+/// The ISA model each emitted proof loads with `needs`; it is the file the
+/// proof is elaborated against, so its digest is part of the executable
+/// identity (XVII.A2).
+const ARM_SEMANTICS: &str = "arm/proofs/base.ml";
+const X86_SEMANTICS: &str = "x86/proofs/base.ml";
+
+/// What a proof is actually about, by digest (XVII.A2). The `arch.dir.op`
+/// label is not an identity: two different objects can share it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutableIdentity {
+    /// `"arm"` or `"x86"`.
+    pub architecture: String,
+    /// SHA-256 of the `.o` the proof is against.
+    pub object_sha256: String,
+    /// SHA-256 of the `.text` bytes the proof's `mc` list encodes. Taken
+    /// through the same `objcopy -O binary --only-section=.text` path that
+    /// produces those bytes, so the digest covers exactly what the proof
+    /// claims about.
+    pub code_sha256: String,
+    /// SHA-256 of the ISA semantics source the proof loads
+    /// (`<arch>/proofs/base.ml`).
+    pub semantics_sha256: String,
+}
+
+impl ExecutableIdentity {
+    /// The fields in comparison order.
+    fn fields(&self) -> [(&'static str, &str); 4] {
+        [
+            ("architecture", &self.architecture),
+            ("object_sha256", &self.object_sha256),
+            ("code_sha256", &self.code_sha256),
+            ("semantics_sha256", &self.semantics_sha256),
+        ]
+    }
+}
+
+/// The identity fields a receipt actually records. Every field is optional so
+/// that an old record degrades to a diagnostic comparison with a named reason
+/// instead of being silently treated as bound (XVII.A2).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RecordedIdentity {
+    pub architecture: Option<String>,
+    pub object_sha256: Option<String>,
+    pub code_sha256: Option<String>,
+    pub semantics_sha256: Option<String>,
+}
+
+impl RecordedIdentity {
+    pub fn of(identity: &ExecutableIdentity) -> RecordedIdentity {
+        RecordedIdentity {
+            architecture: Some(identity.architecture.clone()),
+            object_sha256: Some(identity.object_sha256.clone()),
+            code_sha256: Some(identity.code_sha256.clone()),
+            semantics_sha256: Some(identity.semantics_sha256.clone()),
+        }
+    }
+
+    /// `Some` only when every field is recorded.
+    pub fn complete(&self) -> Option<ExecutableIdentity> {
+        Some(ExecutableIdentity {
+            architecture: self.architecture.clone()?,
+            object_sha256: self.object_sha256.clone()?,
+            code_sha256: self.code_sha256.clone()?,
+            semantics_sha256: self.semantics_sha256.clone()?,
+        })
+    }
+
+    /// The missing field names, in comparison order.
+    pub fn missing(&self) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        if self.architecture.is_none() {
+            out.push("architecture");
+        }
+        if self.object_sha256.is_none() {
+            out.push("object_sha256");
+        }
+        if self.code_sha256.is_none() {
+            out.push("code_sha256");
+        }
+        if self.semantics_sha256.is_none() {
+            out.push("semantics_sha256");
+        }
+        out
+    }
+}
+
+/// Compute the identity of the executable a generated proof is against. The
+/// object lives in the drop-in tree the proof is built in; the semantics file
+/// is the one its `needs "<arch>/proofs/base.ml"` line loads. Fails rather
+/// than inventing a digest when a file is absent.
+pub fn executable_identity(
+    dropin: &Path,
+    arch: &str,
+    dir: &str,
+    op: &str,
+    fam: &str,
+) -> Result<ExecutableIdentity, String> {
+    let base = format!("bignum_{op}_{fam}");
+    let obj = dropin.join(arch).join(dir).join(format!("{base}.o"));
+    let object_sha256 = sha256::hex(
+        &fs::read(&obj).map_err(|e| format!("executable identity: {}: {e}", obj.display()))?,
+    );
+    let text = copy_text(&obj, arch)?;
+    let semantics_rel = match arch {
+        "arm" => ARM_SEMANTICS,
+        "x86" => X86_SEMANTICS,
+        other => {
+            return Err(format!(
+                "executable identity: unknown architecture {other:?}"
+            ))
+        }
+    };
+    let semantics = dropin.join(arch).join("proofs").join("base.ml");
+    let semantics_sha256 = sha256::hex(&fs::read(&semantics).map_err(|e| {
+        format!(
+            "executable identity: {} ({semantics_rel}): {e}",
+            semantics.display()
+        )
+    })?);
+    Ok(ExecutableIdentity {
+        architecture: arch.to_string(),
+        object_sha256,
+        code_sha256: sha256::hex(&text),
+        semantics_sha256,
+    })
+}
 
 struct Family {
     dir: &'static str,
@@ -679,8 +806,12 @@ pub struct TaskResult {
     pub statement_digest: Option<String>,
     /// The executable this theorem belongs to (`arch.dir.op`), carried next to
     /// the digest so two executables that prove a same-named theorem cannot
-    /// pair by accident.
+    /// pair by accident. Display only; the identity below is what binds.
     pub executable: Option<String>,
+    /// Digests of the object, the `.text` bytes and the semantics file
+    /// (XVII.A2). `None` when the producer could not compute them; the reason
+    /// is printed and the run record says `null`, never a guessed value.
+    pub identity: Option<ExecutableIdentity>,
     /// Implied by exit 0: upstream's template runs `check_axioms ()` before it
     /// prints anything, and `run-proof.sh` exits non-zero on failure.
     pub check_axioms: bool,
@@ -1279,6 +1410,16 @@ fn build_logged(
         _ => None,
     };
     let executable = Some(format!("{}.{}.{}", p.arch, p.dir, p.op));
+    let identity = match executable_identity(&s.dropin, &p.arch, &p.dir, &p.op, &p.fam) {
+        Ok(identity) => Some(identity),
+        Err(e) => {
+            println!(
+                "  {}: executable identity unavailable ({e}); recorded as missing",
+                p.label()
+            );
+            None
+        }
+    };
     let seconds = correct_text.as_deref().and_then(running_time);
     let exception = log_text.contains("ANSWER_EXCEPTION")
         || log_text.contains("Fatal error")
@@ -1304,6 +1445,7 @@ fn build_logged(
         theorem,
         statement_digest,
         executable,
+        identity,
         check_axioms: exit == 0,
         seconds,
         timeout: hit_timeout,
@@ -1363,6 +1505,51 @@ fn json_opt_str_array(items: Option<&Vec<String>>) -> String {
     }
 }
 
+fn json_identity(v: Option<&ExecutableIdentity>) -> String {
+    match v {
+        None => "null".to_string(),
+        Some(i) => format!(
+            "{{\"architecture\": {}, \"object_sha256\": {}, \"code_sha256\": {}, \"semantics_sha256\": {}}}",
+            json_str(&i.architecture),
+            json_str(&i.object_sha256),
+            json_str(&i.code_sha256),
+            json_str(&i.semantics_sha256)
+        ),
+    }
+}
+
+/// The architectures a run covers, from its `--arch` token.
+fn requested_arches(arch: &str) -> &'static [&'static str] {
+    match arch {
+        "arm" => &["arm"],
+        "all" => &["arm", "x86"],
+        _ => &["x86"],
+    }
+}
+
+/// The evaluation environment record: which disassembler the capability probe
+/// chose, with its version and executable digest (XVII.A1). If no tool works,
+/// the error is recorded here rather than hidden; the tasks then fail for the
+/// same reason, loudly.
+fn environment_json(arches: &[&str]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for arch in arches {
+        let record = match disasm::disassembler_identity(arch) {
+            Ok(d) => format!(
+                "{{\"name\": {}, \"path\": {}, \"version\": {}, \"sha256\": {}, \"probe\": {}, \"probe_mnemonic\": \"add\"}}",
+                json_str(&d.name),
+                json_str(&d.path),
+                json_str(&d.version),
+                json_str(&d.sha256),
+                json_str(&d.probe)
+            ),
+            Err(e) => format!("{{\"error\": {}}}", json_str(&e)),
+        };
+        parts.push(format!("{}: {record}", json_str(arch)));
+    }
+    format!("{{\"disassembler\": {{{}}}}}", parts.join(", "))
+}
+
 /// One task object, exactly as both the sweep and measure receipts write it.
 fn task_json_line(r: &TaskResult) -> String {
     let footprint: Vec<String> = r
@@ -1382,7 +1569,7 @@ fn task_json_line(r: &TaskResult) -> String {
         })
         .unwrap_or_default();
     format!(
-        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"statement_digest\": {}, \"executable\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"inference_delta_whole_file\": {}, \"footprint\": [{}], \"log\": {}}}",
+        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"statement_digest\": {}, \"executable\": {}, \"identity\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"inference_delta_whole_file\": {}, \"footprint\": [{}], \"log\": {}}}",
         json_str(&r.arch),
         json_str(&r.dir),
         json_str(&r.op),
@@ -1391,6 +1578,7 @@ fn task_json_line(r: &TaskResult) -> String {
         json_opt_str(r.theorem.as_deref()),
         json_opt_str(r.statement_digest.as_deref()),
         json_opt_str(r.executable.as_deref()),
+        json_identity(r.identity.as_ref()),
         r.check_axioms,
         json_opt_num(r.seconds),
         r.timeout,
@@ -1433,6 +1621,10 @@ fn results_json(
     out.push_str("  \"cores\": 1,\n");
     out.push_str(&format!("  \"force\": {force},\n"));
     out.push_str(&format!("  \"stamp\": {stamp},\n"));
+    out.push_str(&format!(
+        "  \"environment\": {},\n",
+        environment_json(requested_arches(arch))
+    ));
     out.push_str(&format!("  \"timeout_seconds\": {timeout},\n"));
     out.push_str("  \"axiom_registry\": [");
     for (i, (id, digest, txt)) in summary.registry.iter().enumerate() {
@@ -1614,6 +1806,8 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
                     theorem: None,
                     statement_digest: None,
                     executable: Some(format!("{}.{}.{}", p.arch, p.dir, p.op)),
+                    identity: executable_identity(&parsed.dropin, &p.arch, &p.dir, &p.op, &p.fam)
+                        .ok(),
                     check_axioms: false,
                     seconds: None,
                     timeout: false,
@@ -2126,6 +2320,10 @@ fn measure_json(m: &MeasureArgs, generated_at: u64, results: &[TaskResult]) -> S
         json_str(&kernel_build_name(&m.hol))
     ));
     out.push_str(&format!("  \"timeout_seconds\": {},\n", m.timeout));
+    out.push_str(&format!(
+        "  \"environment\": {},\n",
+        environment_json(m.arches())
+    ));
     out.push_str("  \"tasks\": [\n");
     for (i, r) in results.iter().enumerate() {
         let comma = if i + 1 == results.len() { "" } else { "," };
@@ -2325,8 +2523,12 @@ pub struct MeasuredProof {
     /// The executable the theorem belongs to (`arch.dir.op`), when the receipt
     /// records one. Carried next to the statement digest so a pair cannot be
     /// made from two different executables that happen to prove a same-named
-    /// theorem.
+    /// theorem. Display and old-record comparison only; `identity` is what an
+    /// identity-bound pair requires (XVII.A2).
     pub executable: Option<String>,
+    /// The recorded object/code/semantics digests, each optional so a missing
+    /// one is named rather than guessed.
+    pub identity: RecordedIdentity,
     pub exit: Option<i32>,
     pub check_axioms: bool,
     pub theorem_proved: bool,
@@ -2383,6 +2585,18 @@ pub enum ComparisonError {
     /// comparison cannot be established (XVI.B).
     ExecutableIdentityUnrecorded {
         side: &'static str,
+    },
+    /// The two sides' recorded digests for one field differ (XVII.A2).
+    ExecutableDigestMismatch {
+        field: &'static str,
+        human: String,
+        generated: String,
+    },
+    /// One side records no digest for one identity field, so the pair is
+    /// diagnostic only and this records exactly which field (XVII.A2).
+    ExecutableDigestUnrecorded {
+        side: &'static str,
+        field: &'static str,
     },
     /// The two sides' seconds were measured over different spans (XV.A5).
     TimeScopeMismatch {
@@ -2449,6 +2663,19 @@ impl std::fmt::Display for ComparisonError {
                 "{side} side records no executable identity, so an identity-bound \
                  comparison cannot be established"
             ),
+            ComparisonError::ExecutableDigestMismatch {
+                field,
+                human,
+                generated,
+            } => write!(
+                f,
+                "executable {field} differs: human {human:?}, generated {generated:?}"
+            ),
+            ComparisonError::ExecutableDigestUnrecorded { side, field } => write!(
+                f,
+                "{side} side records no executable {field}, so an identity-bound \
+                 comparison cannot be established"
+            ),
             ComparisonError::TimeScopeMismatch { human, generated } => write!(
                 f,
                 "time scope differs: human {}, generated {}",
@@ -2473,6 +2700,9 @@ pub struct IdentityEvidence {
     pub generated_statement_digest: Option<String>,
     pub human_executable: Option<String>,
     pub generated_executable: Option<String>,
+    /// Object/code/semantics digests as recorded (XVII.A2).
+    pub human_identity: RecordedIdentity,
+    pub generated_identity: RecordedIdentity,
 }
 
 impl IdentityEvidence {
@@ -2482,6 +2712,8 @@ impl IdentityEvidence {
             generated_statement_digest: generated.statement_digest.clone(),
             human_executable: human.executable.clone(),
             generated_executable: generated.executable.clone(),
+            human_identity: human.identity.clone(),
+            generated_identity: generated.identity.clone(),
         }
     }
 
@@ -2510,9 +2742,61 @@ impl IdentityEvidence {
         out
     }
 
+    fn sides_missing(human: bool, generated: bool) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        if human {
+            out.push("human");
+        }
+        if generated {
+            out.push("generated");
+        }
+        out
+    }
+
+    /// The sides whose `object_sha256` is absent.
+    pub fn missing_object_digest(&self) -> Vec<&'static str> {
+        IdentityEvidence::sides_missing(
+            self.human_identity.object_sha256.is_none(),
+            self.generated_identity.object_sha256.is_none(),
+        )
+    }
+
+    /// The sides whose `code_sha256` is absent.
+    pub fn missing_code_digest(&self) -> Vec<&'static str> {
+        IdentityEvidence::sides_missing(
+            self.human_identity.code_sha256.is_none(),
+            self.generated_identity.code_sha256.is_none(),
+        )
+    }
+
+    /// The sides whose `semantics_sha256` is absent.
+    pub fn missing_semantics_digest(&self) -> Vec<&'static str> {
+        IdentityEvidence::sides_missing(
+            self.human_identity.semantics_sha256.is_none(),
+            self.generated_identity.semantics_sha256.is_none(),
+        )
+    }
+
+    /// Every missing digest field as `(side, field)`, human first, in
+    /// comparison order. Architecture is part of the identity too.
+    pub fn missing_identity_fields(&self) -> Vec<(&'static str, &'static str)> {
+        let mut out = Vec::new();
+        for (side, identity) in [
+            ("human", &self.human_identity),
+            ("generated", &self.generated_identity),
+        ] {
+            for field in identity.missing() {
+                out.push((side, field));
+            }
+        }
+        out
+    }
+
     /// Every piece of evidence is present on both sides.
     pub fn is_complete(&self) -> bool {
-        self.missing_statement_digest().is_empty() && self.missing_executable().is_empty()
+        self.missing_statement_digest().is_empty()
+            && self.missing_executable().is_empty()
+            && self.missing_identity_fields().is_empty()
     }
 
     /// `none` for a complete record, otherwise exactly what is missing.
@@ -2530,6 +2814,27 @@ impl IdentityEvidence {
             parts.push(format!(
                 "executable identity missing on {}",
                 executable.join(", ")
+            ));
+        }
+        for (label, sides) in [
+            ("object digest", self.missing_object_digest()),
+            ("code digest", self.missing_code_digest()),
+            ("semantics digest", self.missing_semantics_digest()),
+        ] {
+            if !sides.is_empty() {
+                parts.push(format!("{label} missing on {}", sides.join(", ")));
+            }
+        }
+        let architecture: Vec<&str> = self
+            .missing_identity_fields()
+            .into_iter()
+            .filter(|(_, field)| *field == "architecture")
+            .map(|(side, _)| side)
+            .collect();
+        if !architecture.is_empty() {
+            parts.push(format!(
+                "executable architecture missing on {}",
+                architecture.join(", ")
             ));
         }
         if parts.is_empty() {
@@ -2562,7 +2867,9 @@ impl IdentityEvidence {
 pub struct DiagnosticComparison {
     human: MeasuredProof,
     generated: MeasuredProof,
-    evidence: IdentityEvidence,
+    /// Boxed: this record is diagnostic-only and the enum that carries it has a
+    /// much smaller identity-bound variant.
+    evidence: Box<IdentityEvidence>,
 }
 
 impl DiagnosticComparison {
@@ -2667,6 +2974,15 @@ impl IdentityBoundComparison {
             .executable
             .as_deref()
             .expect("identity-bound comparison carries an executable identity")
+    }
+
+    /// The full digest identity, present and equal on both sides by
+    /// construction (XVII.A2).
+    pub fn identity(&self) -> ExecutableIdentity {
+        self.human
+            .identity
+            .complete()
+            .expect("identity-bound comparison carries object/code/semantics digests")
     }
 
     /// `generated / human` wall seconds, only when both numbers exist, human is
@@ -2792,6 +3108,20 @@ pub fn diagnostic_reasons(
             });
         }
     }
+    // XVII.A2: when both sides record complete digests they must agree. A
+    // missing digest is not a mismatch here; it is recorded on the diagnostic
+    // result and refuses the identity-bound path.
+    if let (Some(h), Some(g)) = (human.identity.complete(), generated.identity.complete()) {
+        for ((field, hv), (_, gv)) in h.fields().into_iter().zip(g.fields()) {
+            if hv != gv {
+                out.push(ComparisonError::ExecutableDigestMismatch {
+                    field,
+                    human: hv.to_string(),
+                    generated: gv.to_string(),
+                });
+            }
+        }
+    }
     // XV.A5: seconds measured over different spans are not the same number.
     if human.time_scope != generated.time_scope {
         out.push(ComparisonError::TimeScopeMismatch {
@@ -2813,6 +3143,9 @@ pub fn identity_reasons(human: &MeasuredProof, generated: &MeasuredProof) -> Vec
     for side in evidence.missing_executable() {
         out.push(ComparisonError::ExecutableIdentityUnrecorded { side });
     }
+    for (side, field) in evidence.missing_identity_fields() {
+        out.push(ComparisonError::ExecutableDigestUnrecorded { side, field });
+    }
     out
 }
 
@@ -2828,7 +3161,7 @@ pub fn diagnose(
         None => Ok(DiagnosticComparison {
             human: human.clone(),
             generated: generated.clone(),
-            evidence: IdentityEvidence::of(human, generated),
+            evidence: Box::new(IdentityEvidence::of(human, generated)),
         }),
     }
 }
@@ -2862,6 +3195,8 @@ struct TimedTask {
     statement_digest: Option<String>,
     /// The executable the theorem was judged for, when the row carries it.
     executable: Option<String>,
+    /// Object/code/semantics digests, each optional (XVII.A2).
+    identity: RecordedIdentity,
     exit: Option<i32>,
     check_axioms: bool,
     seconds: Option<f64>,
@@ -2975,6 +3310,18 @@ fn read_timed_tasks(
             .get("executable")
             .and_then(|v| v.as_str())
             .map(str::to_string);
+        let identity_field = |k: &str| {
+            t.get("identity")
+                .and_then(|v| v.get(k))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let identity = RecordedIdentity {
+            architecture: identity_field("architecture"),
+            object_sha256: identity_field("object_sha256"),
+            code_sha256: identity_field("code_sha256"),
+            semantics_sha256: identity_field("semantics_sha256"),
+        };
         let time_scope = t
             .get("time_scope")
             .and_then(|v| v.as_str())
@@ -2997,6 +3344,7 @@ fn read_timed_tasks(
             theorem,
             statement_digest,
             executable,
+            identity,
             exit,
             check_axioms,
             seconds,
@@ -3177,6 +3525,7 @@ fn measured(task: &TimedTask, scope: &MeasurementScope) -> MeasuredProof {
         theorem: task.theorem.clone().unwrap_or_default(),
         statement_digest: task.statement_digest.clone(),
         executable: task.executable.clone(),
+        identity: task.identity.clone(),
         exit: task.exit,
         check_axioms: task.check_axioms,
         theorem_proved: task.theorem.is_some(),
@@ -3313,6 +3662,8 @@ fn refusal_code(e: &ComparisonError) -> &'static str {
         ComparisonError::StatementIdentityUnrecorded { .. } => "statement unrecorded",
         ComparisonError::ExecutableIdentityMismatch { .. } => "executable identity",
         ComparisonError::ExecutableIdentityUnrecorded { .. } => "executable unrecorded",
+        ComparisonError::ExecutableDigestMismatch { .. } => "executable digest",
+        ComparisonError::ExecutableDigestUnrecorded { .. } => "executable digest unrecorded",
         ComparisonError::TimeScopeMismatch { .. } => "time scope",
     }
 }
@@ -5133,6 +5484,7 @@ mod tests {
                 None
             },
             executable: Some(format!("{arch}.{dir}.{op}")),
+            identity: None,
             check_axioms: exit == 0,
             seconds: if exit == 0 { Some(46.0) } else { None },
             timeout: false,
@@ -5228,6 +5580,31 @@ mod tests {
                 .as_str(),
             Some("on")
         );
+        // XVII.A1: the run record carries the environment's chosen
+        // disassembler with its version and executable digest, or the reason
+        // none was usable. It is never silently absent.
+        let disassemblers = j
+            .get("environment")
+            .expect("environment record")
+            .get("disassembler")
+            .expect("disassembler record");
+        for arch in ["arm", "x86"] {
+            let record = disassemblers.get(arch).expect("one record per arch");
+            if record.get("error").is_some() {
+                assert!(record.get("sha256").is_none(), "{record:?}");
+            } else {
+                let digest = record
+                    .get("sha256")
+                    .and_then(|v| v.as_str())
+                    .expect("sha256 of the chosen tool");
+                assert_eq!(digest.len(), 64);
+                assert!(record.get("version").is_some());
+                assert_eq!(
+                    record.get("probe_mnemonic").and_then(|v| v.as_str()),
+                    Some("add")
+                );
+            }
+        }
     }
 
     #[test]
@@ -5732,6 +6109,7 @@ mod tests {
             )),
             statement_digest: None,
             executable: None,
+            identity: RecordedIdentity::default(),
             exit: Some(0),
             check_axioms: true,
             seconds: secs,
@@ -5750,11 +6128,13 @@ mod tests {
         }
     }
 
-    /// A row with full identity evidence: a digest and an executable key.
+    /// A row with full identity evidence: a digest, an executable key and the
+    /// object/code/semantics digests.
     fn bound_timed(arch: &str, dir: &str, op: &str, fam: &str, secs: Option<f64>) -> TimedTask {
         let mut task = timed(arch, dir, op, fam, secs);
         task.statement_digest = Some("0f3d".repeat(16));
         task.executable = Some(format!("{arch}.{dir}.{op}"));
+        task.identity = ident(arch);
         task
     }
 
@@ -5763,6 +6143,7 @@ mod tests {
             theorem: theorem.to_string(),
             statement_digest: None,
             executable: None,
+            identity: RecordedIdentity::default(),
             exit: Some(0),
             check_axioms: true,
             theorem_proved: true,
@@ -5780,12 +6161,24 @@ mod tests {
         )
     }
 
+    /// A complete recorded identity, distinct per architecture so a mismatch
+    /// can be constructed.
+    fn ident(arch: &str) -> RecordedIdentity {
+        RecordedIdentity {
+            architecture: Some(arch.to_string()),
+            object_sha256: Some("11".repeat(32)),
+            code_sha256: Some("22".repeat(32)),
+            semantics_sha256: Some("33".repeat(32)),
+        }
+    }
+
     /// A pair with full identity evidence on both sides.
     fn fully_bound() -> (MeasuredProof, MeasuredProof) {
         let (mut h, mut g) = matched();
         for p in [&mut h, &mut g] {
             p.statement_digest = Some("0f3d".repeat(16));
             p.executable = Some("arm.p521.add".to_string());
+            p.identity = ident("arm");
         }
         (h, g)
     }
@@ -5797,6 +6190,7 @@ mod tests {
         let m = bind_identity(&h, &g).expect("full identity evidence, success, same scope");
         assert_eq!(m.theorem(), "BIGNUM_ADD_P521_CORRECT");
         assert_eq!(m.executable(), "arm.p521.add");
+        assert_eq!(m.identity().code_sha256, "22".repeat(32));
         assert_eq!(m.statement_digest(), "0f3d".repeat(16));
         assert_eq!(m.inference_ratio(), Some(1.0));
         assert!(identity_reasons(&h, &g).is_empty());
@@ -5850,12 +6244,15 @@ mod tests {
         let (mut h, g) = matched();
         h.statement_digest = Some("0f3d".repeat(16));
         h.executable = Some("arm.p521.add".to_string());
+        h.identity = ident("arm");
         let d = diagnose(&h, &g).expect("diagnostic comparison on weaker evidence");
         assert_eq!(d.evidence().missing_statement_digest(), vec!["generated"]);
         assert_eq!(d.evidence().missing_executable(), vec!["generated"]);
         assert_eq!(
             d.missing_evidence(),
-            "statement digest missing on generated; executable identity missing on generated"
+            "statement digest missing on generated; executable identity missing on generated; \
+             object digest missing on generated; code digest missing on generated; \
+             semantics digest missing on generated; executable architecture missing on generated"
         );
         assert!(!d.evidence().is_complete());
         assert_eq!(
@@ -5899,6 +6296,115 @@ mod tests {
                 generated: "x86.p521.add".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn the_same_tuple_with_a_different_code_digest_is_refused() {
+        // XVII.A2 test (a). `arm.p521.add` is the same label on both sides, so
+        // the old identity would have called these the same executable. The
+        // code digest says they are not.
+        let (h, mut g) = fully_bound();
+        g.identity.code_sha256 = Some("44".repeat(32));
+        assert_eq!(h.executable, g.executable);
+        let want = ComparisonError::ExecutableDigestMismatch {
+            field: "code_sha256",
+            human: "22".repeat(32),
+            generated: "44".repeat(32),
+        };
+        assert_eq!(diagnose(&h, &g), Err(want.clone()));
+        assert_eq!(bind_identity(&h, &g), Err(want));
+        // Equalising the digest restores the identity-bound pair.
+        let mut g2 = g.clone();
+        g2.identity.code_sha256 = Some("22".repeat(32));
+        assert!(bind_identity(&h, &g2).is_ok());
+    }
+
+    #[test]
+    fn a_missing_semantics_digest_forces_diagnostic() {
+        // XVII.A2 test (b). The pair may still be *diagnosed*; it may not be
+        // cited. The reason names the field and the side.
+        let (h, mut g) = fully_bound();
+        g.identity.semantics_sha256 = None;
+        let d = diagnose(&h, &g).expect("diagnostic on a missing semantics digest");
+        assert_eq!(d.evidence().missing_semantics_digest(), vec!["generated"]);
+        assert!(!d.evidence().is_complete());
+        assert!(
+            d.missing_evidence()
+                .contains("semantics digest missing on generated"),
+            "missing evidence is printed: {}",
+            d.missing_evidence()
+        );
+        assert_eq!(
+            bind_identity(&h, &g),
+            Err(ComparisonError::ExecutableDigestUnrecorded {
+                side: "generated",
+                field: "semantics_sha256",
+            })
+        );
+
+        // A pre-XVII.A2 record carries no identity at all: it degrades to
+        // diagnostic and names every missing digest, never binds silently.
+        let (h2, mut g2) = fully_bound();
+        g2.identity = RecordedIdentity::default();
+        let d = diagnose(&h2, &g2).expect("an old record is diagnostic, not silently bound");
+        assert_eq!(d.evidence().missing_object_digest(), vec!["generated"]);
+        assert_eq!(d.evidence().missing_code_digest(), vec!["generated"]);
+        assert_eq!(d.evidence().missing_semantics_digest(), vec!["generated"]);
+        assert!(d
+            .missing_evidence()
+            .contains("object digest missing on generated"));
+        assert_eq!(
+            bind_identity(&h2, &g2),
+            Err(ComparisonError::ExecutableDigestUnrecorded {
+                side: "generated",
+                field: "architecture",
+            })
+        );
+    }
+
+    #[test]
+    fn a_real_dropin_pair_produces_an_identity_bound_pair() {
+        // XVII.A2 test (c). The digests are computed by the producer path on
+        // the real objects in `.bench/dropin`; `.bench` is machine-specific, so
+        // an absent tree is reported rather than pretended.
+        let dropin = repo_root().join(".bench/dropin");
+        if !dropin.is_dir() {
+            eprintln!("skip: {} is absent", dropin.display());
+            return;
+        }
+        for (arch, dir, op, fam) in [
+            ("arm", "curve25519", "add", "p25519"),
+            ("x86", "curve25519", "add", "p25519"),
+        ] {
+            let identity = match executable_identity(&dropin, arch, dir, op, fam) {
+                Ok(identity) => identity,
+                Err(e) => {
+                    eprintln!("skip: .bench/dropin {arch} object identity unavailable: {e}");
+                    return;
+                }
+            };
+            assert_eq!(identity.architecture, arch);
+            eprintln!("identity {arch}: {identity:?}");
+            for digest in [
+                &identity.object_sha256,
+                &identity.code_sha256,
+                &identity.semantics_sha256,
+            ] {
+                assert_eq!(digest.len(), 64, "a sha-256 hex digest has 64 characters");
+            }
+            let (mut h, mut g) = matched();
+            for p in [&mut h, &mut g] {
+                p.statement_digest = Some("ab".repeat(32));
+                p.executable = Some(format!("{arch}.{dir}.{op}"));
+                p.identity = RecordedIdentity::of(&identity);
+            }
+            let bound = bind_identity(&h, &g).expect("a real drop-in identity binds");
+            assert_eq!(bound.identity(), identity);
+            // A different code digest on the same tuple refuses.
+            let mut other = g.clone();
+            other.identity.code_sha256 = Some("cd".repeat(32));
+            assert!(bind_identity(&h, &other).is_err());
+        }
     }
 
     #[test]
@@ -6147,7 +6653,7 @@ mod tests {
         let default = render_checktime(&human, &generated, false);
         assert!(
             default.contains(
-                "| arm | p521/add_p521 | BIGNUM_ADD_P521_CORRECT | BIGNUM_ADD_P521_CORRECT | 3.000 | 12.000 | diagnostic: statement digest missing on human, generated; executable identity missing on human, generated |"
+                "| arm | p521/add_p521 | BIGNUM_ADD_P521_CORRECT | BIGNUM_ADD_P521_CORRECT | 3.000 | 12.000 | diagnostic: statement digest missing on human, generated; executable identity missing on human, generated; object digest missing on human, generated; code digest missing on human, generated; semantics digest missing on human, generated; executable architecture missing on human, generated |"
             ),
             "{default}"
         );
@@ -6486,9 +6992,25 @@ mod tests {
         let mut generated = proof(name, TreeKind::Generated);
         generated.statement_digest = Some(db);
         generated.executable = Some("arm.curve25519.add".to_string());
+        let real = match executable_identity(
+            &root.join(".bench/dropin"),
+            "arm",
+            "curve25519",
+            "add",
+            "p25519",
+        ) {
+            Ok(identity) => identity,
+            Err(e) => {
+                eprintln!("skip: .bench/dropin object identity unavailable: {e}");
+                return;
+            }
+        };
+        human.identity = RecordedIdentity::of(&real);
+        generated.identity = RecordedIdentity::of(&real);
         let bound = bind_identity(&human, &generated).expect("real equal statements bind");
         assert_eq!(bound.statement_digest(), da);
         assert_eq!(bound.executable(), "arm.curve25519.add");
+        assert_eq!(bound.identity(), real);
     }
 
     #[test]

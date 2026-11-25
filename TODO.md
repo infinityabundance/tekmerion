@@ -3144,7 +3144,7 @@ a project document; this section is the queue it implies.
 
 ## XVII.A — Integrity defects that block any claim (do first)
 
-- [ ] **XVII.A1. CI is red again**: three ARM tests fail because the runner's `objdump` cannot
+- [x] **XVII.A1. CI is red again**: three ARM tests fail because the runner's `objdump` cannot
   disassemble AArch64 (`can't disassemble for architecture UNKNOWN`). `find_objdump()` in
   `src/tools/disasm.rs` takes the first executable found without checking capability.
   - Provision `binutils-aarch64-linux-gnu` in CI;
@@ -3152,7 +3152,7 @@ a project document; this section is the queue it implies.
     committed fixture object, accept only a tool that decodes it, and bind the tool's version and
     digest into the evaluation environment record.
   - Do not weaken the tests.
-- [ ] **XVII.A2. Executable identity must be digests, not a label.** `dropin.rs` currently writes
+- [x] **XVII.A2. Executable identity must be digests, not a label.** `dropin.rs` currently writes
   `format!("{arch}.{dir}.{op}")`, so two different objects with the same tuple compare equal.
   Introduce `ExecutableIdentity { architecture, object_sha256, code_sha256, semantics_sha256 }` and
   require it in `IdentityBoundComparison`.
