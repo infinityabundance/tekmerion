@@ -89,10 +89,28 @@ These are hard rules, not guidance.
 - **Never run a proof build in the orchestrator's foreground.** Delegate it. If a
   subagent cannot be started, run it capped, one at a time, and stop after one
   target.
-- `systemd-run -p MemoryMax=` is **not** an acceptable mechanism on this host: it
-  is accepted but not applied (verified — the scope reports `MemoryMax=infinity`
-  and a 2 GB allocation succeeds under a 256 M setting). `tools/cap.sh` uses
-  `RLIMIT_AS`, which was verified to bite.
+- `tools/cap.sh` uses `RLIMIT_AS` via `ulimit -v`, which was verified to bite.
+  It caps **one process**, not a tree: every process the command starts inherits
+  the limit, so no single process can exceed it, but the aggregate is not
+  capped — N processes can consume about N × the limit. cgroups would cap the
+  aggregate, but `systemd-run -p MemoryMax=` is **not** an acceptable mechanism
+  on this host: it is accepted but not applied (verified — the scope reports
+  `MemoryMax=infinity` and a 2 GB allocation succeeds under a 256 M setting).
+  The group kill below is the strongest tree-wide stop available here, and it
+  is time-based, not memory-based.
+- The command runs in its own process group (`setsid`). `--timeout <secs>` is an
+  additive option: `tools/cap.sh --timeout 600 12G -- make -j1 … <target>.correct`.
+  On expiry the whole group receives TERM and then KILL, not just the leaf. A
+  descendant that deliberately calls `setsid` itself leaves the group; common
+  build tools do not do this. The existing `tools/cap.sh <MEM> -- <cmd>` form is
+  unchanged.
+- After the run the wrapper prints one stderr line:
+  `cap.sh: group=<pgid> rc=<rc> sampled_group_peak_rss_kb=<n> max_process_vmhwm_kb=<n>`.
+  `sampled_group_peak_rss_kb` is a 0.5 s sample of the summed RSS of the group
+  (it can miss a shorter peak); `max_process_vmhwm_kb` is the highest
+  per-process `VmHWM` seen alive. `/usr/bin/time -v` is absent on this host;
+  where present it gives the direct child's maximum only, never tree accounting.
+  The group-kill control is `tests/cap_group_kill.sh` (XVI.E3).
 - Before any long run, check `free -g` and record it in the receipt. If available
   memory is under 3× the cap, stop and report instead of running.
 - A cap that fires is a **result**, not a retry: record it as `capped` with the

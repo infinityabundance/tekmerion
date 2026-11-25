@@ -580,28 +580,54 @@ fn phase_mode_is_the_normal_emitter_plus_marks() {
     assert!(normal.len() < phase.len());
 }
 
-/// IX.69 (XV.B): the slice is tried before the full set, and a failed slice is
-/// reported as a fallback. The measured controls live in
-/// `research/receipts/ix69-slicing.md`; this pins the code shape so the fallback
-/// cannot be removed without a test failure. It also pins that the phase prefix
-/// carries the task id the `SLICE` lines name.
+/// IX.69 (XV.B) + XVI.D: the slice is tried before the full set, and only a
+/// **mathematical** failure falls back. Resource exhaustion is classified,
+/// reported and re-raised; it must not retry the larger full set. The measured
+/// controls live in `research/receipts/ix69-slicing.md`; the taxonomy in
+/// `research/receipts/ix73-failure-taxonomy-and-cap-scope.md`. This pins the
+/// code shape so the fallback cannot be removed or widened without a failure.
+/// It also pins that the phase prefix carries the task id the `SLICE` lines
+/// name.
 #[test]
-fn ix69_slice_falls_back_to_the_full_set_and_the_prefix_names_the_task() {
+fn ix69_slice_falls_back_only_on_a_mathematical_failure() {
     let src = fs::read_to_string(repo().join("tools/bridge.ml")).expect("tools/bridge.ml");
-    let slice = src.find("try close kept").expect("the sliced close");
-    let fallback = src.find("SLICE fallback").expect("the fallback report");
-    let retry = src.rfind("close hths").expect("the full-set retry");
-    assert!(slice < fallback, "the slice must be attempted first");
+    // The tactic: the sliced attempt is passed before the full-set fallback.
+    let body = src
+        .split("let BRIDGE_CSAT_TAC : tactic =")
+        .nth(1)
+        .expect("BRIDGE_CSAT_TAC");
+    let slice = body
+        .find("~attempt:(fun () -> close kept)")
+        .expect("the sliced close");
+    let retry = body
+        .find("~fallback:(fun () -> close hths)")
+        .expect("the full-set retry");
+    assert!(slice < retry, "the slice must be attempted first");
+    // The policy: only the mathematical branch reports and then retries.
+    let policy = src
+        .split("let bridge_slice_retry")
+        .nth(1)
+        .expect("bridge_slice_retry");
+    let report = policy
+        .find("reason=mathematical")
+        .expect("the mathematical fallback report");
+    let fallback = policy.find("fallback ()").expect("the fallback call");
     assert!(
-        fallback < retry,
+        report < fallback,
         "the full set must be retried only after the fallback report"
     );
     assert_eq!(
-        src.matches("SLICE fallback=%s reason=%s kept=%d/%d")
+        src.matches("SLICE fallback=%s reason=mathematical kept=%d/%d")
             .count(),
-        2
+        1
     );
+    assert_eq!(src.matches("CSAT unsupported=%s kept=%d/%d").count(), 1);
+    assert_eq!(src.matches("CSAT capped=%s limit=%s kept=%d/%d").count(), 1);
+    assert_eq!(src.matches("CSAT internal=%s").count(), 1);
     assert_eq!(src.matches("ACCEPT_TAC th' (asl,w)").count(), 1);
+    // The two resource exceptions that must never reach the fallback.
+    assert!(src.contains("| Out_of_memory -> `Resource"));
+    assert!(src.contains("| Stack_overflow -> `Resource"));
 
     let tactic = "BRIDGE_ADD_REF_TAC EXPAND P";
     let task = "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";

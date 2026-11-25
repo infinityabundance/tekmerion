@@ -1505,8 +1505,11 @@ in
 (* and applying MP only to S still yields `|- w` with the same conclusion.   *)
 (* A smaller hypothesis set makes the obligation *stronger*, never weaker,   *)
 (* so dropping hypotheses cannot produce a false theorem -- it can only fail  *)
-(* to close.  That is why the fallback below is mandatory and why an         *)
-(* incompleteness result is a legitimate outcome, not a bug.                 *)
+(* to close.  That is why the fallback below is mandatory for a              *)
+(* *mathematical* failure and why an incompleteness result is a legitimate    *)
+(* outcome, not a bug.  XVI.D classifies the failure first: a resource-      *)
+(* exhausted attempt (out of memory, stack overflow, timeout, signal) is      *)
+(* reported and re-raised, never retried against the larger full set.        *)
 (*                                                                           *)
 (* The criterion is syntactic (free-variable sharing), not semantic.  It is  *)
 (* sound and deterministic; it is not complete, and it may keep hypotheses   *)
@@ -1600,6 +1603,97 @@ let bridge_slice_forced hths kept =
   | "drop-nonoverlap" -> List.filter (fun th -> not (bridge_has_nonoverlap th)) hths
   | _ -> kept
 in
+(* ------------------------------------------------------------------------- *)
+(* 6a'. Failure taxonomy for the sliced attempt (XVI.D).                     *)
+(*                                                                           *)
+(* A failed slice has one of five outcomes.  Only one of them may retry the   *)
+(* full hypothesis set:                                                       *)
+(*                                                                           *)
+(*   closed        the attempt returned a theorem; nothing to report.         *)
+(*   mathematical  the slice was too small (SAT, a sanity-preserving failure *)
+(*                 of the stronger obligation); retry the full set.         *)
+(*   unsupported   the input is outside the close's shape; report and stop.  *)
+(*   resource      out of memory, stack overflow, timeout, or a signal       *)
+(*                 death (exit >= 128, or 124 from a timeout wrapper);       *)
+(*                 report and stop.  Retrying at a larger budget is a        *)
+(*                 decision recorded elsewhere, never an automatic retry.     *)
+(*   internal      a kernel/procedure sanity failure or an unknown exception; *)
+(*                 report and re-raise.                                       *)
+(*                                                                           *)
+(* Classification is a separate, pure function so it can be tested outside   *)
+(* HOL Light: `tests/bridge_failure_selftest.sh` extracts the block between  *)
+(* the markers below and runs it with plain OCaml.                           *)
+(* ------------------------------------------------------------------------- *)
+
+(* BEGIN BRIDGE_FAILURE_STANDALONE *)
+let bridge_failure_class ?(timeout=false) (e:exn) =
+  let has_prefix p s =
+    let lp = String.length p in
+    String.length s >= lp && String.sub s 0 lp = p in
+  let exit_code s =
+    let needle = "exit " and n = String.length s in
+    let ln = String.length needle in
+    let rec find i =
+      if i + ln > n then None
+      else if String.sub s i ln = needle then Some (i + ln)
+      else find (i + 1) in
+    match find 0 with
+    | None -> None
+    | Some j ->
+        let rec digits k =
+          if k < n && s.[k] >= '0' && s.[k] <= '9' then digits (k + 1) else k in
+        let k = digits j in
+        if k = j then None
+        else (try Some (int_of_string (String.sub s j (k - j))) with _ -> None) in
+  if timeout then `Resource ("timeout", "wall-clock budget")
+  else match e with
+  | Out_of_memory -> `Resource ("memory", "address space (RLIMIT_AS)")
+  | Stack_overflow -> `Resource ("stack", "OCaml stack limit")
+  | Sys.Break -> `Resource ("interrupt", "Sys.Break")
+  | Invalid_argument s -> `Unsupported s
+  | Failure s ->
+      let unsupported = "unsupported:" in
+      if has_prefix unsupported s then
+        `Unsupported
+          (String.sub s (String.length unsupported)
+             (String.length s - String.length unsupported))
+      else if has_prefix "CSAT_PROVE: Sanity check" s ||
+              has_prefix "CSAT_REFUTE: Sanity check failure" s then
+        `Internal s
+      else
+        (match exit_code s with
+         | Some 124 -> `Resource ("timeout", "exit 124")
+         | Some rc when rc >= 128 ->
+             `Resource ("signal", "exit " ^ string_of_int rc)
+         | _ -> `Mathematical s)
+  | e -> `Internal (Printexc.to_string e)
+in
+(* The fallback counter is part of the tested surface: a resource exhaustion
+   must leave it at zero. *)
+let bridge_fallback_count = ref 0
+in
+let bridge_slice_retry ~task ~kept ~total ~attempt ~fallback ~note =
+  try attempt ()
+  with e ->
+    (match bridge_failure_class e with
+     | `Mathematical _ ->
+         note (Printf.sprintf "SLICE fallback=%s reason=mathematical kept=%d/%d"
+                 task kept total);
+         incr bridge_fallback_count;
+         fallback ()
+     | `Unsupported what ->
+         note (Printf.sprintf "CSAT unsupported=%s kept=%d/%d" what kept total);
+         raise e
+     | `Resource (which, limit) ->
+         note (Printf.sprintf "CSAT capped=%s limit=%s kept=%d/%d"
+                 which limit kept total);
+         raise e
+     | `Internal why ->
+         note (Printf.sprintf "CSAT internal=%s" why);
+         raise e)
+in
+(* END BRIDGE_FAILURE_STANDALONE *)
+
 let BRIDGE_CSAT_TAC : tactic =
   fun (asl,w) ->
     let hths = map snd asl in
@@ -1630,17 +1724,11 @@ let BRIDGE_CSAT_TAC : tactic =
     let th' =
       if keptn = total then close hths
       else
-        try close kept
-        with
-        | Out_of_memory -> raise Out_of_memory
-        | Failure s ->
-            bridge_slice_note "SLICE fallback=%s reason=%s kept=%d/%d"
-              !bridge_slice_task s keptn total;
-            close hths
-        | e ->
-            bridge_slice_note "SLICE fallback=%s reason=%s kept=%d/%d"
-              !bridge_slice_task (Printexc.to_string e) keptn total;
-            close hths in
+        bridge_slice_retry
+          ~task:(!bridge_slice_task) ~kept:keptn ~total
+          ~attempt:(fun () -> close kept)
+          ~fallback:(fun () -> close hths)
+          ~note:bridge_slice_note in
     ACCEPT_TAC th' (asl,w)
 in
 (* everything that precedes the SAT call, on the goal *)

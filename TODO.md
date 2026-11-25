@@ -3043,24 +3043,24 @@ source file or executable hash.
 set for other exceptions — potentially including stack overflow, which may itself be a resource
 failure.
 
-- [ ] **XVI.D1.** Classify failures into distinct outcomes: **mathematical** (closed: false),
+- [x] **XVI.D1.** Classify failures into distinct outcomes: **mathematical** (closed: false),
   **unsupported input**, **resource exhausted** (OOM, stack overflow, timeout), **internal error**.
   Each has its own message and its own policy.
-- [ ] **XVI.D2.** Resource exhaustion must **not** fall back to a larger instance. It reports and
+- [x] **XVI.D2.** Resource exhaustion must **not** fall back to a larger instance. It reports and
   stops; a retry at a larger budget is a decision, recorded.
-- [ ] **XVI.D3.** Tests for each class, including a synthetic stack-overflow-shaped failure.
+- [x] **XVI.D3.** Tests for each class, including a synthetic stack-overflow-shaped failure.
 
 ## XVI.E — `cap.sh` is per-process; say so and close the gap
 
 `RLIMIT_AS` caps one process, not a tree.
 
-- [ ] **XVI.E1.** State the limitation in `AGENTS.md` §7a and in `tools/cap.sh`'s header.
-- [ ] **XVI.E2.** Add the aggregate guarantee that is actually available here: run the capped
+- [x] **XVI.E1.** State the limitation in `AGENTS.md` §7a and in `tools/cap.sh`'s header.
+- [x] **XVI.E2.** Add the aggregate guarantee that is actually available here: run the capped
   command in its own process group, kill the group on overrun, and report peak RSS for the tree
   (`/usr/bin/time -v` or `wait4` rusage) into the receipt. Where a cgroup is enforceable, use it;
   where it is not (this host: `MemoryMax` is ignored), say so and fall back to the group kill plus
   the documented per-process cap.
-- [ ] **XVI.E3.** A control showing the tree is killed, not just the leaf: a parent that spawns a
+- [x] **XVI.E3.** A control showing the tree is killed, not just the leaf: a parent that spawns a
   child allocating past the cap must end with both gone.
 
 ## XVI.F — The carry-conservation certificate compiler (the real target)
