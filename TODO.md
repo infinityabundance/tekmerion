@@ -2745,3 +2745,135 @@ lrat_total=65657625 cnf_total=4005135
   gate) and replay is 53.68% of its inferences; eliminating replay would leave
   315,758,932 (−54%), while trimming alone reaches 470,294,392 (−31%). The figure is
   evidence for `XIII.E4`, not for an encoding.
+
+---
+
+# XV — Intake 2026-11-25 (after `e5a8187`): two reviews
+
+Nothing omitted. `XV.H` supersedes `XIV.C` as the order of execution.
+
+## XV.0 — Corrections of record
+
+- [ ] **XV.0.1. The check-time gap was under-stated, twice.** The same-obligation measurement
+  (`ix65`) gives an inference ratio with **median 60.20×** (12.93×–109.07×) and a wall-clock
+  median of 106.97×. The original "10–20×" was too low; the retraction to "1.2–5×" went the
+  wrong way. Both earlier statements are recorded as superseded, not deleted.
+- [ ] **XV.0.2. The upstream claim was overstated before IX.64.** "27/27 upstream acceptance"
+  meant per-file builds of a *different contract*; upstream coverage in upstream's sense was
+  **0/27** until `_SUBROUTINE_CORRECT` was derived (IX.64). That correction is now in
+  `ix54-upstream-dropin.md`; keep it there.
+- [ ] **XV.0.3. IX.65's elapsed-time ratio (90.59×) is withheld** until the scope discrepancy is
+  resolved: the human side brackets `_CORRECT`, while the generated seconds look like whole-file
+  upstream timings. The **inference** ratio is the one that stands.
+- [ ] **XV.0.4. IX.66 close-count denominator.** The receipt says 30 SAT closes; the per-task
+  table lists 21 closes across 22 attempts. The inference totals reconcile, but the denominator
+  must be corrected and the receipts cross-checked.
+
+## XV.A — Restore CI and fix measurement integrity (blocking; do first)
+
+- [ ] **XV.A1. CI is red.** `ix66_markers_are_additive_and_the_normal_answer_is_recovered`
+  (`tests/tools_emit.rs:429`) loads library sources that include `.bench/hol-light/Cadical/`,
+  which does not exist offline. Fix with a synthetic fixture; the test must run offline and
+  still prove `deinstrument ∘ instrument = id`. CI green is a precondition for everything below.
+- [ ] **XV.A2. `MatchedComparison` must not be constructible without validation.** Its fields are
+  public. Make them private, expose accessors, and make the only constructor be `compare`. Add a
+  compile-fail test or a unit test that the fields are inaccessible outside the module.
+- [ ] **XV.A3. Identity, not names.** The comparator matches theorem *names*. It must compare the
+  full typed statement (or a canonical digest of it) plus the executable identity, so two
+  different theorems with the same name cannot be paired.
+- [ ] **XV.A4. Fix the trimmer's success reporting.** `src/tools/lrat_trim.rs` can report success
+  with negative hints present or a non-empty root. It must refuse (and say why) in both cases;
+  its own tests must cover the refusals, not only the success path.
+- [ ] **XV.A5. Scope discipline in time comparisons.** Any timing comparison must carry its
+  scope (`prove` only, whole file, or judge run) as data, and the table must refuse to aggregate
+  rows with different scopes.
+
+## XV.B — Cone-of-influence slicing (the measured lever)
+
+The decisive figure from `ix66`/`ix65`: removing the SAT close entirely caps the six-task total
+at **17,873,566** inferences against **14,019,340** for the human proofs. Without the SAT close,
+the generated proofs are already within **~1.3×** of hand-written ones. **The entire 60× gap is
+the SAT close**, and the close scales with the hypothesis set (~28 inferences per bit-blasted
+subterm) rather than with the goal (51 subterms at bridge entry).
+
+- [ ] **XV.B1. Slice before blasting.** Compute, from the simulator's dependency information
+  (the W1 dataflow analysis already computes per-state dependencies), the cone of influence of
+  the output words and the selection flag, and hand `CSAT_TAC` only the hypotheses in that cone.
+  Everything else stays as an assumption but is not blasted.
+- [ ] **XV.B2. What the slicing is must be** (typed and checkable):
+  - **Sound**: a hypothesis may be dropped only if the conclusion's truth cannot depend on it;
+  - **Deterministic**: the same input yields the same sliced instance;
+  - **Measured**: subterms blasted, CNF clauses, inferences per class, and total, against the
+    six-task baseline;
+  - **Statement-preserving**: `equals_thm` against the current theorem, `check_axioms` passing.
+- [ ] **XV.B3. Refuse to be vacuous.** Firing controls: a hypothesis the output *does* depend on
+  must not be sliced away (construct one deliberately and show it is kept); slicing everything
+  must fail, not succeed.
+- [ ] **XV.B4. Target.** At least 30% off the six-task total (993,573,633) with all six still
+  accepted; or a precise blocker with the numbers.
+
+## XV.C — Re-measure the certificate after slicing
+
+- [ ] **XV.C1.** Re-measure LRAT bytes for `arm/add_p25519` and `add_p521` on the sliced instance.
+  Current: 65,657,625 B and 8.2× the 8 MB budget; trimmed 2.95×.
+- [ ] **XV.C2.** Decide the certificate design **from the measurement**, in this order:
+  if a proper trim plus slicing gets certificates under ~1–2 MB, prefer the **in-answer,
+  no-I/O** design; otherwise use the **content-addressed side artefact** (one digest-verified
+  read) and say plainly that the guarantee is weaker.
+- [ ] **XV.C3.** Record the decision with its numbers; do not re-open it without new data.
+
+## XV.D — Hybrid closer (fallback if slicing is not enough)
+
+- [ ] **XV.D1.** Where a modulus class has a cheap human-style arithmetic close (the `IX.67`
+  route already attempted for `add_p25519`), use it; keep the certified SAT close as the
+  fallback for classes the templates have not seen. The class-agnostic guarantee survives; the
+  SAT cost is paid only where it buys generality.
+- [ ] **XV.D2.** The choice must be visible in the emitted answer and recorded per theorem, so a
+  reader can tell which route proved which theorem.
+
+## XV.E — Generic carry-conservation certificate (the deeper target)
+
+- [ ] **XV.E1.** Establish the local radix identity `a_i + b_i + c_i = s_i + B·c_{i+1}` at
+  `B = 2^64`, compose it over `n` limbs into
+  `Σ B^i(a_i+b_i) = Σ B^i s_i + B^n c_n − c_0`, and prove the composition **once**, parametric
+  in width, limb count and modulus.
+- [ ] **XV.E2.** Instantiate it cheaply per theorem and show it removes the corresponding
+  hypotheses from the blast instance (the `XV.B` slicer and this lemma are complementary).
+- [ ] **XV.E3.** Combine with range and modular-correction certificates. This is the route to
+  the Arithmetic Structure Compiler, and the first place where Tekmerion would be *inventing*
+  reusable mathematics rather than replaying it.
+
+## XV.F — Upstream compatibility: what is and is not established
+
+- [ ] **XV.F1.** Established: same contract, same theorem names, whole-tree default `make` green
+  in both arches, one `ALL_TAC` control failing.
+- [ ] **XV.F2.** Not established, and must be said wherever the result is cited: the statement
+  comparison is **text-based after notation normalisation** (not a kernel-level identity check);
+  the assembler **copies upstream's derivation blocks** rather than inventing them; `_SAFE`,
+  `_NOIBT_WINDOWS_*` and `_WINDOWS_*` obligations are out of scope; a full `make proofs`
+  (452 ARM + 1758 x86 obligations) has never been run.
+- [ ] **XV.F3.** Where the comparison can be made kernel-level (both theorems in one session,
+  `equals_thm`), do that instead of text comparison — at least for a sample.
+
+## XV.G — Standing open items that must not be lost
+
+- [ ] **XV.G1.** Solver-free replay of a real machine-code proof (still open; `XV.C2` decides
+  the design).
+- [ ] **XV.G2.** `XIII.H1` G1 bit-blaster soundness (the central hypothesis of the native
+  soundness theorem).
+- [ ] **XV.G3.** Multiplication / Montgomery coverage (`XIV.E1`), and `XII.F5`'s agent-extends-the-
+  compiler experiment.
+- [ ] **XV.G4.** Freeze **v6** before any sealed run (`XIV.I1`); the seal is stale because
+  `src/tools` and `tools/` moved.
+- [ ] **XV.G5.** `XIII.B3` (type-definition negative control) and `XIII.B7` (receipt wording) —
+  small, still open from the earlier intake.
+
+## XV.H — Order of execution (supersedes `XIV.C`)
+
+1. **XV.A** — CI green and measurement integrity. Nothing else is trustworthy while CI is red.
+2. **XV.B** — cone-of-influence slicing, measured on the six-task baseline.
+3. **XV.C** — re-measure certificates, then choose the design from the data.
+4. **XV.D** — hybrid closer only if slicing leaves the gap.
+5. **XV.E** — carry-conservation certificate, parametric, proved once.
+6. **XIV.G1**'s remaining scope → **XV.G3** first new family, then **XV.G2** native G1.
+7. Freeze **v6** immediately before the first sealed run, not before.
