@@ -1055,8 +1055,8 @@ const BRIDGE_EDITS: &[MarkerEdit] = &[
         marked: "  fun g ->\n    csat_mark_at \"bridge:algebra\";\n    (at \"normalise\" BRIDGE_ALG_NORM_TAC THEN",
     },
     MarkerEdit {
-        plain: "     at \"arith\" ASM_INT_ARITH_TAC) g;;",
-        marked: "     at \"arith\" (fun g -> csat_mark_at \"bridge:algebra-arith\"; ASM_INT_ARITH_TAC g)) g;;",
+        plain: "     at \"aggregate\" BRIDGE_AGGREGATE_TAC) g;;",
+        marked: "     at \"aggregate\" (fun g -> csat_mark_at \"bridge:algebra-arith\"; BRIDGE_AGGREGATE_TAC g)) g;;",
     },
     MarkerEdit {
         plain: "let BRIDGE_CSAT_TAC : tactic =\n  fun (asl,w) ->\n    let hths = map snd asl in",

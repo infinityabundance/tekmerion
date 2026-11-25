@@ -820,6 +820,18 @@ let bridge_slice_forced hths kept =
 (* ------------------------------------------------------------------------- *)
 
 (* BEGIN BRIDGE_FAILURE_STANDALONE *)
+(* [IX.75] The classifier returns a portable triple `(kind, detail, limit)'
+   with `kind' one of "mathematical", "unsupported", "resource", "internal".
+   It used polymorphic variants, which cannot live in this file: the emitted
+   answer is preprocessed by HOL Light's camlp5r (revised syntax), where a
+   backtick starts a term quotation, so `` `Resource (a, b)'' is a parse error
+   rather than a variant (`Lexing error: quotation not terminated'); a variant
+   *type* declaration is equally unportable (`of' is rejected in revised
+   syntax).  The same block is also compiled by plain OCaml in
+   `tests/bridge_failure_selftest.sh'.  A string-tagged tuple is the only
+   representation that both readers accept, and it introduces no constructor
+   into the global namespace.  Measured on HEAD: the old block made the answer
+   fail to parse, so *every* task failed to build before this change. *)
 let bridge_failure_class ?(timeout=false) (e:exn) =
   let has_prefix p s =
     let lp = String.length p in
@@ -839,28 +851,30 @@ let bridge_failure_class ?(timeout=false) (e:exn) =
         let k = digits j in
         if k = j then None
         else (try Some (int_of_string (String.sub s j (k - j))) with _ -> None) in
-  if timeout then `Resource ("timeout", "wall-clock budget")
-  else match e with
-  | Out_of_memory -> `Resource ("memory", "address space (RLIMIT_AS)")
-  | Stack_overflow -> `Resource ("stack", "OCaml stack limit")
-  | Sys.Break -> `Resource ("interrupt", "Sys.Break")
-  | Invalid_argument s -> `Unsupported s
-  | Failure s ->
-      let unsupported = "unsupported:" in
-      if has_prefix unsupported s then
-        `Unsupported
-          (String.sub s (String.length unsupported)
-             (String.length s - String.length unsupported))
-      else if has_prefix "CSAT_PROVE: Sanity check" s ||
-              has_prefix "CSAT_REFUTE: Sanity check failure" s then
-        `Internal s
-      else
-        (match exit_code s with
-         | Some 124 -> `Resource ("timeout", "exit 124")
-         | Some rc when rc >= 128 ->
-             `Resource ("signal", "exit " ^ string_of_int rc)
-         | _ -> `Mathematical s)
-  | e -> `Internal (Printexc.to_string e);;
+  let classify e =
+    match e with
+    | Out_of_memory -> ("resource", "memory", "address space (RLIMIT_AS)")
+    | Stack_overflow -> ("resource", "stack", "OCaml stack limit")
+    | Sys.Break -> ("resource", "interrupt", "Sys.Break")
+    | Invalid_argument s -> ("unsupported", s, "")
+    | Failure s ->
+        let unsupported = "unsupported:" in
+        if has_prefix unsupported s then
+          ("unsupported",
+           String.sub s (String.length unsupported)
+             (String.length s - String.length unsupported), "")
+        else if has_prefix "CSAT_PROVE: Sanity check" s ||
+                has_prefix "CSAT_REFUTE: Sanity check failure" s then
+          ("internal", s, "")
+        else
+          (match exit_code s with
+           | Some 124 -> ("resource", "timeout", "exit 124")
+           | Some rc when rc >= 128 ->
+               ("resource", "signal", "exit " ^ string_of_int rc)
+           | _ -> ("mathematical", s, ""))
+    | e -> ("internal", Printexc.to_string e, "") in
+  if timeout then ("resource", "timeout", "wall-clock budget")
+  else classify e;;
 
 (* The fallback counter is part of the tested surface: a resource exhaustion
    must leave it at zero. *)
@@ -870,21 +884,23 @@ let bridge_slice_retry ~task ~kept ~total ~attempt ~fallback ~note =
   try attempt ()
   with e ->
     (match bridge_failure_class e with
-     | `Mathematical _ ->
+     | ("mathematical", _, _) ->
          note (Printf.sprintf "SLICE fallback=%s reason=mathematical kept=%d/%d"
                  task kept total);
          incr bridge_fallback_count;
          fallback ()
-     | `Unsupported what ->
+     | ("unsupported", what, _) ->
          note (Printf.sprintf "CSAT unsupported=%s kept=%d/%d" what kept total);
          raise e
-     | `Resource (which, limit) ->
+     | ("resource", which, limit) ->
          note (Printf.sprintf "CSAT capped=%s limit=%s kept=%d/%d"
                  which limit kept total);
          raise e
-     | `Internal why ->
+     | ("internal", why, _) ->
          note (Printf.sprintf "CSAT internal=%s" why);
-         raise e);;
+         raise e
+     | (_, _, _) -> raise e);;
+(* END BRIDGE_FAILURE_STANDALONE *)
 (* END BRIDGE_FAILURE_STANDALONE *)
 
 let BRIDGE_CSAT_TAC : tactic =
@@ -921,7 +937,7 @@ let BRIDGE_CSAT_TAC : tactic =
           ~task:(!bridge_slice_task) ~kept:keptn ~total
           ~attempt:(fun () -> close kept)
           ~fallback:(fun () -> close hths)
-          ~note:bridge_slice_note in
+          ~note:(fun s -> bridge_slice_note "%s" s) in
     ACCEPT_TAC th' (asl,w);;
 
 (* everything that precedes the SAT call, on the goal *)
@@ -1162,29 +1178,36 @@ let BRIDGE_INT_REDUCE_TAC : tactic =
     (RULE_ASSUM_TAC (CONV_RULE INT_REDUCE_CONV) THEN
      CONV_TAC INT_REDUCE_CONV) g;;
 
+(* the carry whose integrality is load-bearing: the one paired with the
+   highest-weighted `val' atom on the side of the chain that contains it. *)
+let BRIDGE_TOP_CARRY asl =
+  let hyps = List.map (fun (_,th) -> concl th) asl in
+  let atoms = setify (List.concat (List.map BRIDGE_VAL_ATOMS hyps)) in
+  let maxabs x =
+    List.fold_left (fun a t ->
+      let k = BRIDGE_TERM_WEIGHT x t in if Num.le_num a k then k else a)
+      (Num.num_of_int 0) hyps in
+  let scored = List.map (fun x -> (x, maxabs x)) atoms in
+  match BRIDGE_MAX_COEF scored with
+  | None -> None
+  | Some(msatom, _) ->
+      let carriers = List.concat (List.map (fun t ->
+        if List.exists (fun s -> aconv s msatom) (BRIDGE_VAL_ATOMS t)
+        then BRIDGE_BITVAL_COEF_PAIRS t else []) hyps) in
+      let carriers = List.filter
+        (fun (b,_) -> not (BRIDGE_DECIDED_BITVAL asl b)) carriers in
+      (match BRIDGE_MAX_COEF carriers with
+       | None -> None
+       | Some(b, _) -> Some b);;
+
 let BRIDGE_SPLIT_TOP_CARRY_TAC : tactic =
   fun (asl,w) ->
-    let hyps = List.map (fun (_,th) -> concl th) asl in
-    let atoms = setify (List.concat (List.map BRIDGE_VAL_ATOMS hyps)) in
-    let maxabs x =
-      List.fold_left (fun a t ->
-        let k = BRIDGE_TERM_WEIGHT x t in if Num.le_num a k then k else a)
-        (Num.num_of_int 0) hyps in
-    let scored = List.map (fun x -> (x, maxabs x)) atoms in
-    (match BRIDGE_MAX_COEF scored with
-     | None -> ALL_TAC (asl,w)
-     | Some(msatom, _) ->
-        let carriers = List.concat (List.map (fun t ->
-          if List.exists (fun s -> aconv s msatom) (BRIDGE_VAL_ATOMS t)
-          then BRIDGE_BITVAL_COEF_PAIRS t else []) hyps) in
-        let carriers = List.filter
-          (fun (b,_) -> not (BRIDGE_DECIDED_BITVAL asl b)) carriers in
-        (match BRIDGE_MAX_COEF carriers with
-         | None -> ALL_TAC (asl,w)
-         | Some(b, _) ->
-             (ASM_CASES_TAC b THENL
-               [BRIDGE_DECIDE_BITVALS_TAC THEN BRIDGE_INT_REDUCE_TAC THEN ALL_TAC;
-                BRIDGE_DECIDE_BITVALS_TAC THEN BRIDGE_INT_REDUCE_TAC THEN ALL_TAC]) (asl,w)));;
+    match BRIDGE_TOP_CARRY asl with
+    | None -> ALL_TAC (asl,w)
+    | Some b ->
+        (ASM_CASES_TAC b THENL
+          [BRIDGE_DECIDE_BITVALS_TAC THEN BRIDGE_INT_REDUCE_TAC THEN ALL_TAC;
+           BRIDGE_DECIDE_BITVALS_TAC THEN BRIDGE_INT_REDUCE_TAC THEN ALL_TAC]) (asl,w);;
 
 (* The linear decision procedure sees `&(val w)' and `&(bitval b)' as atoms of
    unknown sign.  They are not: a `val' is in [0, 2^dimindex) and a `bitval' is
@@ -1233,6 +1256,126 @@ let BRIDGE_ATOM_BOUNDS_TAC : tactic =
     if facts = [] then ALL_TAC (asl,w)
     else (MP_TAC (end_itlist CONJ facts) THEN STRIP_TAC) (asl,w);;
 
+(* ------------------------------------------------------------------------- *)
+(* 6c. The carry-range certificate (IX.75, XVI.F2).                          *)
+(*                                                                           *)
+(* A limb-wise add of two words at radix `B = 2^k' has, at each limb,        *)
+(*                                                                           *)
+(*   c(i+1) = (a i + b i + c i) DIV B        s i = (a i + b i + c i) MOD B   *)
+(*                                                                           *)
+(* with all inputs < B and a 0/1 carry-in.  The lemmas below are parametric  *)
+(* in the radix and in the limb values (and, for the tactic's use, in the    *)
+(* flag): nothing names 64, 25519, a limb count or a curve.  They are the    *)
+(* range half of the certificate the reviewers asked for; they are what      *)
+(* makes the algebraic close linear instead of an unbounded case split.      *)
+(*                                                                           *)
+(* `CARRY_STEP_NUM' and `SUM_STEP_NUM' prove the local step from the machine's *)
+(* own DIV/MOD add semantics.  `BRIDGE_BITVAL_INT_RANGE' is the same 0/1 fact  *)
+(* at the point of use: every machine carry is `bitval' of a Boolean flag, so  *)
+(* its integer value is 0 or 1.  `INT_ARITH' is a *real*-linear procedure and  *)
+(* cannot see that `0 <= c <= 1' leaves c fractional; with the disjunction the *)
+(* prover splits and each branch is decided numerically.                     *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_BITVAL_INT_RANGE = prove
+ (`!b. &(bitval b) = &0 \/ &(bitval b) = &1`,
+  GEN_TAC THEN REWRITE_TAC[bitval] THEN COND_CASES_TAC THEN
+  REWRITE_TAC[] THEN ARITH_TAC);;
+
+let BRIDGE_CARRY_STEP_NUM = prove
+ (`!B a b c. 0 < B /\ a < B /\ b < B /\ c <= 1 ==> (a + b + c) DIV B <= 1`,
+  REPEAT STRIP_TAC THEN
+  ASM_SIMP_TAC[LE_LDIV_EQ; GSYM LT_NZ] THEN ASM_ARITH_TAC);;
+
+let BRIDGE_SUM_STEP_NUM = prove
+ (`!B a b c. 0 < B ==> (a + b + c) MOD B < B`,
+  REPEAT STRIP_TAC THEN REWRITE_TAC[MOD_LT_EQ_LT] THEN ASM_ARITH_TAC);;
+
+(* The aggregate carry identity.  From the limb equations alone -- and *not* *)
+(* from the surrounding bounds, which are what made `INT_ARITH' exhaust the   *)
+(* 12G cap -- the written digit sum and the top carry satisfy one equation:  *)
+(*                                                                           *)
+(*   M + N = W + B^n * c(n)                                                  *)
+(*                                                                           *)
+(* The tactic proves it with a small `INT_ARITH' over the equations and then  *)
+(* rewrites the goal with it, so the decision procedure never sees the 60+    *)
+(* inequalities.  `K = B * (weight of the top digit in W)' is read from the   *)
+(* goal; the per-instance numerals are not written down anywhere.            *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_INT_ADD = `(+):int->int->int`
+and BRIDGE_INT_MUL = `(*):int->int->int`
+and BRIDGE_INT_SUB = `(-):int->int->int`;;
+
+let bridge_int_numeral (n:Num.num) : term =
+  mk_comb(`int_of_num:num->int`, mk_numeral n);;
+
+let bridge_bitval_int (b:term) : term =
+  mk_comb(`int_of_num:num->int`, mk_comb(`bitval:bool->num`, b));;
+
+(* the output digit with the largest weight in the written value *)
+let BRIDGE_TOP_DIGIT rhs =
+  let scored = List.map (fun a -> (a, BRIDGE_TERM_WEIGHT a rhs))
+                       (BRIDGE_INT_ATOMS rhs) in
+  BRIDGE_MAX_COEF scored;;
+
+(* The aggregate hypothesis and the reduced constant equation, or `None' if the
+   goal does not have the shape `(M + N) - P = W'.  All identifications are
+   structural (weights and coefficients read from the terms). *)
+let BRIDGE_AGGREGATE asl w =
+  if not (is_eq w && type_of (lhand w) = `:int`) then None else
+  let (lhs,rhs) = dest_eq w in
+  try
+    let (mn,p) = dest_binop BRIDGE_INT_SUB lhs in
+    let (satom,kdig) = (match BRIDGE_TOP_DIGIT rhs with
+      | Some x -> x | None -> failwith "no digit") in
+    let carriers = List.concat (List.map (fun (_,th) ->
+      let t = concl th in
+      if List.exists (fun s -> aconv s satom) (BRIDGE_INT_ATOMS t)
+      then BRIDGE_BITVAL_COEF_PAIRS t else []) asl) in
+    let carriers = List.filter
+      (fun (b,_) -> not (BRIDGE_DECIDED_BITVAL asl b)) carriers in
+    let (cbool,kradix) = (match BRIDGE_MAX_COEF carriers with
+      | Some x -> x | None -> failwith "no carry") in
+    let k = Num.mult_num kradix kdig in
+    let cterm = bridge_bitval_int cbool
+    and kterm = bridge_int_numeral k in
+    let agg = mk_eq(mn, mk_binop BRIDGE_INT_ADD rhs
+                             (mk_binop BRIDGE_INT_MUL kterm cterm)) in
+    let kc = mk_eq(mk_binop BRIDGE_INT_MUL kterm cterm, p) in
+    Some(cbool, agg, w, kc)
+  with Failure _ -> None
+  | _ -> None;;
+
+(* apply a list of hypothesis theorems as antecedents *)
+let BRIDGE_PROVE_FROM hyps goal tac =
+  let imp = itlist (fun th b -> mk_imp(concl th, b)) hyps goal in
+  let th = prove(imp, tac) in
+  List.fold_left (fun acc h -> MP acc h) th hyps;;
+
+let BRIDGE_AGGREGATE_TAC : tactic =
+  fun (asl,w) ->
+    match BRIDGE_AGGREGATE asl w with
+    | None -> ALL_TAC (asl,w)
+    | Some(cbool, agg, goal, kc) ->
+        let eqs = List.filter
+          (fun (_,th) -> is_eq (concl th) && type_of (lhand (concl th)) = `:int`)
+          asl in
+        let agg_th =
+          BRIDGE_PROVE_FROM (map snd eqs) agg INT_ARITH_TAC in
+        let eqv =
+          MP (prove(mk_imp(agg, mk_eq(goal, kc)), INT_ARITH_TAC)) agg_th in
+        (REWRITE_TAC[eqv] THEN
+         DISJ_CASES_TAC (ISPEC cbool BRIDGE_BITVAL_INT_RANGE) THEN
+         ASM_REWRITE_TAC[] THEN
+         (fun g -> (let (asl,w) = g in
+                    bridge_slice_note "AGG_AFTER goal=%s" (string_of_term w);
+                    List.iteri (fun i (_,th) ->
+                      bridge_slice_note "AGG_HYP %d %s" (i+1)
+                        (string_of_term (concl th))) asl);
+                   ALL_TAC g) THEN
+         INT_ARITH_TAC) (asl,w);;
+
 (* report the residual goal and hypotheses when a stage does not finish.  It
    prints only under `--mode phase' (csat_mark_enabled), so a normal answer is
    silent; a failure is still a failure. *)
@@ -1256,9 +1399,7 @@ let BRIDGE_ALGEBRA_TAC : tactic =
      at "decide-bitvals" BRIDGE_DECIDE_BITVALS_TAC THEN
      at "bounds" BRIDGE_ATOM_BOUNDS_TAC THEN
      at "reduce" BRIDGE_INT_REDUCE_TAC THEN
-     at "split-top-carry" BRIDGE_SPLIT_TOP_CARRY_TAC THEN
-     at "discard" BRIDGE_DISCARD_IRRELEVANT_TAC THEN
-     at "arith" ASM_INT_ARITH_TAC) g;;
+     at "aggregate" BRIDGE_AGGREGATE_TAC) g;;
 
 (* the same route, with the residue closed algebraically and no SAT call *)
 let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =

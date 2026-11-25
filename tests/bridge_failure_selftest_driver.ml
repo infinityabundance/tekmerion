@@ -114,13 +114,13 @@ let () =
 let () =
   check "classify timeout flag"
     (bridge_failure_class ~timeout:true (Failure "x") =
-     `Resource ("timeout", "wall-clock budget"));
+     ("resource", "timeout", "wall-clock budget"));
   check "classify exit 124"
     (bridge_failure_class (Failure "CSAT: cadical did not report UNSAT, exit 124") =
-     `Resource ("timeout", "exit 124"));
+     ("resource", "timeout", "exit 124"));
   check "classify signal 137"
     (bridge_failure_class (Failure "CSAT: cadical did not report UNSAT, exit 137") =
-     `Resource ("signal", "exit 137"));
+     ("resource", "signal", "exit 137"));
   reset ();
   expect_raises "resource-signal"
     (function Failure _ -> true | _ -> false)
