@@ -1,8 +1,8 @@
 {
   "schema": "tekmerion-freeze-closure/1",
   "tag": "freeze-rust-closure-v6",
-  "repo_commit": "5c2430306854480ffe4c18f0ebbdbcd74835df7e",
-  "created_at": 1795617375,
+  "repo_commit": "7d8e5fa8223b4db09db29be35a3db28c8d488868",
+  "created_at": 1795617830,
   "source": [
     {"path": "Cargo.lock", "sha256": "bb23bec90e5ead40633fe4db645113c536c3048e6d1e9214e73d798ba1226637"},
     {"path": "Cargo.toml", "sha256": "3508653340f12801d900537f9e34e127aaf09c760f4498399883aeb2905cd010"},
