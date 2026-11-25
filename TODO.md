@@ -3300,3 +3300,113 @@ items come out of it, one of them a process defect that matters more than the ma
 - [ ] **XVII.E3. A certificate-producing bounder.** The oracle currently *proposes* facts proved by
   `INT_ARITH` from the definition's cone; for the generic mechanism the bound must come with a
   checkable certificate (the `XVI.F2` range certificate), not from a decision procedure's success.
+
+---
+
+# XVIII — Intake 2026-11-25 (after `5c24303`/`843060b`): seal, export, close
+
+Nothing omitted. `XVIII.E` supersedes `XVII.D`. The lead's instruction is explicit and is adopted:
+**seal the freeze now, as-is; log later integrity work as `v7` deltas.** Every integrity pass
+changes the producer and therefore re-opens the freeze it is meant to protect; that loop can run
+forever.
+
+## XVIII.0 — Standing corrections
+
+- [x] **XVIII.0.1.** Five of the six `XVII.A` defects are implemented with firing controls; the
+  sixth (**statement identity from canonical typed terms**, `XVII.A6`) is still open.
+- [x] **XVIII.0.2.** The mathematical frontier did not move in that pass. No new theorem, no new
+  family, no solver-free close. That is recorded, not glossed.
+- [x] **XVIII.0.3.** `semantics_sha256` is **not** a semantic identity: it hashes
+  `<arch>/proofs/base.ml`, not that file's transitive dependency closure. Changing an imported
+  instruction definition elsewhere leaves the digest unchanged. Treated as a `v7` delta.
+
+## XVIII.A — Integrity deltas for `v7` (do NOT block the seal)
+
+- [ ] **XVIII.A1. CI shim defect (blocking CI, not the seal).** `select_disassembler()` iterates
+  *names* but takes only the first `PATH` match per name, so a defective shim shadows a valid
+  binary later on `PATH`; `an_unusable_shim_earlier_on_path_is_skipped` fails. Enumerate **all**
+  matching executable paths (split `PATH`, test each candidate for executability), probe each, and
+  select the first that satisfies the capability test. Make the test independent of a second
+  disassembler being installed (use a shim plus the real tool, both synthesised if needed).
+- [ ] **XVIII.A2. Semantic identity must be the dependency closure.** Replace
+  `semantics_sha256 = sha256(base.ml)` with the digest of the transitive `needs`/`loads` closure
+  (a canonical sorted `path\0sha256` list), so a changed instruction definition changes the
+  identity. Report the closure size per architecture.
+- [ ] **XVIII.A3. Compute executable identity BEFORE the build, and re-verify after.** Today it is
+  calculated after the proof build, so an object replaced mid-run is recorded under the new bytes
+  while the proof was made against the old ones. Snapshot digests first, build, then re-check that
+  the artefacts are unchanged; refuse if they moved.
+- [ ] **XVIII.A4. The sealed task manifest must itself be bound to the freeze.** `sealed_ids` can
+  be replaced without touching the closure. Distinguish explicitly **freezing the producer** from
+  **freezing the experiment**: the sealed manifest (task ids, manifests, inputs) is part of the
+  experiment and must be closure-bound.
+- [ ] **XVIII.A5. Enforce execution flags, not just record them.** `mode`/`stamp`/`force` are
+  recorded and never compared with the live invocation. Bind and verify.
+- [ ] **XVIII.A6. Probe the complete decoded instruction, not a mnemonic.** The capability test
+  accepts any line containing `add`; require the exact expected decode (operands included).
+- [ ] **XVIII.A7. A validated `Digest` type.** Digest fields are `String` throughout; introduce
+  `Digest` (fixed length, hex, lowercase) with `FromStr`, so a malformed digest cannot enter a
+  comparison or a manifest.
+- [ ] **XVIII.A8.** After A1–A7, cut `v7` as a delta against `v6` — not as a precondition for any
+  claim made under `v6`.
+
+## XVIII.B — Kernel step 1: export the proof objects
+
+The differential corpus every later kernel step is judged against, and the outstanding `XII.F2`
+deliverable.
+
+- [ ] **XVIII.B1.** Export proof objects for the **27 generated** proofs and the **27 matching
+  human** proofs from HOL Light, per theorem, with: statement, derivation object, the guest theory
+  and rule set used, and the axiom set. `ProofTrace/` and `Proofrecording/` were both rejected
+  earlier for full-context dumps (41 GB / 8 GB). The export must be **per theorem**, streamed, and
+  it must state its byte cost per theorem before running.
+- [ ] **XVIII.B2.** State what the representation is (HOL Light's kernel-level steps; the same
+  scheme HOLTrace uses), why it is checkable outside the OCaml process, and what it cannot capture.
+- [ ] **XVIII.B3.** Publish a manifest: `theorem → (statement digest, derivation digest, size,
+  export time)` for both sides. This is the corpus.
+- [ ] **XVIII.B4.** Firing controls: a truncated object refuses; a spliced object (steps from
+  another theorem) refuses; an object whose conclusion differs from the recorded statement refuses.
+- [ ] **XVIII.B5.** This is the `F2.1/F2.3` deliverable: the derivation is exported, not just the
+  verdict.
+
+## XVIII.C — The arithmetic close, finished
+
+`IX.78` built the oracle; it is sound, per-theorem, emits the right fact and performs **0 SAT
+closes**. It fails at one identified step.
+
+- [ ] **XVIII.C1.** Emit **both** aggregates: the raw chain `M + N = W_raw + 2^256·c8` projected
+  onto the goal's atoms, in the `GEN_DECARRY_RULE` style, so the residual is linear without the
+  `2^256` coefficients that fired the 12 GB cap. Then close `arm.bignum_add_p25519` with 0 SAT
+  closes.
+- [ ] **XVIII.C2.** Measure against all three baselines: 111,501,987 (sliced SAT),
+  119,194,788 (full), 1,848,494 (human body). Report the number even if it disappoints.
+- [ ] **XVIII.C3.** If it closes: the same representation must then be consumable by the native
+  checker (`XVII.B3`), so the HOL route and the native route agree on one object.
+- [ ] **XVIII.C4.** If it does not close: the residual verbatim plus a diagnosis naming the missing
+  mechanism. No number may be cited from a failed route (IX.70's 2.62M remains a non-cost).
+- [ ] **XVIII.C5. Representation discipline** (from IX.78's own data): the same 59-hypothesis
+  system closes in **0.205 s flat** and exhausted 12 GB nested. Any future attempt must normalise
+  flat before calling `INT_ARITH`, and say so.
+
+## XVIII.D — Two tracks, run concurrently
+
+The review's structural point, adopted as policy:
+
+- **Assurance track**: CI, exact identities, freeze enforcement, evaluation integrity. Protects the
+  validity of claims.
+- **Mathematical track**: carry conservation, native calculus, `G1`, Montgomery, coverage. Creates
+  capability.
+- Rules: the mathematical track does **not** wait for the assurance track; its exploratory results
+  are labelled **PROVISIONAL** until the assurance track can witness them at identity-bound grade.
+  A provisional result may be reported but never cited as a frontier claim.
+- Each day should produce at least one number from the mathematical track. An integrity pass alone
+  is not a day's progress.
+
+## XVIII.E — Order of execution
+
+1. **Seal `v6`** — as-is, annotated, unsigned, with a decision record. Later fixes are `v7` deltas.
+2. **`XVIII.B`** — proof-object export for the 27 + 27. This is the kernel's first real artefact.
+3. **`XVIII.C`** — the arithmetic close, measured.
+4. **`XVIII.A1`** — CI green (the shim defect), because it gates every merge.
+5. Then `XVIII.A2`–`A7` as `v7` work, interleaved with `XVII.B2` (framework core) and `XVII.C1`
+   (assembly as hardware, after its prior-art sweep).
