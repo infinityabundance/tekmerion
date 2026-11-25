@@ -1365,10 +1365,18 @@ let bridge_lf_neg f = bridge_lf_scale (Num.minus_num num_1) f;;
 
 let bridge_lf_vars (xs,_) = List.map fst xs;;
 
-(* a numeral coefficient: `&k' is `int_of_num (&k)' *)
-let bridge_lf_num t =
+(* a numeral coefficient: `&k' is `int_of_num (&k)', and `-- &k' (the form  *)
+(* `bridge_lf_term' emits for a negative coefficient) is its negation.  The   *)
+(* negated-literal case is needed for the aggregate to be re-linearisable: the *)
+(* canonical flat form spells `-3 * x' as `-- &3 * x', and a parser that only *)
+(* knows `&k' would report the aggregate as non-linear.                    *)
+let rec bridge_lf_num t =
   match t with
   | Comb(Const("int_of_num",_), n) when is_numeral n -> Some(dest_numeral n)
+  | Comb(Const("int_neg",_), u) ->
+      (match bridge_lf_num u with
+       | Some k -> Some(Num.minus_num k)
+       | None -> None)
   | _ -> None;;
 
 let rec bridge_lf_of_term tm =
@@ -1830,6 +1838,317 @@ let bridge_oracle_facts defs ineqs =
   List.rev !out;;
 
 (* ------------------------------------------------------------------------- *)
+(* 6c.3c Aggregate, don't eliminate (XIX.C1).                                 *)
+(*                                                                           *)
+(* IX.78 measured the exact defect: eliminating every internal carry by      *)
+(* Gauss-Jordan destroys the chain aggregate because the top carry becomes a *)
+(* pivot with a `B^n' coefficient (`c8'-type definitions carrying            *)
+(* `2^256 * &(bitval carry_s8)'), and `INT_ARITH' then either omits the raw  *)
+(* relation `M + N = W + B^n * c_n' or blows up.  The human proof never       *)
+(* eliminates: `GEN_DECARRY_RULE'/`DECARRY_RULE' sum the per-limb equations  *)
+(* with the digit weights, and the internal carries cancel by construction.   *)
+(*                                                                           *)
+(* That is done here, exactly, with integer weights.  Nothing is solved for:  *)
+(* the weights ARE the digit positions, and they are recovered from the       *)
+(* theorem's own equations, not from a per-curve template:                    *)
+(*                                                                           *)
+(*   - a *limb equation* is an integer equation carrying at least one         *)
+(*     `&(bitval c)' atom and at least one atom that is not a carry;          *)
+(*   - two limb equations are *linked* when they share a carry atom; the link  *)
+(*     points from the equation where that atom has coefficient magnitude     *)
+(*     `B > 1' (the outgoing carry of a limb) to the equation where it has    *)
+(*     magnitude `1' (the incoming carry of the next limb);                   *)
+(*   - a chain is a connected component that is a directed path, rooted at    *)
+(*     its in-degree-zero equation; its weight list is `1, B, B^2, ...';      *)
+(*   - the aggregate is the weighted sum of the equations, so the internal     *)
+(*     carries cancel and only the raw sum, the written sum and the top carry *)
+(*     survive.                                                               *)
+(*                                                                           *)
+(* `B', the number of limbs and the weights therefore come from the term      *)
+(* structure of this theorem's hypotheses.  If the structure is not a set of  *)
+(* disjoint `(outgoing B, incoming 1)' paths, no aggregate is emitted and the *)
+(* close behaves exactly as it did in IX.78 -- no regression.                 *)
+(*                                                                           *)
+(* The combination is built as a *proof*: each premise is flattened, scaled    *)
+(* by `AP_TERM (( * ) w)', and the equations are added by `MK_COMB'.  The sum  *)
+(* is then normalised to the canonical flat form by `INT_RING', which is a    *)
+(* ring identity, not a search.  The integer weights are the certificate      *)
+(* XIX.D1 asks for, and are printed in phase mode.                            *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_eq_scale th k =
+  if Num.eq_num k num_1 then th
+  else AP_TERM (mk_comb(bridge_int_mul_tm, bridge_int_lit k)) th;;
+
+let bridge_eq_add th1 th2 =
+  MK_COMB(AP_TERM bridge_int_add_tm th1, th2);;
+
+(* carry atoms with a non-zero coefficient *)
+let bridge_carry_coeffs form =
+  List.filter (fun (t,k) -> bridge_is_bitval_atom t && not (Num.eq_num k num_0))
+    (fst form);;
+
+let bridge_limb_equation form =
+  let (xs,_) = form in
+  bridge_carry_coeffs form <> [] &&
+  List.exists (fun (t,_) -> not (bridge_is_bitval_atom t)) xs;;
+
+(* one edge per carry atom shared by exactly two limb equations, from the
+   larger coefficient magnitude to the smaller; any ambiguous sharing makes
+   the whole structure unusable (`false') rather than guessed at. *)
+let bridge_chain_edges forms =
+  let n = Array.length forms in
+  let occs = ref [] in
+  for i = 0 to n - 1 do
+    List.iter (fun (t,_) -> occs := (t,i) :: !occs) (bridge_carry_coeffs forms.(i))
+  done;
+  let edges = ref [] and clean = ref true in
+  List.iter (fun (t,_) ->
+      let occ = List.filter (fun (u,_) -> aconv u t) !occs in
+      match occ with
+      | [_] -> ()   (* an end-of-chain carry (top outgoing, or carry-in): no link *)
+      | [(_,i); (_,j)] when i <> j ->
+          (let ki = bridge_lf_coeff_in t forms.(i)
+           and kj = bridge_lf_coeff_in t forms.(j) in
+           let ai = Num.abs_num ki and aj = Num.abs_num kj in
+           (* the signs must be opposite: that is what cancels *)
+           if Num.lt_num num_0 (Num.mult_num ki kj) then clean := false
+           else if Num.eq_num ai aj then clean := false
+           else if Num.lt_num ai aj then
+             edges := (j,i) :: !edges
+           else edges := (i,j) :: !edges)
+      | _ ->
+          bridge_slice_note "AGGREGATE link %s occ=%d"
+            (string_of_term t) (List.length occ);
+          clean := false) !occs;
+  let uniq = List.fold_left (fun a e -> if List.mem e a then a else e :: a) [] !edges in
+  (List.rev uniq, !clean);;
+
+(* the ordered path through one component, or `None' *)
+let bridge_chain_path comp edges =
+  let out_deg i = List.length (List.filter (fun (a,_) -> a = i) edges)
+  and in_deg i = List.length (List.filter (fun (_,b) -> b = i) edges) in
+  let roots = List.filter (fun i -> in_deg i = 0) comp in
+  match roots with
+  | [r] ->
+      if List.exists (fun i -> out_deg i > 1 || in_deg i > 1) comp then None
+      else if List.length edges <> List.length comp - 1 then None
+      else
+        (let rec go acc i =
+           if out_deg i = 0 then List.rev (i :: acc)
+           else
+             (match List.find_opt (fun (a,_) -> a = i) edges with
+              | Some (_,j) -> go (i :: acc) j
+              | None -> List.rev (i :: acc)) in
+         Some (go [] r))
+  | _ -> None;;
+
+(* the shared carry atom of two linked equations and the limb base, or None *)
+let bridge_chain_link form1 form2 =
+  let shared = List.find_opt (fun (t,_) ->
+      bridge_is_bitval_atom t &&
+      not (Num.eq_num (bridge_lf_coeff_in t form2) num_0))
+    (bridge_carry_coeffs form1) in
+  match shared with
+  | None -> None
+  | Some (t,_) ->
+      let k1 = bridge_lf_coeff_in t form1 and k2 = bridge_lf_coeff_in t form2 in
+      let a1 = Num.abs_num k1 and a2 = Num.abs_num k2 in
+      if Num.le_num a1 num_1 || not (Num.eq_num a2 num_1) then None
+      else Some (a1);;
+
+(* weights `1, B, B^2, ...' for a path, or `None' if the base is not a single
+   value shared by every link *)
+let bridge_chain_weights forms path =
+  let rec go acc prev = function
+    | [] -> Some (List.rev acc)
+    | i::rest ->
+        (match prev with
+         | None -> go ((i, num_1) :: acc) (Some i) rest
+         | Some p ->
+             (match bridge_chain_link forms.(p) forms.(i) with
+              | None -> None
+              | Some b ->
+                  let w = Num.mult_num b (List.assoc p acc) in
+                  go ((i, w) :: acc) (Some i) rest)) in
+  go [] None path;;
+
+(* proof of the weighted sum, normalised to the flat canonical form *)
+let bridge_chain_aggregate chain =
+  let scaled = List.map (fun (n,w) -> (w, bridge_flat_th n)) chain in
+  match scaled with
+  | [] -> None
+  | (w0,th0)::rest ->
+      (try
+         let folded =
+           List.fold_left (fun acc (w,th) ->
+               bridge_eq_add acc (bridge_eq_scale th w))
+             (bridge_eq_scale th0 w0) rest in
+         let comb = List.fold_left (fun acc (w,th) ->
+             match bridge_lf_row_of_thm th with
+             | Some f -> bridge_lf_add acc (bridge_lf_scale w f)
+             | None -> failwith "premise is not linear") ([], num_0) scaled in
+         let target = bridge_lf_eq comb in
+         let l' = lhand target and r' = rand target in
+         let l = lhand (concl folded) and r = rand (concl folded) in
+         (* folded is `l = r'.  The canonical form is obtained by *difference*:
+            `INT_RING' proves `l - r = l' - r'' (a polynomial identity), and
+            `l - r = 0', `l' - r' = 0' is the same equation.  No search. *)
+         let sub = `(-):int->int->int` in
+         let th_ring =
+           prove(mk_eq(mk_binop sub l r, mk_binop sub l' r'),
+                 CONV_TAC INT_RING) in
+         let sub_refl =
+           prove(mk_eq(mk_binop sub r r, bridge_int_lit num_0),
+                 REWRITE_TAC[INT_SUB_REFL]) in
+         let th_lr =
+           TRANS (AP_THM (AP_TERM sub folded) r) sub_refl in
+         let th_ld = TRANS (SYM th_ring) th_lr in
+         let th_res =
+           EQ_MP (ISPECL [l'; r'; bridge_int_lit num_0] INT_EQ_SUB_RADD) th_ld in
+         Some (REWRITE_RULE[INT_ADD_LID] th_res)
+       with e ->
+         bridge_slice_note "AGGREGATE dropped: %s" (Printexc.to_string e);
+         None);;
+
+(* every aggregate this theorem's equations support.  Each result is the
+   proved equation; the weights and premise count are printed with it. *)
+let bridge_aggregates eqs =
+  let limbs = List.filter (fun (_,f) -> bridge_limb_equation f) eqs in
+  let arr = Array.of_list limbs in
+  let forms = Array.map snd arr in
+  let n = Array.length arr in
+  if n < 2 then [] else
+  let (edges, clean) = bridge_chain_edges forms in
+  if not clean then begin
+    bridge_slice_note "AGGREGATE none: carry links are not disjoint paths";
+    []
+  end else
+  let parent = Array.init n (fun i -> i) in
+  let rec root i =
+    if parent.(i) = i then i
+    else (let r = root parent.(i) in parent.(i) <- r; r) in
+  List.iter (fun (i,j) ->
+      let ri = root i and rj = root j in
+      if ri <> rj then parent.(ri) <- rj) edges;
+  let nodes = List.init n (fun i -> i) in
+  let rec group acc = function
+    | [] -> List.rev acc
+    | x::xs ->
+        let r = root x in
+        let same, rest = List.partition (fun y -> root y = r) xs in
+        group ((x :: same) :: acc) rest in
+  let comps = group [] nodes in
+  List.filter_map (fun comp ->
+      let cedges = List.filter (fun (i,j) -> List.mem i comp && List.mem j comp) edges in
+      match bridge_chain_path comp cedges with
+      | None -> None
+      | Some path ->
+          (match bridge_chain_weights forms path with
+           | None -> None
+           | Some wpath ->
+               (match bridge_chain_aggregate
+                        (List.map (fun (i,w) -> (fst arr.(i), w)) wpath) with
+                | None -> None
+                | Some th ->
+                    let b = if List.length wpath > 1
+                            then List.assoc (List.nth path 1) wpath else num_0 in
+                    bridge_slice_note
+                      "AGGREGATE limbs=%d base=%s weights=[%s] premises=%d conclusion=%s"
+                      (List.length path) (Num.string_of_num b)
+                      (String.concat ","
+                         (List.map (fun (_,w) -> Num.string_of_num w) wpath))
+                      (List.length wpath) (string_of_term (concl th));
+                    Some th))) comps;;
+
+(* the top carry of a chain is decided by its aggregate, not by eliminating   *)
+(* the chain: the aggregate is `M + N = W + B^n * c', `INT_ARITH' encodes     *)
+(* integer discreteness through `INT_NOT_EQ', so `c = 0' follows from         *)
+(* `M + N < B^n', `W >= 0' and `0 <= c <= 1'.  The fact is *proved*, and the  *)
+(* premises are the aggregate and the same integer hypotheses as before.     *)
+let bridge_aggregate_facts aggregates all_hyps =
+  (* a top-level disjunction cannot be an antecedent of a linear-arithmetic
+     goal (the prover would have to case-split); the branch splitter has
+     already produced the conjunctive branches, so one is dropped here.  The
+     per-limb equations are dropped too: the aggregate already states their
+     sum, and keeping both multiplies the prover's elimination steps. *)
+  let is_int_eq th =
+    match concl th with
+    | Comb(Comb(Const("=",_),a),b) -> type_of a = `:int`
+    | _ -> false in
+  let conjunctive th =
+    match concl th with
+    | Comb(Comb(Const("\\/",_),_),_) -> false
+    | _ -> true in
+  let side_hyps =
+    List.filter (fun th -> conjunctive th && not (is_int_eq th)) all_hyps in
+  (* `&(bitval b)' is a natural number, so `< &1' is `= &0'.  The `bitval'
+     case split is what supplies the two possible values; the strict bound
+     itself is proved by linear arithmetic from the aggregate. *)
+  let lt_tm = `int_lt` in
+  let carriers =
+    List.fold_left (fun acc th ->
+        match bridge_lf_row_of_thm th with
+        | Some f ->
+            List.fold_left (fun a t ->
+                if bridge_is_bitval_atom t &&
+                   not (List.exists (fun (u,_) -> aconv u t) a)
+                then a @ [(t, th)] else a) acc (bridge_lf_vars f)
+        | None -> acc) [] aggregates in
+  bridge_slice_note "ORACLE aggregate-carriers=%d [%s]"
+    (List.length carriers)
+    (String.concat "," (List.map (fun (v,_) -> string_of_term v) carriers));
+  let prove_zero_lt (v, agg) =
+    let premises = agg :: side_hyps in
+    let band () =
+      let th = prove(bridge_mk_imps premises
+                       (mk_binop lt_tm v (bridge_int_lit num_1)),
+                     INT_ARITH_TAC) in
+      List.fold_left (fun acc h -> MP acc h) th premises in
+    let finish th =
+      let b = rand (rand v) in
+      let th2 = prove(mk_imp (concl th, mk_eq(v, bridge_int_lit num_0)),
+                      ASM_CASES_TAC b THEN
+                      ASM_REWRITE_TAC[BITVAL_CLAUSES] THEN
+                      CONV_TAC INT_REDUCE_CONV) in
+      Some(MP th2 th) in
+    try finish (band ())
+    with e ->
+      bridge_slice_note "ORACLE agg-band %s failed: %s"
+        (string_of_term v) (Printexc.to_string e);
+      None in
+  let prove_fact (v, agg) k =
+    let premises = agg :: side_hyps in
+    try
+      let th = prove(bridge_mk_imps premises (mk_eq(v, bridge_int_lit k)),
+                     INT_ARITH_TAC) in
+      Some(List.fold_left (fun acc h -> MP acc h) th premises)
+    with _ -> None in
+  List.filter_map (fun carrier ->
+      let v = fst carrier in
+      match prove_zero_lt carrier with
+      | Some th ->
+          bridge_slice_note "ORACLE fact %s = 0 why=aggregate-band"
+            (string_of_term v);
+          Some th
+      | None ->
+          (match prove_fact carrier num_0 with
+           | Some th ->
+               bridge_slice_note "ORACLE fact %s = 0 why=aggregate"
+                 (string_of_term v);
+               Some th
+           | None ->
+               (match prove_fact carrier num_1 with
+                | Some th ->
+                    bridge_slice_note "ORACLE fact %s = 1 why=aggregate"
+                      (string_of_term v);
+                    Some th
+                | None ->
+                    bridge_slice_note "ORACLE undetermined %s why=aggregate"
+                      (string_of_term v);
+                    None))) carriers;;
+
+(* ------------------------------------------------------------------------- *)
 (* 6c.4 The close.                                                            *)
 (* ------------------------------------------------------------------------- *)
 
@@ -1889,48 +2208,41 @@ let BRIDGE_ORACLE_TAC : tactic =
             (string_of_term v) (string_of_term (bridge_lf_eq form))) defs;
       let ineqs = bridge_lf_ineqs asl in
       let facts = bridge_oracle_facts defs ineqs in
-      bridge_slice_note "ORACLE system defs=%d residual=%d facts=%d"
-        (List.length defs) (List.length resids) (List.length facts);
-      let def_ths = List.map (fun (v,sup,form) ->
-          (v, bridge_prove_from sup (bridge_lf_eq form))) defs in
-      let res_ths = List.map (fun (_,sup,form) ->
-          bridge_prove_from sup (bridge_lf_eq form)) resids in
+      (* XIX.C1: build the chain aggregates from the per-limb equations, by the
+         same weighted sum the human proof performs.  This is *not* a larger
+         `INT_ARITH' call; it is a constructed theorem, and its weights are the
+         certificate. *)
+      let aggregates = bridge_aggregates eqs in
+      (* the aggregate decides the top carry; the fact is proved from these *)
+      let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in
+      let agg_facts = bridge_aggregate_facts aggregates all_hyps in
+      let facts = facts @ agg_facts in
+      bridge_slice_note "ORACLE system defs=%d residual=%d facts=%d aggregates=%d"
+        (List.length defs) (List.length resids) (List.length facts)
+        (List.length aggregates);
       let facts' = facts in
-      (* The close set: the aggregate rows (the carry-conservation relations),
-         the emitted facts, and the *relational* hypotheses.  The carry
-         definitions and the one-sided bounds are deliberately excluded: the
-         definitions carry the accumulated B^n coefficients that drive
-         INT_ARITH's equality elimination into rational coefficient blow-up
-         (measured: 12 G cap firing), and the bounds are subsumed by the
-         aggregate rows for the branches that are decided.  This set is small
-         enough that a failure is a clean `linear_ineqs: no contradiction'. *)
-      let is_carry_bound th =
-        match bridge_lf_of_concl (concl th) with
-        | Some (x,y) ->
-            let atoms = bridge_lf_vars x @ bridge_lf_vars y in
-            atoms <> [] && List.for_all bridge_is_bitval_atom atoms
-        | None -> false in
+      (* The close set (XIX.C1/C2): the two *constructed chain aggregates* — the
+         raw one is `M + N = W + B^n * c_n', the corrected one is
+         `W_cor = W + (B^n - p)' — the emitted fact, and the *bounds* (each
+         `&(val w)' in [0, 2^dimindex), each `&(bitval b)' in [0,1]) together
+         with the relational hypotheses.  The bounds are not decoration: the
+         corrected aggregate plus `W_cor < B^n' is what turns `p <= M+N' into a
+         contradiction.  The Gauss-Jordan carry definitions and the residual
+         are still excluded — they carry accumulated `B^n' coefficients and are
+         what drove IX.78's equality elimination into coefficient blow-up.
+         Every antecedent is already in flat canonical form (the IX.78 probe:
+         59 flat hypotheses close in 0.205 s, the nested form exhausted 12 GB). *)
       let is_int_eq th =
         match concl th with
         | Comb(Comb(Const("=",_),a),b) -> type_of a = `:int`
         | _ -> false in
-      let hyps_used =
-        List.filter (fun (_,th) ->
-            not (is_int_eq th) && not (is_carry_bound th) &&
-            not (bridge_is_direct_bound th))
-          (bridge_int_hyps asl) in
-      let ants = res_ths @ facts' @
-                 List.map (fun (_,th) -> bridge_flat_th th) hyps_used in
-      (* small-coefficient carry definitions are cheap and carry the corrected
-         chain's relation; the B^n-coefficient ones are what blow up, so they
-         are the ones left out *)
-      let is_small_def (v,_,form) =
-        Num.le_num (Num.abs_num (bridge_lf_coeff_in v form)) num_1 in
-      let small_defs = List.filter_map (fun (v,th) ->
-          match List.find_opt (fun (w,_,_) -> aconv w v) defs with
-          | Some d when is_small_def d -> Some th
-          | _ -> None) def_ths in
-      let ants = small_defs @ ants in
+      let is_disj th =
+        match concl th with
+        | Comb(Comb(Const("\\/",_),_),_) -> true
+        | _ -> false in
+      let side_hyps =
+        List.filter (fun th -> not (is_int_eq th) && not (is_disj th)) all_hyps in
+      let ants = aggregates @ facts' @ side_hyps in
       let w_eq = bridge_flat_conv w in
       let w' = rand (concl w_eq) in
       bridge_slice_note "ORACLE close ants=%d size=%d"

@@ -3493,26 +3493,37 @@ Two failures plus a testing weakness:
 The diagnosis from IX.78: Gauss–Jordan destroys `M + N = W_raw + 2^256·c8` because `carry_s8`
 becomes a pivot with a `2^256` coefficient.
 
-- [ ] **XIX.C1. Don't eliminate, aggregate.** Construct the telescoped sum of the per-limb carry
+- [x] **XIX.C1. Don't eliminate, aggregate.** Construct the telescoped sum of the per-limb carry
   equations **directly**, each weighted by `2^(64i)`. The weights are the digit positions and are
-  known in advance, so nothing needs solving for. This is the `DESUM_RULE`/`DECARRY_RULE` idiom the
-  human proofs use (`BIGNUM_ADD_P256_CORRECT`), and `GEN_DECARRY_RULE`-style projection for the
-  corrected chain.
-- [ ] **XIX.C2.** Emit **both** aggregates (raw and corrected) plus the carry-range fact, so the
-  residual is linear without large coefficients.
-- [ ] **XIX.C3.** Close `arm.bignum_add_p25519` with **0 SAT closes**; measure against
-  **1,848,494** (human), 111,501,987 (sliced SAT), 119,194,788 (full).
-- [ ] **XIX.C4.** If it closes, extend to `sub`, `neg` and the x86 versions to test generality.
-  If it does not, the residual verbatim plus the missing mechanism. No number from a failed route.
-- [ ] **XIX.C5.** If it closes near human cost, the 60× problem for the linear families is solved
-  **without** the new kernel — which sharpens the kernel's purpose to trust, multiple foundations
-  and the Montgomery families. Say so explicitly if that is the outcome.
+  known in advance, so nothing needs solving for. **Done (IX.82):** `bridge_aggregates` reads the
+  chain off the proof (limb equations, shared carry atoms, outgoing `B` / incoming `1`), derives
+  `B` and the weight list `1, B, B², B³`, and builds the sum as a proof (`AP_TERM`/`MK_COMB` +
+  `INT_RING`). Raw and corrected chains both found: `weights=[1, 2^64, 2^128, 2^192]`.
+- [x] **XIX.C2. Emit both aggregates and the fact.** The close set is the two aggregates, the
+  derived fact `&(bitval carry_s8) = &0` (`why=aggregate-band`: a strict linear bound plus a
+  `bitval` case split), and the theorem's own non-equational bounds; the Gauss–Jordan definitions
+  and the residual are excluded. The corrected aggregate plus `W_cor < B^4` and `p <= M+N` is what
+  refutes the select branch.
+- [x] **XIX.C3. Close with 0 SAT closes.** `arm.bignum_add_p25519` closes in **5,233,638**
+  primitive inferences, 28.0 s, 12 oracle branches, **0** SAT closes, against 1,848,494 (human),
+  111,501,987 (sliced SAT), 119,194,788 (full). C1 is a real `equals_thm` (`true`, both
+  conclusions alpha-equivalent, both with zero hypotheses). Receipt: `ix82-aggregate.md`.
+- [ ] **XIX.C4.** Extend to `sub`, `neg` and the x86 versions. **Not attempted:** there is no
+  algebraic entry point for them (only `BRIDGE_ADD_REF_ALG_TAC` exists). The chain reader is
+  generic; the per-route adaptation is open.
+- [x] **XIX.C5. Say it plainly.** For `arm/add_p25519` the 60.35× sliced-SAT gap is now **2.83×**
+  over the human body **without the new kernel**. The remaining factor is the 12-branch case split
+  and the normalisation before each close, not SAT. The kernel's purpose narrows to trust,
+  multiple foundations and the Montgomery families.
 
 ## XIX.D — P1: the elimination engine must produce certificates, not traces
 
-- [ ] **XIX.D1.** Retain the exact coefficients of the linear combination, not just the supporting
-  theorem list: `LinearCombinationCertificate { premises, coefficients: BigInt[], conclusion }`. The
-  checker then verifies an exact polynomial identity and needs no arithmetic search.
+- [x] **XIX.D1.** Retain the exact coefficients of the linear combination, not just the supporting
+  theorem list. **Partly done (IX.82):** the aggregate is built with its integer weights and
+  premises, and both are printed (`AGGREGATE … weights=[…] premises=4 conclusion=…`) and recorded
+  in `ix82-aggregate.json`; the proof itself is the certificate. Still open: a serialised
+  `LinearCombinationCertificate { premises, coefficients: BigInt[], conclusion }` consumed by a
+  checker that verifies the polynomial identity.
 - [ ] **XIX.D2.** Extend to inequality certificates with nonnegative multipliers, then justified
   integer cuts and carry integrality — the direct bridge to the native `LIA` module.
 - [ ] **XIX.D3.** Make **canonical sparse arithmetic forms** a first-class representation (the

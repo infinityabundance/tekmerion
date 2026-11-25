@@ -1,8 +1,8 @@
 {
   "schema": "tekmerion-freeze-closure/1",
   "tag": "freeze-rust-closure-v7",
-  "repo_commit": "2114402976fa30f9c6b67d21abf98c8a37ce683b",
-  "created_at": 1795636152,
+  "repo_commit": "a823a0af7166c207782d94f35cb18000f6f14339",
+  "created_at": 1795643587,
   "source": [
     {"path": "Cargo.lock", "sha256": "bb23bec90e5ead40633fe4db645113c536c3048e6d1e9214e73d798ba1226637"},
     {"path": "Cargo.toml", "sha256": "3508653340f12801d900537f9e34e127aaf09c760f4498399883aeb2905cd010"},
@@ -66,7 +66,7 @@
     {"path": "src/tools/sha256.rs", "sha256": "b6acf5146b1b8b02ef504219cce549dfe04f083b709389064f8e426406d95bd0"},
     {"path": "src/tools/trace_conformance.rs", "sha256": "1d029358def2fcf2c22698b8f5f8508feb03f966e0503f1c466fcfccc322ccec"},
     {"path": "src/wire.rs", "sha256": "039c593854e90da2f657f5bd0455e1f033833eeeb94a2535eaf71f508e265857"},
-    {"path": "tools/bridge.ml", "sha256": "c4b52cc7b4d6b5fa5901f0a6a00c6590914500bcbc063671f80dea5d74767066"},
+    {"path": "tools/bridge.ml", "sha256": "65ced317f254a0122117e3800b07a331e03ed98d3efb1e0f4aa12bbceff9b6ca"},
     {"path": "tools/cap.sh", "sha256": "56a532be1101fea43006ba580e4f6a95cba4966ec80c7d1041754c0ed8b6cdda"},
     {"path": "tools/csat_bridge.ml", "sha256": "8c1dc799f508d3e4f2df5e0b549ec2cd9f36bbda6e85f723464596ee31e2e726"},
     {"path": "tools/csat_hol.ml", "sha256": "8be2fff7c1849f8666a0a676aeb82b31fdc1a4251f8f834a7178fe348347ca33"},
@@ -78,7 +78,7 @@
     {"path": "tools/selftest.sh", "sha256": "9d96617723fe797e9a212965bb7528c4849cfcf4dfe5dea6f0a360c077b922e7"},
     {"path": "tools/w1_hol_capture.ml", "sha256": "f577754b03f707e370b24f7dc4fc856830adfd4ace7a94a5306499ad6c09bde6"}
   ],
-  "source_digest": "65e5eeead92da59e8623276397bea47f2c9901db930a73c14ea2ae9fdbadf78c",
+  "source_digest": "9b907ddcb1e2e010ba75386a12b1fca55bd21a46c38814bab9a8288b4c64d5a9",
   "configuration": {"env": {"TEKMERION_ALG_CLOSE": "unset", "TEKMERION_FAULT": "unset", "TEKMERION_PROBLEMS": "unset", "TEKMERION_RECORD_ANSWERS": "unset", "TEKMERION_SLICE_CONTROL": "unset", "TEKMERION_SLICE_DEBUG": "unset"}, "flags": {"mode": "unspecified", "stamp": "unspecified", "force": "unspecified", "slice": "off"}},
   "runtime": null
 }

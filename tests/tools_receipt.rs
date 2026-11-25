@@ -26,8 +26,10 @@ use tekmerion::tools::{curve_check, dropin};
 /// Boundaries so far: `ca300bd2…` (recorded with the Python-era goldens),
 /// `0a135381…` (after IX.69 slicing and IX.70's opt-in algebraic route),
 /// `deafeb4d…` (after XVI.D's failure taxonomy), `ace0b868…` (after XVII.A5's
-/// mathematical-failure allow-list).
-const BRIDGE_DIGEST: &str = "c4b52cc7b4d6b5fa5901f0a6a00c6590914500bcbc063671f80dea5d74767066";
+/// mathematical-failure allow-list), `c4b52cc7…` (after XIX.A's interval-sum
+/// fix), `65ced317…` (after XIX.C1's weighted-sum aggregate: the chain/weight
+/// builder, the negated-literal linear parser, and the aggregate-band fact).
+const BRIDGE_DIGEST: &str = "65ced317f254a0122117e3800b07a331e03ed98d3efb1e0f4aa12bbceff9b6ca";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -124,8 +126,9 @@ fn curve_check_reproduces_the_recorded_report() {
     // commit, the quotation `` `(*):int->int->int` `` which the scanner read as
     // a block-comment opener; it then deleted the rest of the file and the
     // count was silently pinned to 33.  XIX.B4 fixes the scanner (quotations
-    // and strings are opaque), so the honest count is 81 again.
-    assert_eq!(statements, 81);
+    // and strings are opaque), so the honest count is 81 again.  XIX.C1's
+    // aggregate block adds five `prove` calls: 81 -> 86, hits still 0.
+    assert_eq!(statements, 86);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -162,11 +165,12 @@ fn instrument_reproduces_the_recorded_output() {
     // bridge_slice_retry) -> 160 (XVII.A5 adds bridge_failure_has_prefix,
     // bridge_failure_contains and bridge_math_failure_shape, the allow-list)
     // -> 217 (IX.78 adds the oracle close) -> 221 (XIX.A adds the four sum
-    // bound helpers).
-    assert_eq!(phrases, 221);
+    // bound helpers) -> 232 (XIX.C1 adds the aggregate builder, its chain and
+    // weight helpers, the linear-combination proof and the aggregate-band fact).
+    assert_eq!(phrases, 232);
     assert_eq!(
         sha256(out.as_bytes()),
-        "61cded3eaacf6523c25671d041abc228f2195c694112a0543527e07006790cbf"
+        "fb1677dc3e7785cae102b118b6d8b4731c90951ef02d6fc8c5d9b9402ca2bcf5"
     );
 }
 
@@ -207,8 +211,10 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // (bridge_failure_has_prefix, bridge_failure_contains and
     // bridge_math_failure_shape); XIX.A adds four to bridge.ml
     // (bridge_bound_add_lo, bridge_bound_add_hi, bridge_bound_contrib and
-    // bridge_bounds_of_terms): 261 -> 265.
-    assert_eq!(parts.len(), 265);
+    // bridge_bounds_of_terms): 261 -> 265.  XIX.C1 adds eleven `let` phrases to
+    // bridge.ml (the aggregate builder, its chain/weight helpers, the
+    // linear-combination proof, and the aggregate-band fact): 265 -> 276.
+    assert_eq!(parts.len(), 276);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -275,23 +281,24 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     for (mode, digest) in [
         (
             "add-ref",
-            "e2ca43d5c1cad5c8e4a977f074cf2b2b130c9ad2ef88bfad8d948a5bb1e29884",
+            "a930a4e6466d3f4db7becfddbddb73b07e626fef546ea39406e5a89660137029",
         ),
         (
             "sub",
-            "45daa0a6008d7ea735b0ed8883975d34b80c5c01673fe9c9d30c9adbfcbe3ca4",
+            "eb3215a8be9965309c357d98a4ccb57deb8efec65617bb62aa98c98d149eac71",
         ),
         (
             "neg",
-            "0c9706a22500099f49a6196b9ba53e5c75a67e4b7c9985248b11de809fe7bbad",
+            "e957d506e1e2d8044d3b1f9b9df66e359b162059fbb5b6c956e1eb0c45833fdd",
         ),
         (
             "add-p384",
-            "b5a742877ce79898fd35a2b46a9d3c19cc41578f88afb7c6649a69d53069aab1",
+            "5fad9abe89f876e841404c414bb12110afd17f9c9042cda20c9e8eb6106bf5ee",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
         let got = sha256(body.as_bytes());
+        eprintln!("inline_answer mode {mode}: sha256 {got}");
         assert_eq!(got, digest, "mode {mode} differs: {got}");
     }
 }
