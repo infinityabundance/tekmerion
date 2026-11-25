@@ -1,0 +1,6 @@
+case close1_full_c8 (isolated close-1 system, c8 given as 0 \/ 1)
+#   PROBE close1_full_c8 OK 0.482s
+case close1_c8_1 (same, c8 fixed to 1)
+#   PROBE close1_c8_1 OK 0.388s
+case close1_no_cor (corrected accumulator chain removed)
+#   Fatal error: allocation failure during minor GC

@@ -648,3 +648,25 @@ fn deinstrument_answer(tactic: &str, sources: &[(String, String)]) -> String {
 fn as_refs(v: &[(String, String)]) -> Vec<(&str, &str)> {
     v.iter().map(|(r, t)| (r.as_str(), t.as_str())).collect()
 }
+
+/// IX.70: the algebraic close is opt-in and gated to exactly one task. This is
+/// a pure string mapping (the driver's `TEKMERION_ALG_CLOSE` read is separate),
+/// so it does not depend on process environment or test ordering.
+#[test]
+fn ix70_algebraic_close_is_opt_in_and_one_task_only() {
+    let task = "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
+    let sat = emit::post_text_for(Some(task), false, "add", "s4", "p");
+    assert!(sat.contains("BRIDGE_ADD_REF_TAC "));
+    assert!(!sat.contains("BRIDGE_ADD_REF_ALG_TAC"));
+    let alg = emit::post_text_for(Some(task), true, "add", "s4", "p");
+    assert!(alg.contains("BRIDGE_ADD_REF_ALG_TAC "));
+    assert!(!alg.contains("BRIDGE_ADD_REF_TAC "));
+    // The switch cannot select the algebraic close for any other task.
+    let other = "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
+    let o = emit::post_text_for(Some(other), true, "add", "s4", "p");
+    assert!(o.contains("BRIDGE_ADD_REF_TAC "));
+    assert!(!o.contains("BRIDGE_ADD_REF_ALG_TAC"));
+    // Unknown/None callers always get the SAT path.
+    let none = emit::post_text_for(None, true, "add", "s4", "p");
+    assert!(none.contains("BRIDGE_ADD_REF_TAC "));
+}

@@ -176,8 +176,10 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // 155 before IX.63; the trimmer adds five `let` phrases to csat_lib.ml.
     // 160 after IX.63; the IX.65 phase markers add three more `let` phrases.
     // 163 after IX.65; IX.69 adds eight `let` phrases to bridge.ml (the slice,
-    // its diagnostics, and the S3 controls).
-    assert_eq!(parts.len(), 171);
+    // its diagnostics, and the S3 controls). 171 after IX.69; IX.70 adds
+    // twenty-seven `let`/`let rec` phrases (the algebraic close, its
+    // normalisation, the integrality split, the bounds, and the entry point).
+    assert_eq!(parts.len(), 198);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -205,26 +207,35 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // answer carries the new library text, exactly as the IX.63 trimmer and the
     // IX.65 markers did. The tactics are unchanged, so the change is the
     // appended library text only.
+    // IX.70 boundary. The IX.69 digests were:
+    //   add-ref   c0bf89af740d442826a17c0ac8a9b1db04db69333c5a490535203921447fd183
+    //   sub       84c13e28b9e944a74ca444b25b9f84b6735d928d631b73784c2321b3c955f894
+    //   neg       38792791e9bab492c4644e9d3f29fca3751255a949fc652fa9832a1f483fc884
+    //   add-p384  37095cc23aed03d1b19414f7af79c1cbf43604741849d68e417811234d181f5c
+    // `tools/bridge.ml` gained the (opt-in, and for now non-closing) algebraic
+    // close (IX.70) and the `full` slice control; the shipped tactics are still
+    // the SAT ones, so again the change is the appended library text only.
     for (mode, digest) in [
         (
             "add-ref",
-            "c0bf89af740d442826a17c0ac8a9b1db04db69333c5a490535203921447fd183",
+            "c8b1ca265e8d96bb750726118f7bd5acec2658a1cbcf420a2b06ace512bc9660",
         ),
         (
             "sub",
-            "84c13e28b9e944a74ca444b25b9f84b6735d928d631b73784c2321b3c955f894",
+            "18ace53d924feb26a18babd18208a277399cfccd34d060234289742cf2d13e86",
         ),
         (
             "neg",
-            "38792791e9bab492c4644e9d3f29fca3751255a949fc652fa9832a1f483fc884",
+            "30a98a1e679c772390c56883e1f54a5f16edad69233bcbe79237571952abdece",
         ),
         (
             "add-p384",
-            "37095cc23aed03d1b19414f7af79c1cbf43604741849d68e417811234d181f5c",
+            "1cffe2f64f58d702a416b3326392f81baf3b3194450ed0b6020f09ffb014feb4",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
-        assert_eq!(sha256(body.as_bytes()), digest, "mode {mode} differs");
+        let got = sha256(body.as_bytes());
+        assert_eq!(got, digest, "mode {mode} differs: {got}");
     }
 }
 

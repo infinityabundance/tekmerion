@@ -34,4 +34,18 @@ let BRIDGE_CSAT_TAC : tactic =
 (* everything that precedes the SAT call, on the goal *)
 let BRIDGE_PREPARE_TAC expand : tactic = ALL_TAC;;
 
+(* IX.70: the opt-in algebraic entry point and its phase anchors. *)
+let BRIDGE_ADD_REF_ALG_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  ALL_TAC;;
+
+let BRIDGE_ALG_NORM_TAC : tactic = ALL_TAC;;
+
+let BRIDGE_ALGEBRA_TAC : tactic =
+  let str t = "x" in
+  let at stage (t:tactic) : tactic = fun g -> t g in
+  fun g ->
+    (at "normalise" BRIDGE_ALG_NORM_TAC THEN
+     at "arith" ASM_INT_ARITH_TAC) g;;
+
 let bridge_anchor_count = 6;;

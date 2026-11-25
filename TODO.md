@@ -2894,8 +2894,19 @@ subterm) rather than with the goal (51 subterms at bridge entry).
   route already attempted for `add_p25519`), use it; keep the certified SAT close as the
   fallback for classes the templates have not seen. The class-agnostic guarantee survives; the
   SAT cost is paid only where it buys generality.
-- [ ] **XV.D2.** The choice must be visible in the emitted answer and recorded per theorem, so a
+  — **IX.70:** the `IX.67` route was recovered from `0336cb2`, repaired, and measured. It is
+  sound and reaches a purely linear integer residue with **0** SAT closes, but it **does not
+  prove**: `ASM_INT_ARITH_TAC` overflows on the first residual (verbatim goal in
+  `ix70-algebraic-close.md`). The same system closes in isolation once the top carry's
+  integrality is given (0.48 s), so the route is incomplete at the arithmetic engine, not wrong.
+  It is shipped **opt-in only** (`TEKMERION_ALG_CLOSE=<task id>`); the default is the SAT path.
+  A viable closer needs `XV.E1`, not a bigger `INT_ARITH` call. No inference total exists.
+- [x] **XV.D2.** The choice must be visible in the emitted answer and recorded per theorem, so a
   reader can tell which route proved which theorem.
+  — **IX.70:** the emitted tactic names its entry point (`BRIDGE_ADD_REF_TAC` vs
+  `BRIDGE_ADD_REF_ALG_TAC`); the switch is read at emission and the assembled proofs differ in
+  exactly that token (C1). Since the algebraic route does not prove, the recorded state is: all
+  27 tasks on the SAT path by default; the algebraic entry only under the environment switch.
 
 ## XV.E — Generic carry-conservation certificate (the deeper target)
 
@@ -2903,6 +2914,13 @@ subterm) rather than with the goal (51 subterms at bridge entry).
   `B = 2^64`, compose it over `n` limbs into
   `Σ B^i(a_i+b_i) = Σ B^i s_i + B^n c_n − c_0`, and prove the composition **once**, parametric
   in width, limb count and modulus.
+  — **IX.70 diagnosis (this is the load-bearing step).** The composed identity is already valid
+  over the reals (intermediate carries cancel symbolically), but HOL Light's `INT_ARITH` is a
+  real-linear procedure: the *only* integrality-dependent atom is the top carry of each chain,
+  and supplying it by case split is exponential in the number of carries (all seven: memory
+  exhaustion). A parametric composition lemma would make each chain one rewrite, remove the
+  per-limb system from the decision procedure, and let `IX.70`'s route close; this is the
+  intended replacement for `XV.D1`'s case split.
 - [ ] **XV.E2.** Instantiate it cheaply per theorem and show it removes the corresponding
   hypotheses from the blast instance (the `XV.B` slicer and this lemma are complementary).
 - [ ] **XV.E3.** Combine with range and modular-correction certificates. This is the route to

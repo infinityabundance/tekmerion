@@ -1573,7 +1573,9 @@ in
    asked for it.  `only-true', `drop-true', `drop-nonoverlap' and
    `drop-largest' are diagnostics: they apply to the full set (or, for
    `drop-largest', to one kept hypothesis), so the effect of one syntactic class
-   can be isolated. *)
+   can be isolated.  `full' disables the slice entirely; it exists only to
+   re-measure the pre-slice (IX.63) baseline, which is the full obligation the
+   SAT close had before IX.69, not a weakened one. *)
 let bridge_has_nonoverlap th =
   List.exists
     (fun t -> try fst (dest_const t) = "nonoverlapping_modulo" with _ -> false)
@@ -1581,6 +1583,7 @@ let bridge_has_nonoverlap th =
 in
 let bridge_slice_forced hths kept =
   match bridge_slice_control with
+  | "full" -> hths
   | "keep-none" -> []
   | "drop-one" ->
       (match List.rev kept with [] -> [] | _ :: rest -> List.rev rest)
@@ -1661,6 +1664,332 @@ let BRIDGE_FINISH_KEEP_TAC expand : tactic =
      BRIDGE_CSAT_TAC) g
 in
 (* ------------------------------------------------------------------------- *)
+(* 6b. The algebraic close (IX.70, recovering the IX.67 WIP of 0336cb2).     *)
+(*                                                                           *)
+(* STATUS (IX.70): EXPERIMENTAL, OPT-IN, DOES NOT CLOSE.  Recovered and      *)
+(* repaired, this route still fails on `arm/add_p25519' (Stack_overflow in   *)
+(* `ASM_INT_ARITH_TAC' on the first residual; the verbatim goal and          *)
+(* hypotheses are in `research/receipts/ix70-algebraic-close.md').  The      *)
+(* mathematics below is sound (rewrites and a proof-producing decision       *)
+(* procedure only; no new axioms, no CHEAT_TAC), and the same linear system  *)
+(* *is* closed by `INT_ARITH' when the top carry's integrality is supplied   *)
+(* as a disjunction (receipt, probe `close1_full_c8', 0.48 s).  The blocker   *)
+(* is the procedure/encoding at this size, not a missing identity.  The      *)
+(* emitter therefore selects this entry point only when                 *)
+(* `TEKMERION_ALG_CLOSE=<task id>' is set; default answers are unchanged.    *)
+(* The generic fix is the carry-conservation lemma of XV.E1, not a bigger    *)
+(* call to `INT_ARITH' (XV.D1).                                             *)
+(*                                                                           *)
+(* The residue `BRIDGE_CSAT_TAC' decides is a *value-level* identity: every   *)
+(* fact it needs is a library lemma about `val', plus linear arithmetic over  *)
+(* the limb values.  Bit-blasting is not required.  The obligation is         *)
+(*                                                                           *)
+(*   &(val (word_add M N)) = &(val W)                  (no correction),      *)
+(*   &(val (word_sub (word_add M N) (word p))) = &(val W)  (correction),     *)
+(*                                                                           *)
+(* where `M', `N' and `W' are word_join nestings of the limb words, together  *)
+(* with the accumulator's per-limb equations and the input range conditions.  *)
+(* The route is: expand the joins into weighted `val' sums, expand the        *)
+(* machine add/sub through `INT_VAL_WORD_ADD_CASES'/                        *)
+(* `INT_VAL_WORD_SUB_CASES' (which state the wrap as a conditional), split    *)
+(* the conditionals, read the branch's boolean carry flags into their         *)
+(* `bitval' values, add the word-domain bounds `0 <= val w < 2^dimindex', and  *)
+(* hand the result to integer arithmetic -- which is where it stops.          *)
+(* Nothing depends on the limb width or the number of limbs: the recursion is *)
+(* the join nesting and the coefficients come out of the goal.  Only the      *)
+(* modulus numeral is supplied by the caller, exactly as in the SAT path.     *)
+(*                                                                           *)
+(* Differences from the unverified IX.67 WIP are marked [IX.70]; each was     *)
+(* needed to make the route *reach* the arithmetic and each is a generic      *)
+(* step, not a p25519 special case.                                          *)
+(* ------------------------------------------------------------------------- *)
+
+(* |- val(join x y) = 2 EXP k * val x + val y, unconditionally, at the width
+   the join actually has.  BRIDGE_VAL_JOIN_STEP already discharges the
+   dimindex side condition.  TOP_DEPTH: the rewrite produces new `val ...'
+   subterms on its right-hand side, so a nested join only unfolds completely
+   if the result is visited again. *)
+let rec BRIDGE_VAL_JOIN_CONV (tm:term) : thm =
+  match tm with
+  | Comb(Const("val",_), Comb(Comb(Const("word_join",_),a),b)) ->
+      CONV_RULE (RAND_CONV (TRY_CONV BRIDGE_VAL_JOIN_CONV) THENC
+                 LAND_CONV (RAND_CONV (TRY_CONV BRIDGE_VAL_JOIN_CONV)))
+                (BRIDGE_VAL_JOIN_STEP a b)
+  | _ -> failwith "BRIDGE_VAL_JOIN_CONV"
+in
+let BRIDGE_VAL_JOIN_DEPTH_CONV : conv = DEPTH_CONV BRIDGE_VAL_JOIN_CONV
+in
+(* |- val(word n) = n for a numeral n that fits the word, at that word's
+   width.  VAL_WORD_EQ is the library lemma; only its side condition is
+   discharged here, numerically. *)
+let BRIDGE_VAL_WORD_CONV : conv =
+  let one tm =
+    match tm with
+    | Comb(Const("val",_), (Comb(Const("word",_), n) as w)) when is_numeral n ->
+        let bits = bridge_word_width (type_of w) in
+        let th0 = ISPEC n (INST_TYPE [bridge_finty bits, `:N`] VAL_WORD_EQ) in
+        let side = prove(lhand (concl th0),
+          CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC NUM_REDUCE_CONV)) in
+        MP th0 side
+    | _ -> failwith "BRIDGE_VAL_WORD_CONV" in
+  DEPTH_CONV one
+in
+(* [IX.70] The WIP normalised the assumptions only through the shifts and
+   never rewrote the machine add/sub or the unsigned comparisons.  Two
+   consequences, both measured on arm/add_p25519:
+     - `word_ult s x \/ word_ule pw s' (the correction condition) stayed a
+       word-level disjunction and the arithmetic could not use it;
+     - the goal kept `&(val (word_add ...))' opaque, so the wrap-around case of
+       `INT_VAL_WORD_ADD_CASES' was never available to the procedure.
+   The normalisation below is generic: it is a confluence-free rewrite to the
+   integer fragment, run on the goal and every assumption. *)
+let BRIDGE_ALG_NORM_ASSUM (th:thm) : thm =
+  let th = REWRITE_RULE[WORD_ULT; WORD_ULE; VAL_WORD_0; VAL_WORD_BITVAL] th in
+  let th = CONV_RULE NUM_TO_INT_CONV th in
+  let th = CONV_RULE BRIDGE_VAL_JOIN_DEPTH_CONV th in
+  let th = CONV_RULE BRIDGE_VAL_WORD_CONV th in
+  let th = REWRITE_RULE[INT_VAL_WORD_ADD_CASES; INT_VAL_WORD_SUB_CASES] th in
+  let th = CONV_RULE BRIDGE_VAL_JOIN_DEPTH_CONV th in
+  let th = REWRITE_RULE[VAL_WORD_0; VAL_WORD_BITVAL] th in
+  let th = CONV_RULE BRIDGE_VAL_WORD_CONV th in
+  let th = CONV_RULE (DEPTH_CONV DIMINDEX_CONV) th in
+  let th = CONV_RULE NUM_TO_INT_CONV th in
+  CONV_RULE INT_REDUCE_CONV th
+in
+let BRIDGE_ALG_NORM_TAC : tactic =
+  fun g ->
+    (RULE_ASSUM_TAC BRIDGE_ALG_NORM_ASSUM THEN
+     REWRITE_TAC[WORD_ULT; WORD_ULE; VAL_WORD_0; VAL_WORD_BITVAL] THEN
+     CONV_TAC NUM_TO_INT_CONV THEN
+     CONV_TAC BRIDGE_VAL_JOIN_DEPTH_CONV THEN
+     CONV_TAC BRIDGE_VAL_WORD_CONV THEN
+     REWRITE_TAC[INT_VAL_WORD_ADD_CASES; INT_VAL_WORD_SUB_CASES] THEN
+     CONV_TAC BRIDGE_VAL_JOIN_DEPTH_CONV THEN
+     REWRITE_TAC[VAL_WORD_0; VAL_WORD_BITVAL] THEN
+     CONV_TAC BRIDGE_VAL_WORD_CONV THEN
+     CONV_TAC (DEPTH_CONV DIMINDEX_CONV) THEN
+     CONV_TAC NUM_TO_INT_CONV THEN
+     CONV_TAC INT_REDUCE_CONV) g
+in
+(* [IX.70] A branch condition kept as a boolean fact (for example
+   `carry_s13') also fixes the value of `bitval carry_s13'.  The WIP left the
+   two unrelated, so an impossible branch such as "the select took the
+   corrected word but ref_add did not correct" was not refutable.  The rewrite
+   uses the branch fact *as an assumption* (not via `prove', which would have
+   to discharge it), so it is contextual and always available here. *)
+let BRIDGE_BITVAL_ATOMS tm =
+  find_terms (fun t -> match t with
+    | Comb(Const("bitval",_),_) -> true
+    | _ -> false) tm
+in
+let BRIDGE_DECIDE_BITVALS_TAC : tactic =
+  fun (asl,w) ->
+    let atoms = setify
+      (BRIDGE_BITVAL_ATOMS w @
+       List.concat (map (fun (_,th) -> BRIDGE_BITVAL_ATOMS (concl th)) asl)) in
+    let rules = List.fold_right (fun t acc ->
+      match t with
+      | Comb(_,b) ->
+          (match List.find_opt (fun (_,th) -> concl th = b) asl with
+           | Some(_,th) -> th :: acc
+           | None ->
+               (match List.find_opt (fun (_,th) -> concl th = mk_neg b) asl with
+                | Some(_,th) -> EQF_INTRO th :: acc
+                | None -> acc))
+      | _ -> acc) atoms [] in
+    if rules = [] then ALL_TAC (asl,w)
+    else
+      let rs = rules @ [BITVAL_CLAUSES] in
+      (RULE_ASSUM_TAC (REWRITE_RULE rs) THEN REWRITE_TAC rs) (asl,w)
+in
+(* [IX.70] INT_ARITH/ARITH_RULE reason over the *reals* (the error text is
+   `linear_ineqs: no contradiction'): `0 <= c <= 1' does not make a carry
+   integral, so the procedure cannot conclude `c = 0' even though the chain
+   forces it.  The fix is to case-split the one carry whose integrality is
+   load-bearing -- the carry *out of the most significant limb's addition*,
+   i.e. the carry with the limb weight 2^k on the side of the hypothesis that
+   also contains the highest-weighted input atom.  In every branch here the
+   corrected carry (the selection flag) is already decided by a branch fact, so
+   only the raw add's top carry remains.  The rule is structural: no limb
+   width and no numeral is named.  Splitting every undecided bitval instead is
+   exponential in the number of carries and was measured to exhaust memory on
+   this obligation. *)
+let BRIDGE_NUM_OF_COEF t =
+  try Some(dest_numeral t) with _ -> None
+in
+(* weight of `atom' in `tm', counting numerals as multipliers: the nested form
+   2^k*(2^k*(2^k*a+b)+c)+d gives a the weight 2^(3k). *)
+let rec BRIDGE_TERM_WEIGHT atom tm =
+  if aconv tm atom then Num.num_of_int 1
+  else match tm with
+    | Comb(Comb(Const("int_add",_), a), b) ->
+        Num.add_num (BRIDGE_TERM_WEIGHT atom a) (BRIDGE_TERM_WEIGHT atom b)
+    | Comb(Comb(Const("int_mul",_), a), b) ->
+        (match BRIDGE_NUM_OF_COEF (rand a) with
+         | Some k -> Num.mult_num k (BRIDGE_TERM_WEIGHT atom b)
+         | None -> BRIDGE_TERM_WEIGHT atom b)
+    | Comb(_, x) -> BRIDGE_TERM_WEIGHT atom x
+    | Abs(_, x) -> BRIDGE_TERM_WEIGHT atom x
+    | _ -> Num.num_of_int 0
+in
+let BRIDGE_VAL_ATOMS tm =
+  find_terms (fun t -> match t with
+    | Comb(Const("val",_),_) -> true
+    | _ -> false) tm
+in
+let BRIDGE_BITVAL_COEF_PAIRS tm =
+  let prods = find_terms (fun t -> match t with
+    | Comb(Comb(Const("int_mul",_), Comb(Const("int_of_num",_), n)),
+           Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)))
+        when is_numeral n -> true
+    | _ -> false) tm in
+  let bare = find_terms (fun t -> match t with
+    | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) -> true
+    | _ -> false) tm in
+  List.fold_right (fun t acc ->
+    match BRIDGE_NUM_OF_COEF (rand(rand(rator t))) with
+    | Some k -> (rand(rand(rand t)), k) :: acc
+    | None -> acc) prods
+   (List.map (fun t -> (rand(rand t), Num.num_of_int 1)) bare)
+in
+let BRIDGE_MAX_COEF pairs =
+  let better ((_,k) as a) ((_,k') as b) = if Num.le_num k k' then b else a in
+  match pairs with [] -> None | h :: tl -> Some(List.fold_left better h tl)
+in
+let BRIDGE_DECIDED_BITVAL asl b =
+  List.exists (fun (_,th) -> concl th = b || concl th = mk_neg b) asl
+in
+(* [IX.70] `ASM_INT_ARITH_TAC' quantifies over *every* assumption.  The
+   non-arithmetic ones (`nonoverlapping_modulo ...', which mentions `val z',
+   and the bare branch booleans already consumed by the bitval step) are not
+   needed and were measured to push the procedure into a stack overflow.
+   Dropping an assumption can only strengthen the goal. *)
+let BRIDGE_HAS_INT tm =
+  List.exists (fun s -> match s with
+    | Comb(Const("int_of_num",_),_) -> true
+    | _ -> false) (find_terms (fun _ -> true) tm)
+in
+let BRIDGE_DISCARD_IRRELEVANT_TAC : tactic =
+  let irrelevant th =
+    let t = concl th in
+    t = `T` || not (BRIDGE_HAS_INT t) in
+  fun (asl,w) ->
+    ALL_TAC (List.filter (fun (_,th) -> not (irrelevant th)) asl, w)
+in
+let BRIDGE_INT_REDUCE_TAC : tactic =
+  fun g ->
+    (RULE_ASSUM_TAC (CONV_RULE INT_REDUCE_CONV) THEN
+     CONV_TAC INT_REDUCE_CONV) g
+in
+let BRIDGE_SPLIT_TOP_CARRY_TAC : tactic =
+  fun (asl,w) ->
+    let hyps = List.map (fun (_,th) -> concl th) asl in
+    let atoms = setify (List.concat (List.map BRIDGE_VAL_ATOMS hyps)) in
+    let maxabs x =
+      List.fold_left (fun a t ->
+        let k = BRIDGE_TERM_WEIGHT x t in if Num.le_num a k then k else a)
+        (Num.num_of_int 0) hyps in
+    let scored = List.map (fun x -> (x, maxabs x)) atoms in
+    (match BRIDGE_MAX_COEF scored with
+     | None -> ALL_TAC (asl,w)
+     | Some(msatom, _) ->
+        let carriers = List.concat (List.map (fun t ->
+          if List.exists (fun s -> aconv s msatom) (BRIDGE_VAL_ATOMS t)
+          then BRIDGE_BITVAL_COEF_PAIRS t else []) hyps) in
+        let carriers = List.filter
+          (fun (b,_) -> not (BRIDGE_DECIDED_BITVAL asl b)) carriers in
+        (match BRIDGE_MAX_COEF carriers with
+         | None -> ALL_TAC (asl,w)
+         | Some(b, _) ->
+             (ASM_CASES_TAC b THENL
+               [BRIDGE_DECIDE_BITVALS_TAC THEN BRIDGE_INT_REDUCE_TAC THEN ALL_TAC;
+                BRIDGE_DECIDE_BITVALS_TAC THEN BRIDGE_INT_REDUCE_TAC THEN ALL_TAC]) (asl,w)))
+in
+(* The linear decision procedure sees `&(val w)' and `&(bitval b)' as atoms of
+   unknown sign.  They are not: a `val' is in [0, 2^dimindex) and a `bitval' is
+   0 or 1.  The WIP supplied only the lower bound of `val' and the two bitval
+   bounds; without `val w < 2^dimindex' the carries of the accumulator chain
+   are not pinned, and the overflow branches of the add cannot be refuted
+   (measured: `linear_ineqs: no contradiction'). *)
+let BRIDGE_INT_ATOMS tm =
+  find_terms (fun t -> match t with
+    | Comb(Const("int_of_num",_), Comb(Const("val",_),_)) -> true
+    | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) -> true
+    | _ -> false) tm
+in
+let BRIDGE_INT_LE a b = mk_comb(mk_comb(`(<=):int->int->bool`, a), b)
+in
+let BRIDGE_INT_LT a b = mk_comb(mk_comb(`(<):int->int->bool`, a), b)
+in
+let BRIDGE_BOUND_NONNEG t =
+  prove(BRIDGE_INT_LE `(&0):int` t,
+        REWRITE_TAC[INT_OF_NUM_LE] THEN ARITH_TAC)
+in
+let BRIDGE_BOUND_BITVAL_HI t =
+  prove(BRIDGE_INT_LE t `(&1):int`,
+        REWRITE_TAC[INT_OF_NUM_LE] THEN REWRITE_TAC[bitval] THEN
+        TRY COND_CASES_TAC THEN ARITH_TAC)
+in
+(* &(val w) < &2 pow dimindex at the width `w' actually has: the library's
+   INT_VAL_BOUND, instantiated and reduced to a numeral (dimindex(:64) left
+   unreduced makes the atom opaque to the integer procedure). *)
+let BRIDGE_BOUND_VAL_HI w =
+  let bits = bridge_word_width (type_of w) in
+  CONV_RULE (DEPTH_CONV DIMINDEX_CONV THENC INT_REDUCE_CONV)
+    (ISPEC w (INST_TYPE [bridge_finty bits, `:N`] INT_VAL_BOUND))
+in
+let BRIDGE_ATOM_BOUNDS_TAC : tactic =
+  fun (asl,w) ->
+    let atoms = setify
+      (BRIDGE_INT_ATOMS w @
+       List.concat (map (fun (_,th) -> BRIDGE_INT_ATOMS (concl th)) asl)) in
+    let facts = List.fold_right (fun t acc ->
+      match t with
+      | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) ->
+          BRIDGE_BOUND_BITVAL_HI t :: BRIDGE_BOUND_NONNEG t :: acc
+      | Comb(Const("int_of_num",_), Comb(Const("val",_),w0)) ->
+          BRIDGE_BOUND_VAL_HI w0 :: BRIDGE_BOUND_NONNEG t :: acc
+      | _ -> acc) atoms [] in
+    if facts = [] then ALL_TAC (asl,w)
+    else (MP_TAC (end_itlist CONJ facts) THEN STRIP_TAC) (asl,w)
+in
+(* report the residual goal and hypotheses when a stage does not finish.  It
+   prints only under `--mode phase' (csat_mark_enabled), so a normal answer is
+   silent; a failure is still a failure. *)
+let BRIDGE_ALGEBRA_TAC : tactic =
+  let str t =
+    let s = string_of_term t in
+    if String.length s > 4000 then String.sub s 0 4000 ^ "..." else s in
+  let at stage (t:tactic) : tactic =
+    fun g ->
+      try t g
+      with e ->
+        let (asl,w) = g in
+        bridge_slice_note "ALG_FAIL stage=%s goal=%s" stage (str w);
+        List.iteri (fun i (_,th) ->
+          bridge_slice_note "ALG_HYP %d %s" (i + 1) (str (concl th))) asl;
+        raise e in
+  fun g ->
+    (at "normalise" BRIDGE_ALG_NORM_TAC THEN
+     at "split-conditions" BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     at "renormalise" BRIDGE_ALG_NORM_TAC THEN
+     at "decide-bitvals" BRIDGE_DECIDE_BITVALS_TAC THEN
+     at "bounds" BRIDGE_ATOM_BOUNDS_TAC THEN
+     at "reduce" BRIDGE_INT_REDUCE_TAC THEN
+     at "split-top-carry" BRIDGE_SPLIT_TOP_CARRY_TAC THEN
+     at "discard" BRIDGE_DISCARD_IRRELEVANT_TAC THEN
+     at "arith" ASM_INT_ARITH_TAC) g
+in
+(* the same route, with the residue closed algebraically and no SAT call *)
+let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =
+  fun g ->
+    (BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     expand THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     CONV_TAC BRIDGE_TO_WORD_CONV THEN
+     BRIDGE_ALGEBRA_TAC) g
+in
+(* ------------------------------------------------------------------------- *)
 (* 7. Entry points.  `pth' is the definition theorem of the modulus, so the  *)
 (* numeral replaces the constant before anything is decided.                 *)
 (* ------------------------------------------------------------------------- *)
@@ -1732,6 +2061,42 @@ let BRIDGE_ADD_REF_TAC expand pth : tactic =
     let rth = SYM (REWRITE_RULE[thx; thy] rth) in
     (ASM_REWRITE_TAC[rth; SYM thw; ref_add; LET_DEF; LET_END_DEF] THEN
      BRIDGE_FINISH_KEEP_TAC expand) (asl,w))
+in
+(* the same route with the word residue closed by BRIDGE_ALGEBRA_TAC instead of
+   by certified SAT (IX.70).  A separate entry point, so the SAT-free close is
+   opt-in per theorem: every other task keeps the emitted tactic it had, and
+   its inference count is unchanged.  The gate is in the emitter
+   (`src/tools/emit.rs', `ALGEBRAIC_CLOSE_TASKS'), so the choice is visible in
+   the emitted answer and recorded per theorem. *)
+let BRIDGE_ADD_REF_ALG_TAC expand pth : tactic =
+  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
+  (fun (asl,w) ->
+    let (lhs,wv) = dest_eq w in
+    let (sum,p) = dest_binop `(MOD):num->num->num` lhs in
+    let (bx,by) = dest_binop `(+):num->num->num` sum in
+    let (xw,thx) = BRIDGE_WORD_OF_DIGITS bx in
+    let (yw,thy) = BRIDGE_WORD_OF_DIGITS by in
+    let (ww,thw) = BRIDGE_WORD_OF_DIGITS wv in
+    let lt tm = mk_comb(mk_comb(`(<):num->num->bool`, tm), p) in
+    let bound tm =
+      try snd(List.find (fun (_,th) -> aconv (concl th) (lt tm)) asl)
+      with Not_found ->
+        failwith "BRIDGE_ADD_REF_ALG_TAC: missing `x < p' hypothesis" in
+    let hltx = REWRITE_RULE[GSYM thx] (bound bx)
+    and hlty = REWRITE_RULE[GSYM thy] (bound by) in
+    let wt = bridge_finty (bridge_word_width (type_of xw)) in
+    let lem = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] ADD_REF_VAL_WORD) in
+    let ants = conjuncts (lhand (concl lem)) in
+    if List.length ants <> 4 then
+      failwith "BRIDGE_ADD_REF_ALG_TAC: unexpected antecedent shape";
+    let s1 = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
+    let s2 = prove(List.nth ants 1,
+      CONV_TAC(RAND_CONV(RAND_CONV DIMINDEX_CONV) THENC
+               RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
+    let rth = MP lem (end_itlist CONJ [s1; s2; hltx; hlty]) in
+    let rth = SYM (REWRITE_RULE[thx; thy] rth) in
+    (ASM_REWRITE_TAC[rth; SYM thw; ref_add; LET_DEF; LET_END_DEF] THEN
+     BRIDGE_FINISH_KEEP_ALG_TAC expand) (asl,w))
 in
 (* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
 let BRIDGE_SUB_TAC expand pth : tactic =

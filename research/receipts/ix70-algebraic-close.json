@@ -1,0 +1,18 @@
+{
+  "schema": "ix70-algebraic-close/1",
+  "date": "2026-11-25",
+  "branch": "staging",
+  "kernel": "hol-light-stamp2 (axiom-stamp v2)",
+  "measurement": "emit --mode phase (IX.66 markers); tools/cap.sh 12G; make -j1",
+  "task": "arm_add_p25519",
+  "verdict": "does-not-prove",
+  "baseline_full": {"total": 119194788, "sat_closes": 4, "bitblast": 53397616, "defn_clausify": 21500946, "encode": 0, "replay": 40808833, "other": 3487393},
+  "baseline_sliced": {"total": 111501987, "sat_closes": 4, "bitblast": 53396030, "defn_clausify": 21500774, "encode": 0, "replay": 33117926, "other": 3487257},
+  "algebraic": {"total": null, "sat_closes": 0, "bitblast": 0, "defn_clausify": 0, "encode": 0, "replay": 0, "work_before_abort": 2620473, "pre_theorem_inferences": 67646907, "last_mark": "bridge:algebra-arith", "last_mark_inferences": 70267380, "aborted": true},
+  "cadical": {"sat_path_invocations": 2, "algebraic_path_invocations": 0},
+  "scope_spot_check": [
+    {"task": "arm_add_p256", "total": 118896814, "accepted": true},
+    {"task": "arm_neg_p25519", "total": 33888658, "accepted": true},
+    {"task": "x86_neg_sm2", "total": 15444067, "accepted": true}
+  ]
+}
