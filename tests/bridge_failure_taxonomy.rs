@@ -7,7 +7,8 @@
 //!
 //! The selftest asserts one case per class and — the defect XVI.D removes —
 //! that `Out_of_memory` and `Stack_overflow` do **not** run the fallback to the
-//! full hypothesis set.
+//! full hypothesis set. XVII.A5 adds the other direction: a generic `Failure`
+//! is not mathematical and must not retry; only the explicit allow-list does.
 
 use std::process::Command;
 
@@ -49,11 +50,13 @@ fn bridge_failure_taxonomy_selftest_passes() {
     for expected in [
         "OK closed: no fallback",
         "OK mathematical: fallback ran",
+        "OK mathematical-slice: fallback ran",
         "OK unsupported: no fallback",
         "OK resource-memory: no fallback",
         "OK resource-stack: no fallback",
         "OK resource-signal: no fallback",
         "OK internal: no fallback",
+        "OK internal-generic: no fallback",
         "OK bridge_failure_taxonomy",
     ] {
         assert!(

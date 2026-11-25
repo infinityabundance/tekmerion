@@ -913,3 +913,211 @@ fn guard_enforces_the_closure_on_a_sealed_run() {
         Ok(()) => panic!("a modified emitter was accepted under the closure"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// 6. XVII.A3: the sealed path itself binds the configuration
+// ---------------------------------------------------------------------------
+
+/// Every declared variable unset, with the flags a source seal records.
+fn all_unset_config() -> EffectiveConfig {
+    let env: BTreeMap<String, Option<String>> = config::ALL_ENV_VARS
+        .iter()
+        .map(|name| ((*name).to_string(), None))
+        .collect();
+    EffectiveConfig::from_entries(
+        env,
+        RunFlags {
+            mode: Some("answer".to_string()),
+            stamp: Some(true),
+            force: None,
+            slice: false,
+        },
+    )
+    .expect("all-unset configuration")
+}
+
+fn closure_with_config(fixture: &Fixture, config: EffectiveConfig) -> Closure {
+    freeze::build_with_config(
+        &fixture.repo,
+        TAG,
+        Some(&fixture.runtime_paths()),
+        Some(config),
+    )
+    .expect("closure with configuration")
+}
+
+fn write_sealed_manifest(fixture: &Fixture, tag_commit: &str) -> PathBuf {
+    let path = fixture.tmp.path().join("sealed.json");
+    fs::write(
+        &path,
+        format!(
+            "{{\"freeze_commit\":\"{tag_commit}\",\"freeze_tag\":\"{TAG}\",\
+             \"sealed_ids\":[\"x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT\"],\
+             \"freeze_closure\":\"receipts/closure.json\"}}"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+/// `guard::verify_freeze` refuses when the configuration recorded in the
+/// closure is not the live one. The recorded variable is set to a value the
+/// test process cannot have, so the comparison refuses without mutating the
+/// process environment.
+#[test]
+fn guard_refuses_a_sealed_run_whose_recorded_configuration_is_not_live() {
+    use tekmerion::tools::guard;
+
+    let fixture = Fixture::new(TAG);
+    let mut env: BTreeMap<String, Option<String>> = config::ALL_ENV_VARS
+        .iter()
+        .map(|name| ((*name).to_string(), None))
+        .collect();
+    env.insert(
+        "TEKMERION_ALG_CLOSE".to_string(),
+        Some("ix77-recorded-not-live".to_string()),
+    );
+    let config = EffectiveConfig::from_entries(
+        env,
+        RunFlags {
+            mode: Some("answer".to_string()),
+            stamp: Some(true),
+            force: None,
+            slice: false,
+        },
+    )
+    .unwrap();
+    let closure = closure_with_config(&fixture, config);
+    let text = freeze::render(&closure);
+    let tag_commit = commit_manifest(&fixture, "receipts/closure.json", &text);
+    let manifest_path = write_sealed_manifest(&fixture, &tag_commit);
+    let manifest = guard::load_sealed_manifest(&manifest_path).expect("sealed manifest");
+
+    match guard::verify_freeze(&manifest, TAG, &fixture.repo) {
+        Err(e) => {
+            let text = e.to_string();
+            assert!(
+                text.contains("configuration mismatch: TEKMERION_ALG_CLOSE"),
+                "unexpected message {text}"
+            );
+            assert!(
+                text.contains("recorded \"ix77-recorded-not-live\""),
+                "{text}"
+            );
+        }
+        Ok(()) => panic!("a sealed run with a configuration mismatch was accepted"),
+    }
+}
+
+/// The firing control on the sealed *emit* path: the manifest records
+/// `TEKMERION_ALG_CLOSE` unset and the emitter is invoked with it set. The
+/// refusal must come from the sealed policy, before any task is built.
+#[test]
+fn sealed_emit_refuses_a_live_variable_the_manifest_records_unset() {
+    let fixture = Fixture::new(TAG);
+    let closure = closure_with_config(&fixture, all_unset_config());
+    let text = freeze::render(&closure);
+    let tag_commit = commit_manifest(&fixture, "receipts/closure.json", &text);
+    let manifest_path = write_sealed_manifest(&fixture, &tag_commit);
+    let out_path = fixture.tmp.path().join("answer.txt");
+
+    let run = |alg_close: Option<&str>| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_emit"));
+        command.current_dir(&fixture.repo).args([
+            "--sealed-eval",
+            "--sealed-manifest",
+            manifest_path.to_str().unwrap(),
+            "--freeze-tag",
+            TAG,
+            "--task",
+            "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+            "--mode",
+            "answer",
+            "--out",
+            out_path.to_str().unwrap(),
+        ]);
+        for name in config::ALL_ENV_VARS {
+            command.env_remove(name);
+        }
+        if let Some(value) = alg_close {
+            command.env("TEKMERION_ALG_CLOSE", value);
+        }
+        command.output().expect("run emit")
+    };
+
+    // Firing control: a live value where the manifest records unset.
+    let refused = run(Some("ix77-live-control"));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    println!("sealed emit exit={:?}\n{stderr}", refused.status.code());
+    assert!(!refused.status.success(), "sealed emit must refuse");
+    assert!(
+        stderr.contains(
+            "configuration mismatch: TEKMERION_ALG_CLOSE recorded unset, live \"ix77-live-control\""
+        ),
+        "stderr was:\n{stderr}"
+    );
+
+    // The same invocation with the recorded (unset) environment gets past the
+    // sealed policy; it may fail later only because the fixture has no bench.
+    let allowed = run(None);
+    let stderr = String::from_utf8_lossy(&allowed.stderr);
+    assert!(
+        !stderr.contains("configuration mismatch"),
+        "the live configuration was refused when it matched:\n{stderr}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 7. XVII.A4: the tag binds the complete committed manifest
+// ---------------------------------------------------------------------------
+
+#[test]
+fn check_tag_refuses_a_changed_non_digest_field() {
+    // The committed manifest differs only in `runtime.rustc`, a field neither
+    // source_digest nor repo_commit covers.
+    let fixture = Fixture::new(TAG);
+    let closure = fixture.closure(TAG);
+    let text = freeze::render(&closure);
+    let rustc = format!(
+        "    \"rustc\": {},\n",
+        freeze_quote(&closure.runtime.as_ref().unwrap().rustc)
+    );
+    assert!(text.contains(&rustc), "rustc line not found");
+    let changed = text.replace(&rustc, "    \"rustc\": \"ix77-rustc-version-change\",\n");
+    assert_ne!(changed, text);
+    let tag_commit = commit_manifest(&fixture, "receipts/closure.json", &changed);
+
+    match freeze::check_tag(&fixture.repo, &closure, "receipts/closure.json") {
+        Err(e) => {
+            let text = e.to_string();
+            assert!(text.contains("runtime.rustc"), "message: {text}");
+            assert!(text.contains(&tag_commit), "message: {text}");
+        }
+        Ok(_) => panic!("a one-field change in the committed manifest was accepted"),
+    }
+
+    // The configuration block is bound the same way.
+    let fixture = Fixture::new(TAG);
+    let closure = closure_with_config(&fixture, all_unset_config());
+    let text = freeze::render(&closure);
+    let changed = text.replace(
+        "\"TEKMERION_ALG_CLOSE\": \"unset\"",
+        "\"TEKMERION_ALG_CLOSE\": \"ix77-changed\"",
+    );
+    assert_ne!(changed, text, "configuration line not found");
+    commit_manifest(&fixture, "receipts/closure.json", &changed);
+    match freeze::check_tag(&fixture.repo, &closure, "receipts/closure.json") {
+        Err(e) => assert!(
+            e.to_string()
+                .contains("configuration.env.TEKMERION_ALG_CLOSE"),
+            "message: {e}"
+        ),
+        Ok(_) => panic!("a changed configuration field was accepted"),
+    }
+}
+
+/// `freeze::render` quotes strings itself; this mirrors it for the test's
+/// search text (paths and versions here contain no escapes).
+fn freeze_quote(text: &str) -> String {
+    format!("\"{text}\"")
+}

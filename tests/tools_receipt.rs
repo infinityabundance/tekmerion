@@ -25,8 +25,9 @@ use tekmerion::tools::{curve_check, dropin};
 ///
 /// Boundaries so far: `ca300bd2…` (recorded with the Python-era goldens),
 /// `0a135381…` (after IX.69 slicing and IX.70's opt-in algebraic route),
-/// `deafeb4d…` (after XVI.D's failure taxonomy).
-const BRIDGE_DIGEST: &str = "deafeb4de6129686f7a521a0b4afee08bdd15b78aaf703f2bc0dbc39a5d1c072";
+/// `deafeb4d…` (after XVI.D's failure taxonomy), `ace0b868…` (after XVII.A5's
+/// mathematical-failure allow-list).
+const BRIDGE_DIGEST: &str = "ace0b8680be6e12f44d45dd9c00043effaf558dbc6c7d122ade66d51180ff63a";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -155,11 +156,12 @@ fn instrument_reproduces_the_recorded_output() {
     // Boundaries: 119 (Python-era) -> 127 (IX.69 slicing) -> 154 (IX.70 adds
     // the opt-in algebraic close, BRIDGE_ALGEBRA_TAC and its helpers) -> 157
     // (XVI.D adds bridge_failure_class, bridge_fallback_count and
-    // bridge_slice_retry).
-    assert_eq!(phrases, 157);
+    // bridge_slice_retry) -> 160 (XVII.A5 adds bridge_failure_has_prefix,
+    // bridge_failure_contains and bridge_math_failure_shape, the allow-list).
+    assert_eq!(phrases, 160);
     assert_eq!(
         sha256(out.as_bytes()),
-        "cd52a52efb927b656079a786256d3aa4d5da96a24de7fd7cee5fd56a3255556f"
+        "7a11bed9e3edca32521763e3c0ff7d9cd5c2bb36423f14e66cfa1c3779173215"
     );
 }
 
@@ -196,8 +198,10 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // twenty-seven `let`/`let rec` phrases (the algebraic close, its
     // normalisation, the integrality split, the bounds, and the entry point).
     // 198 after IX.70; XVI.D adds three (bridge_failure_class,
-    // bridge_fallback_count, bridge_slice_retry).
-    assert_eq!(parts.len(), 201);
+    // bridge_fallback_count, bridge_slice_retry); XVII.A5 adds three
+    // (bridge_failure_has_prefix, bridge_failure_contains and
+    // bridge_math_failure_shape).
+    assert_eq!(parts.len(), 204);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -243,22 +247,32 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // are unchanged; the fallback now runs only for a mathematical failure and
     // resource exhaustion is re-raised, so the change is the appended library
     // text plus the rewritten fallback block.
+    // XVII.A5 boundary. The XVI.D digests were:
+    //   add-ref   8090b1a9f9de4a1a42cfee4d54072c013b64d1a48e4ea02847ecb4d06fea1df7
+    //   sub       d2b93b6dab4a1a39ce5b6b549d24ded367234af5b66d547799ab7d76b3bf8d4d
+    //   neg       93c457d6de3e754fe822d76b32e02d41edabfdedd99e84060bc716565d75476c
+    //   add-p384  3d9547195cb84b7701d313a3953fa195926c604bb7588c5577a3aecb1a66aed6
+    // `tools/bridge.ml` gained the XVII.A5 allow-list (bridge_failure_has_prefix,
+    // bridge_failure_contains, bridge_math_failure_shape) and the classifier now
+    // sends an unrecognised Failure to `internal` instead of `Mathematical`.
+    // The shipped SAT tactics are unchanged; only the appended library text and
+    // the classifier body moved.
     for (mode, digest) in [
         (
             "add-ref",
-            "8090b1a9f9de4a1a42cfee4d54072c013b64d1a48e4ea02847ecb4d06fea1df7",
+            "4363d594f638546261404cc6d781dcf03546731b79029867a8b62074df8e9d4a",
         ),
         (
             "sub",
-            "d2b93b6dab4a1a39ce5b6b549d24ded367234af5b66d547799ab7d76b3bf8d4d",
+            "eecd75484aa705578407ef681ffd0c801ee9a8c45302ee7f13870396ec634f56",
         ),
         (
             "neg",
-            "93c457d6de3e754fe822d76b32e02d41edabfdedd99e84060bc716565d75476c",
+            "ee40990a290736addea5c20fa6041b449691fb763086e63d0a79e8c5e91d4e20",
         ),
         (
             "add-p384",
-            "3d9547195cb84b7701d313a3953fa195926c604bb7588c5577a3aecb1a66aed6",
+            "82a52246a149793a9bec7c55dd532ed6b48ad321234f4168a13a167808d679ad",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

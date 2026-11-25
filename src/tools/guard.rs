@@ -705,6 +705,17 @@ pub fn verify_freeze(manifest: &SealedManifest, freeze_tag: &str, repo: &Path) -
             }
             crate::tools::freeze::check_tag(repo, &closure, rel)?;
             crate::tools::freeze::verify_source(repo, &closure)?;
+            // A sealed run must bind the TEKMERION_* configuration that changes
+            // the reasoning path, not only the file hashes (XVII.A3). `freeze
+            // verify` checked this; the sealed path itself did not.
+            match &closure.configuration {
+                Some(config) => crate::tools::config::verify_live(config)?,
+                None => eprintln!(
+                    "{}",
+                    crate::tools::freeze::configuration_warning(&closure)
+                        .expect("a configuration-less closure has a warning")
+                ),
+            }
             crate::tools::freeze::verify_runtime(repo, &closure)?;
             Ok(())
         }

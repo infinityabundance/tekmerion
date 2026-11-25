@@ -70,18 +70,30 @@ let () =
   check "mathematical: note"
     (has_note "SLICE fallback=t reason=mathematical kept=3/5")
 
-(* A generic Failure is still today's mathematical fallback, not a resource
-   failure. *)
+(* A slice-too-strong report is the second allow-listed mathematical shape. *)
 let () =
   reset ();
   let fell = ref false in
-  ignore
-    (retry ~attempt:(fun () -> raise (Failure "boom"))
-       ~fallback:(fun () -> fell := true; 0));
-  check "mathematical-generic: fallback ran" !fell;
-  check "mathematical-generic: counter one" (!bridge_fallback_count = 1);
-  check "mathematical-generic: note"
+  let v =
+    retry
+      ~attempt:(fun () -> raise (Failure "SLICE_TOO_STRONG: kept 3/5"))
+      ~fallback:(fun () -> fell := true; 43) in
+  check "mathematical-slice: fallback ran" !fell;
+  check "mathematical-slice: result is the fallback's" (v = 43);
+  check "mathematical-slice: counter one" (!bridge_fallback_count = 1);
+  check "mathematical-slice: note"
     (has_note "SLICE fallback=t reason=mathematical kept=3/5")
+
+(* A generic Failure is NOT mathematical. It can equally be a broken rewrite,
+   a missing lemma, or a violated invariant. Only the explicit allow-list may
+   retry; everything else is internal and propagates. *)
+let () =
+  reset ();
+  expect_raises "internal-generic"
+    (function Failure s -> s = "boom" | _ -> false)
+    (Failure "boom");
+  check "internal-generic: note"
+    (has_note "CSAT internal=unrecognised Failure: boom")
 
 (* --- unsupported input --------------------------------------------------- *)
 let () =
@@ -129,6 +141,24 @@ let () =
     (has_note "CSAT capped=signal limit=exit 137 kept=3/5")
 
 (* --- internal error ------------------------------------------------------ *)
+let () =
+  check "classify generic Failure is internal"
+    (match bridge_failure_class (Failure "boom") with
+     | `Internal _ -> true
+     | _ -> false);
+  check "classify allow-listed exit 10 is mathematical"
+    (bridge_failure_class
+       (Failure "CSAT: cadical did not report UNSAT, exit 10") =
+     `Mathematical "CSAT: cadical did not report UNSAT, exit 10");
+  check "classify SATISFIABLE is mathematical"
+    (match bridge_failure_class (Failure "solver: SATISFIABLE") with
+     | `Mathematical _ -> true
+     | _ -> false);
+  check "classify slice-too-strong is mathematical"
+    (match bridge_failure_class (Failure "SLICE_TOO_STRONG: x") with
+     | `Mathematical _ -> true
+     | _ -> false)
+
 let () =
   reset ();
   expect_raises "internal"

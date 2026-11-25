@@ -1115,9 +1115,11 @@ fn is_ancestor(root: &Path, commit: &str, of: &str) -> bool {
 /// content would have to be a fixed point of SHA-1. So `repo_commit` is the
 /// sealed *code* commit and the tag may sit at that commit or at a descendant
 /// that only adds the manifest and receipts. Both trees' source closures must
-/// equal the recorded closure, and the manifest committed at the tag must
-/// carry the same `source_digest` and `repo_commit`. That is what stops a
-/// clean commit with modified tools.
+/// equal the recorded closure, and the **complete** manifest committed at the
+/// tag must be byte-identical, under canonical rendering, to the manifest
+/// under verification (XVII.A4). Comparing selected digests was not enough: a
+/// committed manifest that differed in the runtime block, the configuration
+/// block or a file entry could still pass.
 pub fn check_tag(root: &Path, closure: &Closure, manifest_rel: &str) -> Result<String> {
     let spec = format!("{}^{{commit}}", closure.tag);
     let tag_commit = git_text(root, &["rev-parse", "--verify", &spec])?
@@ -1167,7 +1169,162 @@ pub fn check_tag(root: &Path, closure: &Closure, manifest_rel: &str) -> Result<S
             at_tag.repo_commit, closure.repo_commit
         )));
     }
+
+    // Bind every remaining field through the canonical bytes. The two explicit
+    // checks above keep their specific messages; anything else that differs
+    // (the runtime block, the configuration block, a source entry, the tag or
+    // created_at) is refused here, naming the field where the structure tells
+    // us which one, else the first differing byte offset.
+    let committed_bytes = render(&at_tag);
+    let local_bytes = render(closure);
+    if committed_bytes != local_bytes {
+        let where_ = match manifest_difference(&at_tag, closure) {
+            Some(field) => format!("field {field}"),
+            None => format!(
+                "byte offset {}",
+                first_byte_offset(&committed_bytes, &local_bytes)
+            ),
+        };
+        return Err(Refused::new(format!(
+            "manifest committed at tag {tag_commit} differs from {manifest_rel} at {where_}; \
+             the tag binds the complete manifest, not selected digests"
+        )));
+    }
     Ok(tag_commit)
+}
+
+/// The offset of the first differing byte, or the length of the shorter string
+/// when one is a prefix of the other.
+fn first_byte_offset(a: &str, b: &str) -> usize {
+    a.bytes()
+        .zip(b.bytes())
+        .position(|(x, y)| x != y)
+        .unwrap_or(a.len().min(b.len()))
+}
+
+fn entry_field_difference(a: &Entry, b: &Entry) -> Option<&'static str> {
+    if a.path != b.path {
+        Some("path")
+    } else if a.sha256 != b.sha256 {
+        Some("sha256")
+    } else {
+        None
+    }
+}
+
+fn entries_difference(prefix: &str, a: &[Entry], b: &[Entry]) -> Option<String> {
+    for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+        if let Some(field) = entry_field_difference(x, y) {
+            return Some(format!("{prefix}[{i}].{field}"));
+        }
+    }
+    if a.len() != b.len() {
+        Some(format!("{prefix}.len"))
+    } else {
+        None
+    }
+}
+
+fn configuration_difference(a: &EffectiveConfig, b: &EffectiveConfig) -> Option<String> {
+    for name in config::ALL_ENV_VARS {
+        if a.value(name) != b.value(name) {
+            return Some(format!("configuration.env.{name}"));
+        }
+    }
+    let (fa, fb) = (a.flags(), b.flags());
+    if fa.mode != fb.mode {
+        return Some("configuration.flags.mode".to_string());
+    }
+    if fa.stamp != fb.stamp {
+        return Some("configuration.flags.stamp".to_string());
+    }
+    if fa.force != fb.force {
+        return Some("configuration.flags.force".to_string());
+    }
+    if fa.slice != fb.slice {
+        return Some("configuration.flags.slice".to_string());
+    }
+    None
+}
+
+fn runtime_difference(a: &RuntimeBlock, b: &RuntimeBlock) -> Option<String> {
+    if let Some(field) = entry_field_difference(&a.executable, &b.executable) {
+        return Some(format!("runtime.executable.{field}"));
+    }
+    if a.rustc != b.rustc {
+        return Some("runtime.rustc".to_string());
+    }
+    if a.cargo_lock_sha256 != b.cargo_lock_sha256 {
+        return Some("runtime.cargo_lock_sha256".to_string());
+    }
+    if a.hol_light.path != b.hol_light.path {
+        return Some("runtime.hol_light.path".to_string());
+    }
+    if a.hol_light.pin != b.hol_light.pin {
+        return Some("runtime.hol_light.pin".to_string());
+    }
+    if a.hol_light.hol_lib_cmxa_sha256 != b.hol_light.hol_lib_cmxa_sha256 {
+        return Some("runtime.hol_light.hol_lib_cmxa_sha256".to_string());
+    }
+    if a.cadical.path != b.cadical.path {
+        return Some("runtime.cadical.path".to_string());
+    }
+    if a.cadical.sha256 != b.cadical.sha256 {
+        return Some("runtime.cadical.sha256".to_string());
+    }
+    if a.cadical.version != b.cadical.version {
+        return Some("runtime.cadical.version".to_string());
+    }
+    if let Some(field) =
+        entries_difference("runtime.ocaml_bridge", &a.ocaml_bridge, &b.ocaml_bridge)
+    {
+        return Some(field);
+    }
+    if a.benchmark_inputs.path != b.benchmark_inputs.path {
+        return Some("runtime.benchmark_inputs.path".to_string());
+    }
+    if a.benchmark_inputs.problems_json_sha256 != b.benchmark_inputs.problems_json_sha256 {
+        return Some("runtime.benchmark_inputs.problems_json_sha256".to_string());
+    }
+    None
+}
+
+/// The first field that differs, in canonical-render order.
+fn manifest_difference(a: &Closure, b: &Closure) -> Option<String> {
+    if a.tag != b.tag {
+        return Some("tag".to_string());
+    }
+    if a.repo_commit != b.repo_commit {
+        return Some("repo_commit".to_string());
+    }
+    if a.created_at != b.created_at {
+        return Some("created_at".to_string());
+    }
+    if let Some(field) = entries_difference("source", &a.source, &b.source) {
+        return Some(field);
+    }
+    if a.source_digest != b.source_digest {
+        return Some("source_digest".to_string());
+    }
+    match (&a.configuration, &b.configuration) {
+        (None, None) => {}
+        (Some(_), None) | (None, Some(_)) => return Some("configuration".to_string()),
+        (Some(x), Some(y)) => {
+            if let Some(field) = configuration_difference(x, y) {
+                return Some(field);
+            }
+        }
+    }
+    match (&a.runtime, &b.runtime) {
+        (None, None) => {}
+        (Some(_), None) | (None, Some(_)) => return Some("runtime".to_string()),
+        (Some(x), Some(y)) => {
+            if let Some(field) = runtime_difference(x, y) {
+                return Some(field);
+            }
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------

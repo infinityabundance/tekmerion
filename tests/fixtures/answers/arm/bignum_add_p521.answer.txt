@@ -1610,15 +1610,22 @@ in
 (* full hypothesis set:                                                       *)
 (*                                                                           *)
 (*   closed        the attempt returned a theorem; nothing to report.         *)
-(*   mathematical  the slice was too small (SAT, a sanity-preserving failure *)
-(*                 of the stronger obligation); retry the full set.         *)
+(*   mathematical  the slice was too small, and the failure carries a shape *)
+(*                 on the explicit allow-list below (a SAT report or the     *)
+(*                 named slice-too-strong marker); retry the full set.       *)
 (*   unsupported   the input is outside the close's shape; report and stop.  *)
 (*   resource      out of memory, stack overflow, timeout, or a signal       *)
 (*                 death (exit >= 128, or 124 from a timeout wrapper);       *)
-(*                 report and stop.  Retrying at a larger budget is a        *)
+(*                 report and stop.  Retrying at a larger budget is a       *)
 (*                 decision recorded elsewhere, never an automatic retry.     *)
-(*   internal      a kernel/procedure sanity failure or an unknown exception; *)
-(*                 report and re-raise.                                       *)
+(*   internal      a kernel/procedure sanity failure, a Failure whose text    *)
+(*                 is not on the allow-list (a broken rewrite, a missing     *)
+(*                 lemma, a violated invariant all look like this), or an    *)
+(*                 unknown exception; report and re-raise.                    *)
+(*                                                                           *)
+(* A generic `Failure' is *not* evidence of a mathematical failure.  Only a   *)
+(* message matching a recognised mathematical shape retries; everything else *)
+(* is internal and propagates.                                               *)
 (*                                                                           *)
 (* Classification is a separate, pure function so it can be tested outside   *)
 (* HOL Light: `tests/bridge_failure_selftest.sh` extracts the block between  *)
@@ -1626,10 +1633,36 @@ in
 (* ------------------------------------------------------------------------- *)
 
 (* BEGIN BRIDGE_FAILURE_STANDALONE *)
+let bridge_failure_has_prefix p s =
+  let lp = String.length p in
+  String.length s >= lp && String.sub s 0 lp = p
+in
+let bridge_failure_contains needle s =
+  let ln = String.length needle and n = String.length s in
+  let rec go i =
+    if i + ln > n then false
+    else if String.sub s i ln = needle then true
+    else go (i + 1) in
+  ln = 0 || go 0
+in
+(* The *allow-list* of recognised mathematical failure shapes.  A failure    *)
+(* retries the full hypothesis set only when its message matches one of      *)
+(* these; `None' means "not a recognised mathematical failure".              *)
+(*                                                                           *)
+(*   solver-sat        cadical reported SATISFIABLE (exit 10): the slice was *)
+(*                     too strong to prove, which is a mathematical outcome. *)
+(*   slice-too-strong  an explicit marker that a slice obligation was a     *)
+(*                     strictly stronger instance of the goal.              *)
+let bridge_math_failure_shape s =
+  if bridge_failure_has_prefix "CSAT: cadical did not report UNSAT, exit 10" s
+  then Some "solver-sat"
+  else if bridge_failure_contains "SATISFIABLE" s then Some "solver-sat"
+  else if bridge_failure_has_prefix "SLICE_TOO_STRONG" s then
+    Some "slice-too-strong"
+  else None
+in
 let bridge_failure_class ?(timeout=false) (e:exn) =
-  let has_prefix p s =
-    let lp = String.length p in
-    String.length s >= lp && String.sub s 0 lp = p in
+  let has_prefix = bridge_failure_has_prefix in
   let exit_code s =
     let needle = "exit " and n = String.length s in
     let ln = String.length needle in
@@ -1665,7 +1698,10 @@ let bridge_failure_class ?(timeout=false) (e:exn) =
          | Some 124 -> `Resource ("timeout", "exit 124")
          | Some rc when rc >= 128 ->
              `Resource ("signal", "exit " ^ string_of_int rc)
-         | _ -> `Mathematical s)
+         | _ ->
+             (match bridge_math_failure_shape s with
+              | Some _ -> `Mathematical s
+              | None -> `Internal ("unrecognised Failure: " ^ s)))
   | e -> `Internal (Printexc.to_string e)
 in
 (* The fallback counter is part of the tested surface: a resource exhaustion
