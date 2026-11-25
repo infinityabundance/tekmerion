@@ -216,11 +216,20 @@ fn arg_value<'a>(args: &'a [String], key: &str) -> Option<&'a str> {
         .map(String::as_str)
 }
 
+/// Candidates for extracting `.text`, in preference order per architecture.
+///
+/// The tool is chosen by **trial**, not by name: a candidate is used only if it
+/// exits successfully and produces non-empty output on the actual object. The
+/// previous code hard-coded `llvm-objcopy` for ARM, which is absent from the CI
+/// image (the same class of defect XVII.A1 fixed for the disassembler).
+const ARM_OBJCOPY: [&str; 3] = ["aarch64-linux-gnu-objcopy", "llvm-objcopy", "objcopy"];
+const X86_OBJCOPY: [&str; 2] = ["objcopy", "llvm-objcopy"];
+
 fn copy_text(obj: &Path, arch: &str) -> Result<Vec<u8>, String> {
-    let tool = if arch == "arm" {
-        "llvm-objcopy"
+    let candidates: &[&str] = if arch == "arm" {
+        &ARM_OBJCOPY
     } else {
-        "objcopy"
+        &X86_OBJCOPY
     };
     let out = std::env::temp_dir().join(format!(
         "tek-dropin-{}-{}",
@@ -229,18 +238,41 @@ fn copy_text(obj: &Path, arch: &str) -> Result<Vec<u8>, String> {
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default()
     ));
-    let status = Command::new(tool)
-        .args(["-O", "binary", "--only-section=.text"])
-        .arg(obj)
-        .arg(&out)
-        .status()
-        .map_err(|e| format!("{tool}: {e}"))?;
-    if !status.success() {
-        return Err(format!("{tool} failed on {}", obj.display()));
+    let mut tried = Vec::new();
+    for tool in candidates {
+        let _ = fs::remove_file(&out);
+        let status = match Command::new(tool)
+            .args(["-O", "binary", "--only-section=.text"])
+            .arg(obj)
+            .arg(&out)
+            .status()
+        {
+            Ok(s) => s,
+            Err(e) => {
+                tried.push(format!("{tool}: {e}"));
+                continue;
+            }
+        };
+        if !status.success() {
+            tried.push(format!("{tool}: exit {:?}", status.code()));
+            continue;
+        }
+        match fs::read(&out) {
+            Ok(bytes) if !bytes.is_empty() => {
+                let _ = fs::remove_file(&out);
+                return Ok(bytes);
+            }
+            Ok(_) => tried.push(format!("{tool}: empty .text")),
+            Err(e) => tried.push(format!("{tool}: {e}")),
+        }
     }
-    let bytes = fs::read(&out).map_err(|e| e.to_string())?;
     let _ = fs::remove_file(&out);
-    Ok(bytes)
+    Err(format!(
+        "no objcopy could extract .text from {}: {}\n\
+         install binutils-aarch64-linux-gnu (or llvm) and retry",
+        obj.display(),
+        tried.join("; ")
+    ))
 }
 
 fn mclist(bytes: &[u8], arch: &str) -> Result<String, String> {
