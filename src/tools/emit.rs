@@ -1254,12 +1254,45 @@ fn bench(repo: &Path) -> PathBuf {
     repo.join(".bench")
 }
 
-fn s2n(repo: &Path) -> PathBuf {
+/// The benchmark tree (`<repo>/.bench/s2n-bignum`), exposed so the fixture
+/// recorder and the parity tests locate objects exactly as the emitter does.
+pub fn s2n_root(repo: &Path) -> PathBuf {
     bench(repo).join("s2n-bignum")
 }
 
+fn s2n(repo: &Path) -> PathBuf {
+    s2n_root(repo)
+}
+
+/// Environment variable naming an alternate benchmark corpus (`problems.json`).
+///
+/// Resolution, in order:
+///
+/// 1. `<repo>/.bench/problems.json` when it exists — a live corpus always wins,
+///    so a committed fixture can never silently shadow the pin;
+/// 2. `TEKMERION_PROBLEMS` when it is set and non-empty — this is how a
+///    bench-free checkout (CI) reaches `tests/fixtures/problems.json`;
+/// 3. `<repo>/.bench/problems.json` otherwise, so a caller with neither sees an
+///    error naming the historical default path.
+///
+/// With the variable unset, resolution is exactly the pre-XVI.A behaviour.
+/// XVI.C1 must bind this variable into the freeze configuration once that work
+/// lands; see `research/receipts/ix72-offline-inputs.md`.
+pub const PROBLEMS_ENV: &str = "TEKMERION_PROBLEMS";
+
+fn problems_path(repo: &Path) -> PathBuf {
+    let live = bench(repo).join("problems.json");
+    if live.is_file() {
+        return live;
+    }
+    match std::env::var_os(PROBLEMS_ENV) {
+        Some(value) if !value.is_empty() => PathBuf::from(value),
+        _ => live,
+    }
+}
+
 fn load_problems(repo: &Path) -> Result<Json> {
-    let path = bench(repo).join("problems.json");
+    let path = problems_path(repo);
     let bytes = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     json::parse(&bytes).map_err(|e| EmitError::Other(format!("corpus: {e}")))
 }
@@ -1334,7 +1367,16 @@ fn x86_family(op: &str, task: &str) -> Option<String> {
     Some(family.to_string())
 }
 
-fn object_for(arch: &str, op: &str, family: &str, repo: &Path) -> Result<PathBuf> {
+/// Locate the unique `<repo>/.bench/s2n-bignum/<arch>/*/bignum_<op>_<family>.o`.
+///
+/// Public so the fixture recorder and the corpus-agreement test use the same
+/// search as the emitter rather than a second copy of it.
+pub fn object_for(
+    arch: &str,
+    op: &str,
+    family: &str,
+    repo: &Path,
+) -> std::result::Result<PathBuf, EmitError> {
     let root = s2n(repo).join(arch);
     let wanted = format!("bignum_{op}_{family}.o");
     let mut matches: Vec<PathBuf> = Vec::new();

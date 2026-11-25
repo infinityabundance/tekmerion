@@ -2992,15 +2992,22 @@ Three tests fail in CI because they need `.bench/problems.json` (and the tree ar
 `arm_answers_are_byte_identical`, `x86_answers_are_byte_identical`,
 `sealed_freeze_verification_end_to_end`.
 
-- [ ] **XVI.A1.** Commit **input** fixtures so the offline suite genuinely exercises what it
+- [x] **XVI.A1.** Commit **input** fixtures so the offline suite genuinely exercises what it
   claims: the task entries the emitter needs (`query`, `inlined_locations`, family/op) for the 27
   tasks, in `tests/fixtures/problems.json`, with a test asserting the fixture and the live
   `.bench/problems.json` agree on those 27 entries whenever `.bench` is present.
-- [ ] **XVI.A2.** No silent early returns. If a fixture is missing, the test must **fail** with a
+- [x] **XVI.A2.** No silent early returns. If a fixture is missing, the test must **fail** with a
   message saying which fixture, not skip. Skips are only allowed for things that are genuinely
   machine-specific (e.g. a different HOL Light build), and must print a reason.
-- [ ] **XVI.A3.** Reproduce the CI condition locally (bench-free copy of the tree) and show
+- [x] **XVI.A3.** Reproduce the CI condition locally (bench-free copy of the tree) and show
   `cargo test --offline` green there, then push and confirm the workflow.
+
+**Receipt:** `research/receipts/ix72-offline-inputs.md`. The corpus is only the
+first missing input: the emitter also needs the 27 ELF objects and the three
+Cadical sources, so those are committed too (`tests/fixtures/bench/`). The
+override is `TEKMERION_PROBLEMS` (`src/tools/emit.rs`), a fallback that never
+shadows a live `.bench/problems.json`; XVI.C1 must bind it once XVI.C has a
+variable list (none exists yet).
 
 ## XVI.B — Identity-bound comparison must be distinguishable from a diagnostic one
 

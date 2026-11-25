@@ -4,7 +4,7 @@
 //! accepts exactly RFC 8259 JSON (including `\uXXXX` and surrogate pairs) and
 //! refuses trailing bytes, duplicate object keys and unescaped control bytes.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Json {
@@ -44,6 +44,60 @@ impl Json {
             _ => None,
         }
     }
+}
+
+/// The top-level members of a JSON object as `(decoded key, raw value bytes)`.
+///
+/// The value slices borrow from `bytes` and preserve the source spelling
+/// exactly: whitespace, indentation, escape sequences and number formatting are
+/// untouched. That is what lets a recorded fixture be compared **byte for byte**
+/// with the live corpus (XVI.A1); `parse` deliberately does not preserve them.
+///
+/// The input must be a single JSON object with no trailing bytes and no
+/// duplicate keys, matching [`parse`].
+pub fn top_level_members(bytes: &[u8]) -> Result<Vec<(String, &[u8])>, String> {
+    let s = std::str::from_utf8(bytes).map_err(|_| "input is not UTF-8".to_string())?;
+    let mut p = Parser {
+        s: s.as_bytes(),
+        i: 0,
+    };
+    p.ws();
+    p.eat(b'{')?;
+    p.ws();
+    let mut out: Vec<(String, &[u8])> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    if p.peek() == Some(b'}') {
+        p.i += 1;
+    } else {
+        loop {
+            p.ws();
+            let key = p.string()?;
+            p.ws();
+            p.eat(b':')?;
+            p.ws();
+            let start = p.i;
+            p.skip_value()?;
+            let end = p.i;
+            if !seen.insert(key.clone()) {
+                return Err(format!("duplicate object key {key:?}"));
+            }
+            out.push((key, &p.s[start..end]));
+            p.ws();
+            match p.peek() {
+                Some(b',') => p.i += 1,
+                Some(b'}') => {
+                    p.i += 1;
+                    break;
+                }
+                _ => return Err(format!("expected , or }} at offset {}", p.i)),
+            }
+        }
+    }
+    p.ws();
+    if p.i != p.s.len() {
+        return Err(format!("trailing bytes at offset {}", p.i));
+    }
+    Ok(out)
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Json, String> {
@@ -258,6 +312,70 @@ impl<'a> Parser<'a> {
         Ok(v)
     }
 
+    /// Advance past one JSON value without materialising it. Strings are
+    /// decoded only far enough to find their closing quote, so braces and
+    /// brackets inside strings do not confuse the scan.
+    fn skip_value(&mut self) -> Result<(), String> {
+        match self.peek() {
+            Some(b'n') => self.lit(b"null", Json::Null).map(|_| ()),
+            Some(b't') => self.lit(b"true", Json::Bool(true)).map(|_| ()),
+            Some(b'f') => self.lit(b"false", Json::Bool(false)).map(|_| ()),
+            Some(b'"') => self.string().map(|_| ()),
+            Some(b'[') => {
+                self.eat(b'[')?;
+                self.ws();
+                if self.peek() == Some(b']') {
+                    self.i += 1;
+                    return Ok(());
+                }
+                loop {
+                    self.ws();
+                    self.skip_value()?;
+                    self.ws();
+                    match self.peek() {
+                        Some(b',') => self.i += 1,
+                        Some(b']') => {
+                            self.i += 1;
+                            return Ok(());
+                        }
+                        _ => return Err(format!("expected , or ] at offset {}", self.i)),
+                    }
+                }
+            }
+            Some(b'{') => {
+                self.eat(b'{')?;
+                self.ws();
+                if self.peek() == Some(b'}') {
+                    self.i += 1;
+                    return Ok(());
+                }
+                loop {
+                    self.ws();
+                    self.string()?;
+                    self.ws();
+                    self.eat(b':')?;
+                    self.ws();
+                    self.skip_value()?;
+                    self.ws();
+                    match self.peek() {
+                        Some(b',') => self.i += 1,
+                        Some(b'}') => {
+                            self.i += 1;
+                            return Ok(());
+                        }
+                        _ => return Err(format!("expected , or }} at offset {}", self.i)),
+                    }
+                }
+            }
+            Some(b'-' | b'0'..=b'9') => self.number().map(|_| ()),
+            Some(c) => Err(format!(
+                "unexpected byte {:?} at offset {}",
+                c as char, self.i
+            )),
+            None => Err("unexpected end of input".to_string()),
+        }
+    }
+
     fn number(&mut self) -> Result<Json, String> {
         let start = self.i;
         if self.peek() == Some(b'-') {
@@ -308,5 +426,30 @@ mod tests {
     fn decodes_surrogate_pairs() {
         let j = parse(br#""\ud83d\ude00""#).unwrap();
         assert_eq!(j.as_str().unwrap(), "\u{1F600}");
+    }
+
+    #[test]
+    fn top_level_members_preserve_the_source_bytes() {
+        let src = br#"{
+  "a b": {"x": [1, { "y": "}" }],
+    "z": 2 },
+  "q": "a\"b"
+}"#;
+        let members = top_level_members(src).unwrap();
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[0].0, "a b");
+        assert_eq!(
+            std::str::from_utf8(members[0].1).unwrap(),
+            "{\"x\": [1, { \"y\": \"}\" }],\n    \"z\": 2 }"
+        );
+        assert_eq!(members[1].0, "q");
+        assert_eq!(std::str::from_utf8(members[1].1).unwrap(), "\"a\\\"b\"");
+    }
+
+    #[test]
+    fn top_level_members_refuse_duplicates_and_trailing_bytes() {
+        assert!(top_level_members(br#"{"a":1,"a":2}"#).is_err());
+        assert!(top_level_members(br#"{} x"#).is_err());
+        assert!(top_level_members(br#"[]"#).is_err());
     }
 }

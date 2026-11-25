@@ -1,9 +1,16 @@
 //! Byte-identity tests for the Rust emitters.
 //!
-//! The reference answers under `.bench/dropin-gen/answers{,-arm}` were produced
-//! by the Python emitters at the pinned inputs. For every task the Rust emitter
-//! in `--mode answer` must reproduce the file byte for byte, under the same
-//! guard mode and manifest. The tests skip themselves when `.bench` is absent.
+//! The reference answers are tracked under `tests/fixtures/answers/`. For every
+//! task the Rust emitter in `--mode answer` must reproduce the file byte for
+//! byte, under the same guard mode and manifest. The emitter's *inputs* are also
+//! tracked (`tests/fixtures/problems.json` and `tests/fixtures/bench/`), so the
+//! suite runs for real in a bench-free checkout: it materialises those inputs
+//! into a temporary `.bench` and points the corpus at the fixture through
+//! `TEKMERION_PROBLEMS` (XVI.A; `research/receipts/ix72-offline-inputs.md`).
+//!
+//! Missing fixtures are failures, not skips (XVI.A2). The only early returns
+//! left are for genuinely machine-specific tools (`git`, `ocaml`) and they print
+//! why.
 //!
 //! IX.63 boundary: `tools/csat_lib.ml` gained the backward-closure LRAT trim, so
 //! the inlined answer text changed. The `.bench` reference answers were
@@ -18,13 +25,17 @@
 //! phase-contract tests below prove by stripping every marker and comparing to
 //! the answer the same binary emits in `--mode answer`.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Once;
 
+use tekmerion::tools::corpus;
 use tekmerion::tools::emit;
 use tekmerion::tools::guard::{self, default_held_out, GuardPolicy, Manifest, Mode};
+use tekmerion::tools::json;
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -53,21 +64,69 @@ fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn answers_x86() -> PathBuf {
-    repo().join(".bench/dropin-gen/answers")
-}
-
-fn answers_arm() -> PathBuf {
-    repo().join(".bench/dropin-gen/answers-arm")
-}
-
-/// Tracked reference answers. `.bench` is git-ignored, so a comparison against
-/// it protects only this machine; the fixtures are what CI can check. They are
-/// re-recorded deliberately when the emitted library text changes (IX.63 added
-/// the LRAT trimmer, which every answer inlines) — see
+/// Tracked reference answers. These are the only reference the suite accepts:
+/// `.bench/dropin-gen` protects just this machine, while the fixtures travel
+/// with the tree. They are re-recorded deliberately when the emitted library
+/// text changes (IX.63 added the LRAT trimmer, which every answer inlines) — see
 /// `research/receipts/ix68-ci-and-integrity.md`.
 fn answers_fixture(arch: &str) -> PathBuf {
     repo().join("tests/fixtures/answers").join(arch)
+}
+
+/// `tests/fixtures/problems.json`, the committed 27-entry corpus excerpt.
+fn problems_fixture() -> PathBuf {
+    corpus::problems_fixture(&repo())
+}
+
+/// Fail, naming the fixture, when the committed corpus excerpt is absent.
+/// XVI.A2: a missing input is a failure, never a silent skip.
+fn require_problems_fixture() -> PathBuf {
+    let path = problems_fixture();
+    assert!(
+        path.is_file(),
+        "missing input fixture {}: regenerate it with `cargo run --release \
+         --offline --bin record_problems_fixture -- --repo {}` (see \
+         research/receipts/ix72-offline-inputs.md)",
+        path.display(),
+        repo().display()
+    );
+    path
+}
+
+/// Point the emitter at the committed corpus for the rest of this process.
+///
+/// `TEKMERION_PROBLEMS` is a *fallback*: a repo-local `.bench/problems.json`
+/// always wins, so this cannot shadow the live pin, and the synthetic-corpus
+/// tests (which write their own `problems.json`) are unaffected. It is set once
+/// because the value is the same for every test that needs it.
+fn use_fixture_corpus() {
+    let fixture = require_problems_fixture();
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| std::env::set_var(emit::PROBLEMS_ENV, fixture));
+}
+
+/// Materialise `tests/fixtures/bench/` into a temporary `.bench`, then add the
+/// two tracked library texts under `tools/`. The result is a repository root the
+/// emitter can read without the live 20 GB bench; `problems.json` is supplied by
+/// `TEKMERION_PROBLEMS` instead, so the override is genuinely load-bearing.
+fn fixture_bench(tag: &str) -> Tmp {
+    let fixtures = repo().join("tests/fixtures");
+    let tmp = Tmp::new(tag);
+    corpus::materialise_bench_inputs(&fixtures, tmp.path()).unwrap_or_else(|e| {
+        panic!(
+            "missing input fixture {}/bench: {e}; regenerate it with \
+             `cargo run --release --offline --bin record_problems_fixture` \
+             (see research/receipts/ix72-offline-inputs.md)",
+            fixtures.display()
+        )
+    });
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    for name in ["csat_lib.ml", "bridge.ml"] {
+        let from = repo().join("tools").join(name);
+        fs::copy(&from, tools.join(name)).unwrap_or_else(|e| panic!("{}: {e}", from.display()));
+    }
+    tmp
 }
 
 /// Set `TEKMERION_RECORD_ANSWERS=1` to (re-)record the fixtures instead of
@@ -76,19 +135,17 @@ fn recording_answers() -> bool {
     std::env::var_os("TEKMERION_RECORD_ANSWERS").is_some()
 }
 
-/// The tracked fixture when it exists, otherwise the git-ignored copy.
-fn reference_answer(arch: &str, legacy_dir: &Path, base: &str) -> PathBuf {
-    let fixture = answers_fixture(arch).join(format!("{base}.answer.txt"));
-    if fixture.is_file() {
-        fixture
-    } else {
-        legacy_dir.join(format!("{base}.answer.txt"))
-    }
-}
-
-/// True when either the fixtures or the legacy copy can serve as a reference.
-fn have_reference(arch: &str, legacy_dir: &Path) -> bool {
-    recording_answers() || answers_fixture(arch).is_dir() || legacy_dir.is_dir()
+/// The tracked fixture answer. A missing file is a failure naming the path, not
+/// a fallback to the git-ignored `.bench` copy (XVI.A2).
+fn reference_answer(arch: &str, base: &str) -> PathBuf {
+    let path = answers_fixture(arch).join(format!("{base}.answer.txt"));
+    assert!(
+        path.is_file(),
+        "missing tracked reference answer {}: re-record with \
+         TEKMERION_RECORD_ANSWERS=1 (see research/receipts/ix68-ci-and-integrity.md)",
+        path.display()
+    );
+    path
 }
 
 fn sealed_manifest_path() -> PathBuf {
@@ -121,38 +178,9 @@ fn spent_policy() -> GuardPolicy {
     .expect("spent policy")
 }
 
-const X86_TASKS: [&str; 9] = [
-    "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
-    "x86.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT",
-    "x86.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT",
-    "x86.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
-    "x86.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT",
-    "x86.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT",
-    "x86.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT",
-    "x86.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT",
-    "x86.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT",
-];
+const X86_TASKS: [&str; 9] = corpus::X86_TASKS;
 
-const ARM_TASKS: [&str; 18] = [
-    "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
-    "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT",
-    "arm.bignum_add_p256k1.BIGNUM_ADD_P256K1_CORRECT",
-    "arm.bignum_add_p384.BIGNUM_ADD_P384_CORRECT",
-    "arm.bignum_add_p521.BIGNUM_ADD_P521_CORRECT",
-    "arm.bignum_add_sm2.BIGNUM_ADD_SM2_CORRECT",
-    "arm.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
-    "arm.bignum_neg_p256.BIGNUM_NEG_P256_CORRECT",
-    "arm.bignum_neg_p256k1.BIGNUM_NEG_P256K1_CORRECT",
-    "arm.bignum_neg_p384.BIGNUM_NEG_P384_CORRECT",
-    "arm.bignum_neg_p521.BIGNUM_NEG_P521_CORRECT",
-    "arm.bignum_neg_sm2.BIGNUM_NEG_SM2_CORRECT",
-    "arm.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT",
-    "arm.bignum_sub_p256.BIGNUM_SUB_P256_CORRECT",
-    "arm.bignum_sub_p256k1.BIGNUM_SUB_P256K1_CORRECT",
-    "arm.bignum_sub_p384.BIGNUM_SUB_P384_CORRECT",
-    "arm.bignum_sub_p521.BIGNUM_SUB_P521_CORRECT",
-    "arm.bignum_sub_sm2.BIGNUM_SUB_SM2_CORRECT",
-];
+const ARM_TASKS: [&str; 18] = corpus::ARM_TASKS;
 
 /// Assert byte equality, reporting the first differing offset.
 fn assert_identical(task: &str, got: &[u8], want: &[u8]) {
@@ -178,16 +206,15 @@ fn assert_identical(task: &str, got: &[u8], want: &[u8]) {
 
 #[test]
 fn x86_answers_are_byte_identical() {
-    if !have_reference("x86", &answers_x86()) {
-        return;
-    }
+    use_fixture_corpus();
+    let bench = fixture_bench("x86-answers");
     let policy = sealed_policy();
     let mut count = 0;
     for task in X86_TASKS {
         let parsed = guard::parse_task_id(task).expect("declared task id");
-        let info = emit::build_x86(&parsed.op, task, &policy, &repo())
+        let info = emit::build_x86(&parsed.op, task, &policy, bench.path())
             .unwrap_or_else(|e| panic!("{task}: {e}"));
-        let text = emit::inlined_answer(&info.tactic, &repo()).expect("answer");
+        let text = emit::inlined_answer(&info.tactic, bench.path()).expect("answer");
         let base = format!("bignum_{}_{}", parsed.op, parsed.family);
         if recording_answers() {
             let dir = answers_fixture("x86");
@@ -196,7 +223,7 @@ fn x86_answers_are_byte_identical() {
             count += 1;
             continue;
         }
-        let path = reference_answer("x86", &answers_x86(), &base);
+        let path = reference_answer("x86", &base);
         let want = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert_identical(task, text.as_bytes(), &want);
         count += 1;
@@ -206,16 +233,15 @@ fn x86_answers_are_byte_identical() {
 
 #[test]
 fn arm_answers_are_byte_identical() {
-    if !have_reference("arm", &answers_arm()) {
-        return;
-    }
+    use_fixture_corpus();
+    let bench = fixture_bench("arm-answers");
     let policy = spent_policy();
     let mut count = 0;
     for task in ARM_TASKS {
         let parsed = guard::parse_task_id(task).expect("declared task id");
-        let info = emit::build_arm(&parsed.op, task, &policy, &repo())
+        let info = emit::build_arm(&parsed.op, task, &policy, bench.path())
             .unwrap_or_else(|e| panic!("{task}: {e}"));
-        let text = emit::inlined_answer(&info.tactic, &repo()).expect("answer");
+        let text = emit::inlined_answer(&info.tactic, bench.path()).expect("answer");
         let base = format!("bignum_{}_{}", parsed.op, parsed.family);
         if recording_answers() {
             let dir = answers_fixture("arm");
@@ -224,7 +250,7 @@ fn arm_answers_are_byte_identical() {
             count += 1;
             continue;
         }
-        let path = reference_answer("arm", &answers_arm(), &base);
+        let path = reference_answer("arm", &base);
         let want = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert_identical(task, text.as_bytes(), &want);
         count += 1;
@@ -234,13 +260,12 @@ fn arm_answers_are_byte_identical() {
 
 #[test]
 fn arm_dev_mode_refuses_a_spent_proof_file() {
-    if !answers_arm().is_dir() {
-        return;
-    }
+    use_fixture_corpus();
+    let bench = fixture_bench("arm-dev");
     let policy = spent_policy();
     let task = "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT";
-    let info = emit::build_arm("add", task, &policy, &repo()).expect("build");
-    match emit::dev_script_arm(&info, &policy, &repo()) {
+    let info = emit::build_arm("add", task, &policy, bench.path()).expect("build");
+    match emit::dev_script_arm(&info, &policy, bench.path()) {
         Err(e) => assert!(
             e.to_string().contains("never readable"),
             "unexpected dev refusal: {e}"
@@ -251,13 +276,12 @@ fn arm_dev_mode_refuses_a_spent_proof_file() {
 
 #[test]
 fn x86_dev_mode_refuses_a_sealed_proof_file() {
-    if !answers_x86().is_dir() {
-        return;
-    }
+    use_fixture_corpus();
+    let bench = fixture_bench("x86-dev");
     let policy = sealed_policy();
     let task = "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
-    let info = emit::build_x86("add", task, &policy, &repo()).expect("build");
-    match emit::dev_script_x86(&info, &policy, &repo()) {
+    let info = emit::build_x86("add", task, &policy, bench.path()).expect("build");
+    match emit::dev_script_x86(&info, &policy, bench.path()) {
         Err(e) => assert!(
             e.to_string().contains("never readable"),
             "unexpected dev refusal: {e}"
@@ -271,12 +295,12 @@ fn x86_dev_mode_refuses_a_sealed_proof_file() {
 /// answer byte for byte.
 #[test]
 fn sealed_freeze_verification_end_to_end() {
-    if !have_reference("x86", &answers_x86()) {
-        return;
-    }
+    use_fixture_corpus();
     if Command::new("git").arg("--version").output().is_err() {
+        eprintln!("skipping: `git` is not on PATH; the freeze verifier shells out to it");
         return;
     }
+    let bench = fixture_bench("freeze-bench");
     let tmp = Tmp::new("freeze");
     let root = tmp.path();
     fs::create_dir_all(root.join("tools")).unwrap();
@@ -287,7 +311,7 @@ fn sealed_freeze_verification_end_to_end() {
         )
         .unwrap();
     }
-    std::os::unix::fs::symlink(repo().join(".bench"), root.join(".bench")).unwrap();
+    std::os::unix::fs::symlink(bench.path().join(".bench"), root.join(".bench")).unwrap();
 
     let git = |args: &[&str]| {
         let out = Command::new("git")
@@ -338,8 +362,104 @@ fn sealed_freeze_verification_end_to_end() {
     .expect("frozen tree must be accepted");
     let info = emit::build_x86("add", task, &policy, root).expect("build");
     let text = emit::inlined_answer(&info.tactic, root).expect("answer");
-    let want = fs::read(reference_answer("x86", &answers_x86(), "bignum_add_p25519")).unwrap();
+    let want = fs::read(reference_answer("x86", "bignum_add_p25519")).unwrap();
     assert_identical(task, text.as_bytes(), &want);
+}
+
+/// XVI.A1: committed inputs must not rot away from the pin. The fixture must
+/// always hold exactly the 27 covered entries; when the live bench is present,
+/// each entry must be **byte-identical** to its committed copy, and so must the
+/// object and Cadical fixtures. When the bench is absent those comparisons print
+/// why they could not run — the live pin is genuinely unavailable on that
+/// machine — but the fixture's own shape is still asserted.
+#[test]
+fn fixture_inputs_match_the_live_bench_when_present() {
+    let fixture = require_problems_fixture();
+    let fixture_bytes = fs::read(&fixture).expect("fixture corpus");
+    let fixture_members = json::top_level_members(&fixture_bytes).expect("parse fixture corpus");
+    assert_eq!(
+        fixture_members.len(),
+        corpus::tasks().count(),
+        "the fixture must hold exactly the covered tasks"
+    );
+    let fixture_keys: BTreeSet<&str> = fixture_members
+        .iter()
+        .map(|(key, _)| key.as_str())
+        .collect();
+    let expected_keys: BTreeSet<&str> = corpus::tasks().collect();
+    assert_eq!(
+        fixture_keys, expected_keys,
+        "fixture key set differs from the covered task set"
+    );
+
+    let live = repo().join(".bench/problems.json");
+    if live.is_file() {
+        let live_bytes = fs::read(&live).expect("live corpus");
+        let live_members = json::top_level_members(&live_bytes).expect("parse live corpus");
+        let live_by_key: BTreeMap<&str, &[u8]> = live_members
+            .iter()
+            .map(|(key, value)| (key.as_str(), *value))
+            .collect();
+        for (key, value) in &fixture_members {
+            let want = live_by_key
+                .get(key.as_str())
+                .unwrap_or_else(|| panic!("live corpus has no entry for {key}"));
+            assert_identical(key, value, want);
+        }
+    } else {
+        eprintln!(
+            "skipping live-corpus agreement: {} is absent (bench-free tree)",
+            live.display()
+        );
+    }
+
+    let bench = corpus::bench_fixture(&repo());
+    let live_s2n = repo().join(".bench/s2n-bignum");
+    if live_s2n.is_dir() {
+        compare_tree(&bench.join("s2n-bignum"), &live_s2n, Path::new(""));
+    } else {
+        eprintln!(
+            "skipping object-fixture agreement: {} is absent (bench-free tree)",
+            live_s2n.display()
+        );
+    }
+
+    let live_cadical = repo().join(".bench/hol-light/Cadical");
+    if live_cadical.is_dir() {
+        compare_tree(
+            &bench.join("hol-light/Cadical"),
+            &live_cadical,
+            Path::new(""),
+        );
+    } else {
+        eprintln!(
+            "skipping Cadical-fixture agreement: {} is absent (bench-free tree)",
+            live_cadical.display()
+        );
+    }
+}
+
+/// Every file under `fixture` must exist under `live` with identical bytes.
+fn compare_tree(fixture: &Path, live: &Path, rel: &Path) {
+    for entry in fs::read_dir(fixture).unwrap_or_else(|e| panic!("{}: {e}", fixture.display())) {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        let child = rel.join(entry.file_name());
+        if path.is_dir() {
+            compare_tree(&path, live, &child);
+            continue;
+        }
+        let other = live.join(&child);
+        let got = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let want = fs::read(&other).unwrap_or_else(|e| panic!("{}: {e}", other.display()));
+        assert_eq!(
+            got,
+            want,
+            "fixture {} is not byte-identical to {}",
+            path.display(),
+            other.display()
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -435,16 +555,16 @@ fn phase_markers_are_removable_and_the_class_is_mechanical() {
 
 #[test]
 fn phase_mode_is_the_normal_emitter_plus_marks() {
-    if !answers_arm().is_dir() {
-        return;
-    }
+    use_fixture_corpus();
+    let bench = fixture_bench("phase");
     let policy = spent_policy();
     let task = "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
     let parsed = guard::parse_task_id(task).expect("declared task id");
-    let info = emit::build_arm(&parsed.op, task, &policy, &repo()).expect("build");
-    let normal = emit::inlined_answer(&info.tactic, &repo()).expect("normal answer");
-    let phase = emit::inlined_answer_measured(&emit::phase_tactic(&info.tactic, task), &repo())
-        .expect("phase answer");
+    let info = emit::build_arm(&parsed.op, task, &policy, bench.path()).expect("build");
+    let normal = emit::inlined_answer(&info.tactic, bench.path()).expect("normal answer");
+    let phase =
+        emit::inlined_answer_measured(&emit::phase_tactic(&info.tactic, task), bench.path())
+            .expect("phase answer");
     assert_ne!(normal, phase);
     assert_eq!(
         answer_tactic(&phase),
@@ -504,9 +624,11 @@ fn ix69_slice_falls_back_to_the_full_set_and_the_prefix_names_the_task() {
 /// 2. The same round trip on the **tracked** `tools/csat_lib.ml` and
 ///    `tools/bridge.ml`, which are in git and therefore always present. This is
 ///    what fails if an anchor drifts in the real library.
-/// 3. The **real inlined set**, which includes `.bench/hol-light/Cadical/`.
-///    That half needs the bench and prints why it was skipped when it is
-///    absent, which is the offline CI case.
+/// 3. The **real inlined set**, which includes the Cadical sources. It reads
+///    the live `.bench/hol-light/Cadical/` when present and the committed
+///    `tests/fixtures/bench/hol-light/Cadical/` copy otherwise, so it runs
+///    offline rather than skipping (the two are pinned together by the
+///    live-agreement test).
 ///
 /// `--mode answer` never calls the instrumenter at all.
 #[test]
@@ -553,21 +675,23 @@ fn ix66_markers_are_additive_and_the_normal_answer_is_recovered() {
         emit::inlined_answer_from(tactic, &as_refs(&tracked))
     );
 
-    // 3. The real inlined set, which includes `.bench/hol-light/Cadical/`.
-    //    Needs the bench; skip it cleanly (and say why) when it is absent.
+    // 3. The real inlined set (the Cadical sources plus the tracked
+    //    libraries). The live bench is used when present; otherwise the
+    //    committed inputs under `tests/fixtures/bench` stand in — they are
+    //    pinned to the live bytes by
+    //    `fixture_inputs_match_the_live_bench_when_present`.
     let cadical = repo().join(".bench/hol-light/Cadical");
-    if !cadical.is_dir() {
-        eprintln!(
-            "skipping the real-source half: {} is absent (offline CI). The \
-             fixture and tracked-library halves above proved \
-             `deinstrument ∘ instrument = id`.",
-            cadical.display()
-        );
-        return;
-    }
+    let stand_in = if cadical.is_dir() {
+        None
+    } else {
+        Some(fixture_bench("ix66-real"))
+    };
+    let root = stand_in
+        .as_ref()
+        .map_or_else(repo, |tmp| tmp.path().to_path_buf());
     let real: Vec<(String, String)> = emit::ANSWER_SOURCES
         .iter()
-        .map(|rel| (rel.to_string(), read_repo_file(rel)))
+        .map(|rel| (rel.to_string(), read_source(&root, rel)))
         .collect();
     let real_phase = instrument_sources(&real);
     let measured = emit::inlined_answer_from(tactic, &as_refs(&real_phase));
@@ -578,7 +702,13 @@ fn ix66_markers_are_additive_and_the_normal_answer_is_recovered() {
 
 /// Read a repository-relative source file.
 fn read_repo_file(rel: &str) -> String {
-    let path = repo().join(rel);
+    read_source(&repo(), rel)
+}
+
+/// Read a source file relative to an arbitrary repository root (the live tree or
+/// a materialised fixture bench).
+fn read_source(root: &Path, rel: &str) -> String {
+    let path = root.join(rel);
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 

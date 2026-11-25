@@ -250,6 +250,10 @@ fn sealed_allows_declared_nine_ids() {
 #[test]
 fn sealed_allows_declared_nine_objects() {
     if !s2n().join("x86").is_dir() {
+        eprintln!(
+            "skipping: {} is absent (the s2n-bignum bench is not checked in)",
+            s2n().join("x86").display()
+        );
         return;
     }
     let mut objects = Vec::new();
@@ -257,7 +261,10 @@ fn sealed_allows_declared_nine_objects() {
         let (op, family) = task_parts(task);
         match x86_object(&op, &family) {
             Some(obj) => objects.push(obj),
-            None => return,
+            None => {
+                eprintln!("skipping: no unique x86 object for {op}/{family}");
+                return;
+            }
         }
     }
     let tmp = Tmp::new("sealed-objects");
@@ -524,6 +531,10 @@ fn spent_allows_only_listed_ids() {
 #[test]
 fn spent_allows_listed_object_and_refuses_unlisted() {
     if !s2n().join("x86").is_dir() {
+        eprintln!(
+            "skipping: {} is absent (the s2n-bignum bench is not checked in)",
+            s2n().join("x86").display()
+        );
         return;
     }
     let tmp = Tmp::new("spent-objects");
@@ -531,7 +542,10 @@ fn spent_allows_listed_object_and_refuses_unlisted() {
     let (op, family) = task_parts(NINE[0]);
     let obj = match x86_object(&op, &family) {
         Some(o) => o,
-        None => return,
+        None => {
+            eprintln!("skipping: no unique x86 object for {op}/{family}");
+            return;
+        }
     };
     let allowed = policy
         .check_object(&obj, Some(&s2n()))

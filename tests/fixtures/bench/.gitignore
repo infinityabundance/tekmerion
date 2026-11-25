@@ -1,0 +1,4 @@
+# The committed input fixtures include 27 ELF objects (~1.2 KB each). The root
+# `.gitignore` excludes `*.o` because they are build artefacts everywhere else;
+# under `tests/fixtures/bench` they are reviewed inputs, so re-include them.
+!*.o

@@ -259,11 +259,16 @@ fn human_union(proof: &Path) -> Vec<usize> {
 #[test]
 fn real_object_derivation_matches_the_reference_lists() {
     if !s2n().join("arm/p256").is_dir() {
+        eprintln!(
+            "skipping: {} is absent (the s2n-bignum bench is not checked in)",
+            s2n().join("arm/p256").display()
+        );
         return;
     }
     for op in ["add", "sub", "neg"] {
         let obj = s2n().join(format!("arm/p256/bignum_{op}_p256.o"));
         if !obj.exists() {
+            eprintln!("skipping: {} is absent", obj.display());
             return;
         }
         let steps_list = disasm::disassemble(&obj, None, None).expect("disassembly");
@@ -386,6 +391,10 @@ fn x86_object(family: &str, op: &str) -> PathBuf {
 #[test]
 fn x86_endbr64_is_trimmed_and_addresses_are_trimmed_relative() {
     if !s2n().join("x86/p384").is_dir() {
+        eprintln!(
+            "skipping: {} is absent (the s2n-bignum bench is not checked in)",
+            s2n().join("x86/p384").display()
+        );
         return;
     }
     let steps_x86 = disasm::disassemble(&x86_object("p384", "add"), None, None).unwrap();
@@ -398,6 +407,10 @@ fn x86_endbr64_is_trimmed_and_addresses_are_trimmed_relative() {
 #[test]
 fn x86_entry_offset_skips_the_push_prologue() {
     if !s2n().join("x86/p521").is_dir() {
+        eprintln!(
+            "skipping: {} is absent (the s2n-bignum bench is not checked in)",
+            s2n().join("x86/p521").display()
+        );
         return;
     }
     let full = disasm::disassemble(&x86_object("p521", "add"), None, None).unwrap();
@@ -412,6 +425,10 @@ fn x86_entry_offset_skips_the_push_prologue() {
 #[test]
 fn x86_real_accumulate_sets() {
     if !s2n().join("x86/p384").is_dir() {
+        eprintln!(
+            "skipping: {} is absent (the s2n-bignum bench is not checked in)",
+            s2n().join("x86/p384").display()
+        );
         return;
     }
     let expected: [(&str, &str, Vec<usize>); 3] = [
@@ -426,6 +443,7 @@ fn x86_real_accumulate_sets() {
     for (family, op, want) in expected {
         let obj = x86_object(family, op);
         if !obj.exists() {
+            eprintln!("skipping: {} is absent", obj.display());
             return;
         }
         let steps_x86 = disasm::disassemble(&obj, None, None).unwrap();
