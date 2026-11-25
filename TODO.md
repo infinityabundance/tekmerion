@@ -3156,13 +3156,15 @@ a project document; this section is the queue it implies.
   `format!("{arch}.{dir}.{op}")`, so two different objects with the same tuple compare equal.
   Introduce `ExecutableIdentity { architecture, object_sha256, code_sha256, semantics_sha256 }` and
   require it in `IdentityBoundComparison`.
-- [ ] **XVII.A3. The sealed-run guard must enforce the configuration check.** `freeze verify` does;
-  `guard::verify_freeze` does not. Integrate it, with a firing control.
-- [ ] **XVII.A4. Freeze tag validation must bind the whole committed manifest**, not selected
-  fields: a tag whose committed manifest differs anywhere must refuse.
-- [ ] **XVII.A5. Only recognised mathematical outcomes may retry.** Generic OCaml `Failure` must
-  not be assumed mathematical; the classifier needs an explicit allow-list of mathematical failure
-  shapes, everything else stopping.
+- [x] **XVII.A3. The sealed-run guard must enforce the configuration check.** `freeze verify` does;
+  `guard::verify_freeze` does not. Integrated it, with a firing control on the sealed emit
+  (`research/receipts/ix77-enforcement.md` §1).
+- [x] **XVII.A4. Freeze tag validation must bind the whole committed manifest**, not selected
+  fields: a tag whose committed manifest differs anywhere now refuses, naming the first differing
+  field (`research/receipts/ix77-enforcement.md` §2).
+- [x] **XVII.A5. Only recognised mathematical outcomes may retry.** Generic OCaml `Failure` is no
+  longer assumed mathematical; an explicit allow-list gates the retry and everything else is
+  `internal` (`research/receipts/ix77-enforcement.md` §3).
 - [ ] **XVII.A6. Statement identity from typed terms, not printed text.** Introduce a canonical
   serialization of the actual kernel term (structure, types, sharing-independent) and use it for
   `statement_digest`; keep the printed form only for display.
