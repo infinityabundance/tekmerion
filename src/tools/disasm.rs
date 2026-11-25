@@ -27,6 +27,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// The selection policy lives in its own file but is owned by this module.  It
+// is declared with an explicit path so `src/tools/mod.rs` does not need a
+// second entry for a policy that has no other caller (XIX.B2).
+#[path = "engine.rs"]
+pub mod engine;
+
 const DEFAULT_OBJDUMP_NAMES_ARM: &[&str] =
     &["aarch64-linux-gnu-objdump", "llvm-objdump", "objdump"];
 const DEFAULT_OBJDUMP_NAMES_X86: &[&str] = &["objdump", "llvm-objdump", "x86_64-linux-gnu-objdump"];
@@ -110,25 +116,36 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
-/// A `shutil.which` equivalent: an explicit path is checked directly, a bare
-/// name is searched on `PATH` (or on `search_path` when one is supplied, so
-/// tests can exercise selection without mutating the process environment).
-fn which_in(name: &str, search_path: Option<&OsStr>) -> Option<PathBuf> {
+/// Every executable path for `name` in the search path, in order (XIX.B1).
+///
+/// The previous helper returned only the first match per name, so a defective
+/// shim earlier on `PATH` shadowed a usable binary of the same name later on
+/// it.  An explicit path (containing `/`) is used as-is; a bare name is matched
+/// in *every* directory of the search path.
+fn which_all_in(name: &str, search_path: Option<&OsStr>) -> Vec<PathBuf> {
     if name.contains('/') {
         let p = PathBuf::from(name);
-        return if is_executable(&p) { Some(p) } else { None };
+        return if is_executable(&p) {
+            vec![p]
+        } else {
+            Vec::new()
+        };
     }
     let path = match search_path {
         Some(path) => path.to_os_string(),
-        None => std::env::var_os("PATH")?,
+        None => match std::env::var_os("PATH") {
+            Some(path) => path,
+            None => return Vec::new(),
+        },
     };
+    let mut out: Vec<PathBuf> = Vec::new();
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(name);
-        if is_executable(&candidate) {
-            return Some(candidate);
+        if is_executable(&candidate) && !out.contains(&candidate) {
+            out.push(candidate);
         }
     }
-    None
+    out
 }
 
 fn probe_fixture(arch: &str) -> Result<PathBuf, String> {
@@ -226,6 +243,9 @@ fn install_hint(arch: &str) -> &'static str {
 /// Try each candidate in order and return the first one that decodes the
 /// architecture's fixture. `explicit` (from `--objdump`) is still probed: a
 /// named tool that cannot decode is refused rather than trusted.
+///
+/// The decision itself is `engine::select`, a pure function over a supplied
+/// candidate list; this function only enumerates the paths and runs the probe.
 fn select_disassembler(
     explicit: Option<&str>,
     arch: &str,
@@ -241,26 +261,31 @@ fn select_disassembler(
         None => defaults.to_vec(),
     };
     let fixture = probe_fixture(arch)?;
-    let mut notes: Vec<String> = Vec::new();
-    for name in candidates.iter().copied().filter(|n| !n.is_empty()) {
-        match which_in(name, search_path) {
-            None => notes.push(format!("{name}: not found on PATH")),
-            Some(path) => match probe_candidate(&path, arch, &fixture) {
-                Ok(()) => return Ok((name.to_string(), path)),
-                Err(why) => notes.push(format!("{} ({why})", path.display())),
-            },
+    let requests: Vec<engine::CandidateName> = candidates
+        .iter()
+        .copied()
+        .filter(|n| !n.is_empty())
+        .map(|name| engine::CandidateName {
+            name: name.to_string(),
+            paths: which_all_in(name, search_path),
+        })
+        .collect();
+    let failure = |notes: Vec<String>| {
+        format!(
+            "disasm_steps: no working {arch} disassembler (probe fixture {}); tried:\n  {}\n{}\n\
+             pass --objdump PATH to name one explicitly",
+            fixture.display(),
+            notes.join("\n  "),
+            install_hint(arch)
+        )
+    };
+    match engine::select(&requests, |path| probe_candidate(path, arch, &fixture)) {
+        Ok(selection) => Ok((selection.name, selection.path)),
+        Err(engine::SelectionError::NoCandidate) => {
+            Err(failure(vec!["no candidate was given".to_string()]))
         }
+        Err(engine::SelectionError::NoWorking { notes }) => Err(failure(notes)),
     }
-    if notes.is_empty() {
-        notes.push("no candidate was given".to_string());
-    }
-    Err(format!(
-        "disasm_steps: no working {arch} disassembler (probe fixture {}); tried:\n  {}\n{}\n\
-         pass --objdump PATH to name one explicitly",
-        fixture.display(),
-        notes.join("\n  "),
-        install_hint(arch)
-    ))
 }
 
 /// The working disassembler for `arch`, selected by capability.

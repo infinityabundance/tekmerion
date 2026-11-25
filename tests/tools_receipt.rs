@@ -27,7 +27,7 @@ use tekmerion::tools::{curve_check, dropin};
 /// `0a135381…` (after IX.69 slicing and IX.70's opt-in algebraic route),
 /// `deafeb4d…` (after XVI.D's failure taxonomy), `ace0b868…` (after XVII.A5's
 /// mathematical-failure allow-list).
-const BRIDGE_DIGEST: &str = "c3a1e199a481e17daa1fe03f79c48f4e3239e1e5b1444b941337b6f722a8385c";
+const BRIDGE_DIGEST: &str = "c4b52cc7b4d6b5fa5901f0a6a00c6590914500bcbc063671f80dea5d74767066";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -120,9 +120,12 @@ fn curve_check_reproduces_the_recorded_report() {
         return;
     };
     let (text, statements, hits) = curve_check::check_text(&src);
-    // IX.69 slicing + IX.70's opt-in algebraic route add five `prove`
-    // statements to `tools/bridge.ml`: 71 -> 76.
-    assert_eq!(statements, 33);
+    // 76 after IX.77.  IX.78 added five `prove` calls (81) and, in the same
+    // commit, the quotation `` `(*):int->int->int` `` which the scanner read as
+    // a block-comment opener; it then deleted the rest of the file and the
+    // count was silently pinned to 33.  XIX.B4 fixes the scanner (quotations
+    // and strings are opaque), so the honest count is 81 again.
+    assert_eq!(statements, 81);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -157,11 +160,13 @@ fn instrument_reproduces_the_recorded_output() {
     // the opt-in algebraic close, BRIDGE_ALGEBRA_TAC and its helpers) -> 157
     // (XVI.D adds bridge_failure_class, bridge_fallback_count and
     // bridge_slice_retry) -> 160 (XVII.A5 adds bridge_failure_has_prefix,
-    // bridge_failure_contains and bridge_math_failure_shape, the allow-list).
-    assert_eq!(phrases, 217);
+    // bridge_failure_contains and bridge_math_failure_shape, the allow-list)
+    // -> 217 (IX.78 adds the oracle close) -> 221 (XIX.A adds the four sum
+    // bound helpers).
+    assert_eq!(phrases, 221);
     assert_eq!(
         sha256(out.as_bytes()),
-        "a70f5d582e7610ab68a010525f2cf533d00bab8bf22a6571de2c24e882d38fa6"
+        "61cded3eaacf6523c25671d041abc228f2195c694112a0543527e07006790cbf"
     );
 }
 
@@ -200,8 +205,10 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // 198 after IX.70; XVI.D adds three (bridge_failure_class,
     // bridge_fallback_count, bridge_slice_retry); XVII.A5 adds three
     // (bridge_failure_has_prefix, bridge_failure_contains and
-    // bridge_math_failure_shape).
-    assert_eq!(parts.len(), 261);
+    // bridge_math_failure_shape); XIX.A adds four to bridge.ml
+    // (bridge_bound_add_lo, bridge_bound_add_hi, bridge_bound_contrib and
+    // bridge_bounds_of_terms): 261 -> 265.
+    assert_eq!(parts.len(), 265);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -257,22 +264,30 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // sends an unrecognised Failure to `internal` instead of `Mathematical`.
     // The shipped SAT tactics are unchanged; only the appended library text and
     // the classifier body moved.
+    //
+    // XIX.A boundary.  The XVII.A5 digests were:
+    //   add-ref   c26c0080c3db52e5f62ba0aa4175d74ef461d50f4de9e575f5daa5923925f1f7
+    //   sub       f600e09a4dd9be44cc935ce1386e4613436816cd403a73aba89a746514d01546
+    //   neg       821f71d16ad4c8b0620804f5451ffd188a9a5671ed94bf60215f2ecdc8add5ac
+    //   add-p384  91083c8163cca271005806aea20d9a7147adbbf247db33f39c93994412a3c640
+    // `tools/bridge.ml` gained the four sum-bound helpers (XIX.A), so every
+    // inlined answer carries new library text.  The SAT tactics are unchanged.
     for (mode, digest) in [
         (
             "add-ref",
-            "c26c0080c3db52e5f62ba0aa4175d74ef461d50f4de9e575f5daa5923925f1f7",
+            "e2ca43d5c1cad5c8e4a977f074cf2b2b130c9ad2ef88bfad8d948a5bb1e29884",
         ),
         (
             "sub",
-            "f600e09a4dd9be44cc935ce1386e4613436816cd403a73aba89a746514d01546",
+            "45daa0a6008d7ea735b0ed8883975d34b80c5c01673fe9c9d30c9adbfcbe3ca4",
         ),
         (
             "neg",
-            "821f71d16ad4c8b0620804f5451ffd188a9a5671ed94bf60215f2ecdc8add5ac",
+            "0c9706a22500099f49a6196b9ba53e5c75a67e4b7c9985248b11de809fe7bbad",
         ),
         (
             "add-p384",
-            "91083c8163cca271005806aea20d9a7147adbbf247db33f39c93994412a3c640",
+            "b5a742877ce79898fd35a2b46a9d3c19cc41578f88afb7c6649a69d53069aab1",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

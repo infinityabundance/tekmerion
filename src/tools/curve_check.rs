@@ -57,9 +57,14 @@ fn is_word(b: u8) -> bool {
 /// Drop `(* ... *)` blocks, preserving everything else verbatim.
 ///
 /// The scan is byte-wise and removes only ASCII delimiter bytes, so a valid
-/// UTF-8 input stays valid UTF-8. Nesting is tracked the same way the Python
-/// original tracked it, and — like the original — strings are not treated
-/// specially.
+/// UTF-8 input stays valid UTF-8.  Nesting is tracked the same way the Python
+/// original tracked it, with one deliberate correction (XIX.B4): a `(*` that
+/// occurs inside a HOL Light quotation (backtick-delimited) or an OCaml string
+/// literal is *not* a comment opener.  `tools/bridge.ml` contains the quotation
+/// `` `(*):int->int->int` `` for integer multiplication; treating that as a
+/// comment silently deleted the rest of the file and the report counted 33
+/// statements instead of 81.  A backtick or double quote that is never closed
+/// consumes the remainder, exactly as the lexer would.
 pub fn strip_comments(src: &str) -> String {
     let bytes = src.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -74,6 +79,36 @@ pub fn strip_comments(src: &str) -> String {
             i += 2;
         } else if depth > 0 {
             i += 1;
+        } else if bytes[i] == b'`' {
+            // HOL Light quotation: opaque to the OCaml lexer's comment rule.
+            out.push(bytes[i]);
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'`' {
+                out.push(bytes[i]);
+                i += 1;
+            }
+            if i < bytes.len() {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        } else if bytes[i] == b'"' {
+            // OCaml string literal, with backslash escapes.
+            out.push(bytes[i]);
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'"' {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    out.push(bytes[i]);
+                    out.push(bytes[i + 1]);
+                    i += 2;
+                } else {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                out.push(bytes[i]);
+                i += 1;
+            }
         } else {
             out.push(bytes[i]);
             i += 1;
@@ -265,5 +300,33 @@ mod tests {
     fn nested_comments_are_removed() {
         let src = "a (* outer (* inner *) still *) b";
         assert_eq!(strip_comments(src), "a  b");
+    }
+
+    // XIX.B4: the quotation operator `(*` must not open a comment.  This is
+    // the exact text that made the shipped report stop after 33 statements.
+    #[test]
+    fn a_quotation_operator_is_not_a_comment_opener() {
+        let src = "let mul = `(*):int->int->int`;;\n\
+                   let T = prove (`!x. x = x`, REWRITE_TAC[]);;\n";
+        let (text, statements, hits) = check_text(src);
+        assert_eq!(statements, 1, "{text}");
+        assert_eq!(hits, 0, "{text}");
+        assert!(text.contains("statements=1 hits=0"), "{text}");
+    }
+
+    #[test]
+    fn a_comment_opener_inside_a_string_is_not_a_comment() {
+        let src = "let s = \"(* not a comment\" in\n\
+                   let T = prove (`!x. x = x`, REWRITE_TAC[]);;\n";
+        let (text, statements, hits) = check_text(src);
+        assert_eq!(statements, 1, "{text}");
+        assert_eq!(hits, 0, "{text}");
+    }
+
+    #[test]
+    fn an_unclosed_quotation_consumes_the_rest_like_the_lexer() {
+        let src = "let T = prove (`!x. x = x`, REWRITE_TAC[]);;\nlet broken = `oops";
+        let (text, statements, _hits) = check_text(src);
+        assert_eq!(statements, 1, "{text}");
     }
 }

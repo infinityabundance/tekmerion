@@ -2331,8 +2331,23 @@ in
 (* atoms, not by any single atom's bound.                                    *)
 (* ------------------------------------------------------------------------- *)
 
-(* (value, strict) meaning `x > value' when strict and `x >= value' otherwise;
-   None means no bound.  No variant type: this file is also read by camlp5r. *)
+(* Bounds are (value, strict), meaning `x > value' when strict and
+   `x >= value' otherwise.  `None' has *two* meanings and they must not be
+   confused (XIX.A):
+
+   - in a *join* of constraints on the same quantity it means "no constraint"
+     (=-inf for a lower bound, =+inf for an upper bound), which is the identity
+     of max/min;
+   - for a *sum* it means "unknown", and it must propagate.  `0 <= x <= 3' and
+     an unbounded y must give an unbounded x+y, never a coincidental 0.
+
+   No variant type: this file is also read by camlp5r.  The block below is
+   extracted verbatim by tests/interval_engine_selftest.sh and checked against
+   brute-force enumeration. *)
+(* BEGIN BRIDGE_INTERVAL_STANDALONE *)
+(* Join of two constraints on the *same* quantity: max of lower bounds, min of
+   upper bounds.  Used only by bridge_direct_bounds (two hypotheses about one
+   atom) and bridge_hi (two derivations of an upper bound for one form). *)
 let bridge_bound_join_lo a b =
   match a,b with
   | None, x | x, None -> x
@@ -2349,9 +2364,46 @@ let bridge_bound_join_hi a b =
       else if Num.lt_num v1 v2 then Some(v2,s2)
       else Some(v1, s1 || s2)
 in
+(* Addition of bounds for a *sum*: x in A and y in B give x+y in A+B, so the
+   endpoints add and the strictness is inherited (x > a and y > b give
+   x+y > a+b).  A missing endpoint is *unknown* and stays unknown: dropping it
+   would treat an unbounded summand as 0. *)
+let bridge_bound_add_lo a b =
+  match a,b with
+  | None, _ | _, None -> None
+  | Some(v1,s1), Some(v2,s2) -> Some(Num.add_num v1 v2, s1 || s2)
+in
+let bridge_bound_add_hi a b =
+  match a,b with
+  | None, _ | _, None -> None
+  | Some(v1,s1), Some(v2,s2) -> Some(Num.add_num v1 v2, s1 || s2)
+in
+(* contribution of one atom with coefficient k to (lo,hi): k*x is increasing
+   for k > 0, decreasing for k < 0 (the two endpoints swap), and the zero
+   contribution for k = 0 is the exact point 0, whatever the atom's bounds. *)
+let bridge_bound_contrib k (l,h) =
+  let scale b = match b with
+    | None -> None
+    | Some(v,s) -> Some(Num.mult_num k v, s) in
+  if Num.eq_num k num_0 then (Some(num_0,false), Some(num_0,false))
+  else if Num.lt_num num_0 k then (scale l, scale h)
+  else (scale h, scale l)
+in
+(* bounds of a sum of scaled atoms plus a constant.  This is *addition* at
+   every step, not a join; `lookup' supplies the one-atom table. *)
+let bridge_bounds_of_terms lookup c terms =
+  List.fold_left (fun (lo,hi) (t,k) ->
+      let (cl,ch) = bridge_bound_contrib k (lookup t) in
+      (bridge_bound_add_lo lo cl, bridge_bound_add_hi hi ch))
+    ((Some (c,false)), (Some (c,false))) terms
+in
+(* END BRIDGE_INTERVAL_STANDALONE *)
+
 (* direct one-atom bounds from the hypotheses: a form with one variable and a
    constant is a lower bound when its coefficient is positive, an upper bound
-   when it is negative *)
+   when it is negative.  Two hypotheses about the *same* atom are two
+   constraints on one quantity, so this is a join (max lower, min upper), and
+   `None' here means "this hypothesis gives no bound", the join identity. *)
 let bridge_direct_bounds ineqs =
   let add tbl t lo hi =
     let (lo0,hi0) = try List.assoc t tbl with Not_found -> (None,None) in
@@ -2368,19 +2420,11 @@ in
 let bridge_lookup_bound tbl t =
   try List.assoc t tbl with Not_found -> (None,None)
 in
-(* bounds of a linear form from the one-atom table.  For `k > 0', k*x is
-   increasing (lower bound from x's lower, upper from x's upper); for
-   `k < 0' it is decreasing (the two swap). *)
+(* bounds of a linear form from the one-atom table.  The form is a *sum*, so
+   the scaled contributions are added (bridge_bounds_of_terms); the join is
+   only used for the relational bound in bridge_hi. *)
 let bridge_form_bounds tbl (xs,c) =
-  List.fold_left (fun (lo,hi) (t,k) ->
-      let (l,h) = bridge_lookup_bound tbl t in
-      let lo_add b = match b with None -> lo
-        | Some(v,s) -> bridge_bound_join_lo lo (Some (Num.mult_num k v, s))
-      and hi_add b = match b with None -> hi
-        | Some(v,s) -> bridge_bound_join_hi hi (Some (Num.mult_num k v, s)) in
-      if Num.lt_num num_0 k then (lo_add l, hi_add h)
-      else (lo_add h, hi_add l))
-    ((Some (c,false)), (Some (c,false))) xs
+  bridge_bounds_of_terms (bridge_lookup_bound tbl) c xs
 in
 (* upper bound of a form, using one relational hypothesis; `None' if none
    applies.  `t = alpha * f + rest' where `f' shares a proportional part. *)
@@ -2412,6 +2456,8 @@ let bridge_rel_hi tbl ineqs t =
       | Some _ -> acc
       | None -> try_one ineq) None ineqs
 in
+(* two independent derivations of an *upper* bound for the same form; the
+   tighter one wins, so this is a join (min), and `None' is +inf. *)
 let bridge_hi tbl ineqs t =
   let (_,hi) = bridge_form_bounds tbl t in
   match bridge_rel_hi tbl ineqs t with

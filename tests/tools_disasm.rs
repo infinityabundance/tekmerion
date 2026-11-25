@@ -52,6 +52,21 @@ fn path_with(dir: &Path) -> OsString {
     combined
 }
 
+/// A freshly written shim can transiently fail `exec` with ETXTBSY: the kernel
+/// may still hold the write descriptor while the probe starts.  The integration
+/// tests retry exactly once, and say so (XIX.B2).  The deterministic policy
+/// tests in `disasm::engine` never touch the filesystem, so they cannot race.
+fn retry_if_briefly_busy<T>(mut f: impl FnMut() -> Result<T, String>) -> Result<T, String> {
+    match f() {
+        Err(e) if e.contains("Text file busy") => {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            eprintln!("retrying once: freshly written shim was still busy ({e})");
+            f()
+        }
+        other => other,
+    }
+}
+
 fn fixture(arch: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
@@ -98,8 +113,10 @@ fn an_unusable_shim_earlier_on_path_is_skipped() {
         "echo 'this is not a disassembler'; exit 0",
     );
     let search = path_with(&dir.0);
-    let chosen = disasm::disassembler_for_with("arm", None, Some(search.as_os_str()))
-        .expect("selection falls through to a working tool");
+    let chosen = retry_if_briefly_busy(|| {
+        disasm::disassembler_for_with("arm", None, Some(search.as_os_str()))
+    })
+    .expect("selection falls through to a working tool");
     assert_ne!(
         chosen, bad,
         "the shim exits 0 but decodes nothing, so it must not be chosen"
@@ -119,15 +136,53 @@ fn an_unusable_shim_earlier_on_path_is_skipped() {
     assert_eq!(steps[0].mnemonic, "add");
 }
 
+/// XIX.B1: every matching executable across the split `PATH` is a candidate,
+/// not just the first one.  An unusable shim in the first directory must not
+/// shadow a usable binary of the same name in the second.
+#[test]
+fn every_matching_path_for_a_name_is_probed() {
+    let real = disasm::disassembler_for("arm").expect("a working AArch64 disassembler");
+    let bad_dir = tmp_dir("b1-bad");
+    let good_dir = tmp_dir("b1-good");
+    let bad = shim(
+        &bad_dir.0,
+        "aarch64-linux-gnu-objdump",
+        "echo 'not a disassembler'; exit 0",
+    );
+    let good = shim(
+        &good_dir.0,
+        "aarch64-linux-gnu-objdump",
+        &format!("exec \"{}\" \"$@\"", real.display()),
+    );
+    let mut search = OsString::from(bad_dir.0.as_os_str());
+    search.push(":");
+    search.push(good_dir.0.as_os_str());
+    let chosen = retry_if_briefly_busy(|| {
+        disasm::disassembler_for_with("arm", None, Some(search.as_os_str()))
+    })
+    .expect("the usable second path is selected");
+    assert_ne!(chosen, bad, "the unusable shim is rejected");
+    assert_eq!(chosen, good, "the second path of the same name is used");
+    let steps = disasm::disassemble(
+        &fixture("arm"),
+        Some(chosen.to_str().expect("utf-8 tool path")),
+        Some("arm"),
+    )
+    .expect("the selected path decodes");
+    assert_eq!(steps[0].mnemonic, "add");
+}
+
 #[test]
 fn an_unusable_explicit_tool_is_refused() {
     let dir = tmp_dir("explicit");
     let bad = shim(&dir.0, "objdump", "echo 'still not a disassembler'; exit 0");
-    let err = disasm::disassembler_for_with(
-        "arm",
-        Some(bad.to_str().expect("utf-8 shim path")),
-        Some(dir.0.as_os_str()),
-    )
+    let err = retry_if_briefly_busy(|| {
+        disasm::disassembler_for_with(
+            "arm",
+            Some(bad.to_str().expect("utf-8 shim path")),
+            Some(dir.0.as_os_str()),
+        )
+    })
     .expect_err("an explicit tool is still probed");
     assert!(
         err.contains(&bad.display().to_string()),

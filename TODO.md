@@ -3441,35 +3441,52 @@ bound is ignored rather than propagating an unknown endpoint.
 The proof step prevented these from being admitted (see XIX.0.2), so no theorem is affected. The
 discovery engine is still wrong and must be fixed.
 
-- [ ] **XIX.A1.** Add bounds for sums (`lo₁+lo₂`, `hi₁+hi₂`); keep max/min only where the operation
-  genuinely is a join (conditionals, selections).
-- [ ] **XIX.A2.** Propagate unknown: a missing endpoint makes the result unknown, never a guess.
-- [ ] **XIX.A3.** Exhaustive small-domain tests (all combinations in a small range) comparing the
+- [x] **XIX.A1.** Add bounds for sums (`lo₁+lo₂`, `hi₁+hi₂`); keep max/min only where the operation
+  genuinely is a join (conditionals, selections). `bridge_bound_add_lo`/`_hi` add and propagate
+  strictness; `bridge_bounds_of_terms` folds a form by addition. Every call site audited: sums in
+  `bridge_form_bounds`; joins kept in `bridge_direct_bounds` (two hypotheses on one atom) and
+  `bridge_hi` (two upper bounds on one form). See `research/receipts/ix81-intervals-and-gates.md`.
+- [x] **XIX.A2.** Propagate unknown: a missing endpoint makes the result unknown, never a guess.
+  `bridge_bound_add_lo`/`_hi` return `None` when either summand endpoint is unknown; the join keeps
+  `None` as the ±∞ identity only where it means "no constraint".
+- [x] **XIX.A3.** Exhaustive small-domain tests (all combinations in a small range) comparing the
   interval result against brute-force evaluation, so a wrong rule shows up as a counterexample, not
-  as a failing proof.
-- [ ] **XIX.A4.** State what remains unproved: this is tested interval arithmetic, not a verified
-  one. A soundness theorem belongs with the native `LIA` module (`XVII.B3`), not here.
+  as a failing proof. `tests/interval_engine_selftest.sh` extracts the shipped block, probes 4,356
+  interval pairs / 360,000 points against an exact-rational shim, and requires the retired join rule
+  to fail; unit case `0 ≤ x ≤ 3`, `0 ≤ y ≤ 4` gives `≤ 7`.
+- [x] **XIX.A4.** State what remains unproved: this is tested interval arithmetic, not a verified
+  one. A soundness theorem belongs with the native `LIA` module (`XVII.B3`), not here. Recorded in
+  the IX.81 receipt and in the block's comment.
 
 ## XIX.B — P0: CI, and a real elaboration gate
 
 Two failures plus a testing weakness:
 
-- [ ] **XIX.B1.** `an_unusable_shim_earlier_on_path_is_skipped` — the selector iterates names but
+- [x] **XIX.B1.** `an_unusable_shim_earlier_on_path_is_skipped` — the selector iterates names but
   takes only the first `PATH` match per name. Enumerate **every** matching executable path and probe
-  each.
-- [ ] **XIX.B2.** `an_unusable_explicit_tool_is_refused` fails with `Text file busy` when executing a
+  each. `which_all_in` returns every match; the policy probes them in order; a new integration test
+  puts an unusable shim before a usable one of the same name on a split `PATH`.
+- [x] **XIX.B2.** `an_unusable_explicit_tool_is_refused` fails with `Text file busy` when executing a
   freshly written shim. Separate the **deterministic selector-policy tests** (pure functions over a
   supplied candidate list) from the **integration tests** that spawn processes; keep both, and make
-  the policy tests independent of filesystem timing.
-- [ ] **XIX.B3. Mandatory real-toolchain elaboration gate.** A Rust test suite cannot detect that
+  the policy tests independent of filesystem timing. The policy is `src/tools/engine.rs` (no I/O, no
+  clock, unit tests); the process tests retry once on `Text file busy` and say so.
+- [x] **XIX.B3. Mandatory real-toolchain elaboration gate.** A Rust test suite cannot detect that
   HOL Light fails to parse an emitted answer — that happened, and every test stayed green. Add a
   gate that elaborates one representative emitted answer with the real toolchain (`ocamlc -i` at
   minimum, as the bench's own syntax check does; a real `loadt` elaboration where affordable), and
-  wire it into CI. Costs seconds, catches the whole class.
-- [ ] **XIX.B4. `curve_check`'s statement count fell 76 → 33** after the latest changes: the
+  wire it into CI. Costs seconds, catches the whole class. `tests/answer_elaboration.rs` runs
+  `ocamlc -stop-after parsing -i` on the committed answer after the two lexical normalisations HOL
+  source needs, fails (never skips) when `ocamlc` is absent, and additionally runs the bench's full
+  `ocamlc -pp ... -i` where the bench exists. Quotation *contents* remain unverified offline; the
+  receipt states this.
+- [x] **XIX.B4. `curve_check`'s statement count fell 76 → 33** after the latest changes: the
   heuristic scanner is now miscounting, which means the no-curve-name control is measuring the
   scanner rather than the proofs. Either fix the scanner or replace it with a structured parse of
-  the emitted answers. A control that silently changes what it counts is not a control.
+  the emitted answers. A control that silently changes what it counts is not a control. Diagnosed:
+  IX.78 added the quotation `` `(*):int->int->int` ``, whose `(*` the stripper read as a comment
+  opener; the rest of the file was deleted from the scan. `strip_comments` now skips quotations and
+  strings. Count is 81 (76 + IX.78's five `prove` calls), hits 0; regression tests added.
 
 ## XIX.C — P1: the missing aggregate, constructed not recovered
 

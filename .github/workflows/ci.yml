@@ -70,6 +70,20 @@ jobs:
       - name: cargo test (offline)
         run: cargo test --offline
 
+      # XIX.B3: the answer-elaboration gate is part of `cargo test`, but it is
+      # run here explicitly so its output (the ocamlc version, the quotation
+      # count and the front end's exit status) is in the CI log.  A missing
+      # `ocamlc` fails the test; nothing is skipped.
+      - name: Answer elaboration gate (real OCaml front end)
+        run: cargo test --offline --test answer_elaboration -- --nocapture
+
+      # XIX.A3: exhaustive small-domain tests for the interval engine.  The
+      # extracted block is compiled against an exact-rational `Num' shim; every
+      # bound pair is compared with enumerated points, and the retired
+      # join-based rule is required to fail.  No proof build, no bench.
+      - name: Interval engine exhaustive tests (offline)
+        run: bash tests/interval_engine_selftest.sh
+
       # No continue-on-error: the job must fail if a lint appears. Verified green
       # locally before adding this file (clippy 0.1.98, rust 1.98.0).
       - name: cargo clippy (offline, warnings are errors)
