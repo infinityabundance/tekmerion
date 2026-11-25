@@ -412,56 +412,155 @@ fn phase_mode_is_the_normal_emitter_plus_marks() {
 }
 
 /// IX.66: the instrumentation is additive only, and the normal answer is
-/// recoverable from the phase copy. Two checks, one table:
+/// recoverable from the phase copy. Three halves, one property:
 ///
-/// 1. `deinstrument (instrument src) == src` for both library files: the phase
-///    copy differs from the tracked file by the marker phrases alone.
-/// 2. Assembling the answer from the *deinstrumented* phase copy reproduces the
-///    normal answer byte-for-byte, so nothing but markers is in the measured
-///    text. `--mode answer` never calls the instrumenter at all.
+/// 1. `deinstrument (instrument src) == src` on **committed synthetic
+///    fixtures** (`tests/fixtures/emit/`), and assembling the answer from the
+///    deinstrumented phase copy reproduces the normal answer byte for byte.
+///    No `.bench` input is needed (XV.A1): the property is a text round trip on
+///    the two library texts, not a property of the HOL Light sources.
+/// 2. The same round trip on the **tracked** `tools/csat_lib.ml` and
+///    `tools/bridge.ml`, which are in git and therefore always present. This is
+///    what fails if an anchor drifts in the real library.
+/// 3. The **real inlined set**, which includes `.bench/hol-light/Cadical/`.
+///    That half needs the bench and prints why it was skipped when it is
+///    absent, which is the offline CI case.
+///
+/// `--mode answer` never calls the instrumenter at all.
 #[test]
 fn ix66_markers_are_additive_and_the_normal_answer_is_recovered() {
-    let mut sources: Vec<(String, String)> = emit::ANSWER_SOURCES
-        .iter()
-        .map(|rel| {
-            (
-                rel.to_string(),
-                fs::read_to_string(repo().join(rel)).expect("library source"),
-            )
-        })
-        .collect();
-    let tracked = sources.clone();
-    // 1. instrument, and prove the change is the marker phrases alone.
-    for (rel, src) in sources.iter_mut() {
-        let (inst, deinst) = match rel.as_str() {
-            "tools/csat_lib.ml" => (
-                emit::instrument_csat_lib_markers as fn(&str) -> Result<String, _>,
-                emit::deinstrument_csat_lib as fn(&str) -> Result<String, _>,
-            ),
-            "tools/bridge.ml" => (
-                emit::instrument_bridge_markers as fn(&str) -> Result<String, _>,
-                emit::deinstrument_bridge as fn(&str) -> Result<String, _>,
-            ),
-            _ => continue,
-        };
-        let marked = inst(src).unwrap_or_else(|e| panic!("{rel}: {e}"));
-        assert_ne!(marked, *src, "{rel}: instrumentation did nothing");
-        let back = deinst(&marked).unwrap_or_else(|e| panic!("{rel}: {e}"));
-        assert_eq!(back, *src, "{rel}: instrumentation is not additive only");
-        *src = marked;
-    }
-    // 2. the measured answer and the answer rebuilt from the *tracked* sources
-    //    differ only by the markers that the phase copy carries.
     let tactic = "MAP_EVERY X_GEN_TAC [`z:int64`] THEN\nBRIDGE_ADD_REF_TAC EXPAND P";
-    let measured = emit::inlined_answer_from(tactic, &as_refs(&sources));
-    let normal = emit::inlined_answer_from(tactic, &as_refs(&tracked));
-    assert!(normal.len() < measured.len());
+
+    // 1. The synthetic fixtures: always runnable, `.bench` or not.
+    let fixture = |name: &str| -> String {
+        let path = repo().join("tests/fixtures/emit").join(name);
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    };
+    let plain: Vec<(String, String)> = vec![
+        ("cadical_stub.ml".to_string(), fixture("cadical_stub.ml")),
+        ("csat_lib_min.ml".to_string(), fixture("csat_lib_min.ml")),
+        ("bridge_min.ml".to_string(), fixture("bridge_min.ml")),
+    ];
+    let phase = instrument_sources(&plain);
+    let measured = emit::inlined_answer_from(tactic, &as_refs(&phase));
+    let normal = emit::inlined_answer_from(tactic, &as_refs(&plain));
+    assert!(
+        normal.len() < measured.len(),
+        "the fixture phase copy carries no markers"
+    );
     let n_normal = normal.matches("PHASE_").count();
     let n_measured = measured.matches("PHASE_").count();
     assert!(
         n_measured > n_normal,
-        "the phase copy carries no markers: {n_measured} vs {n_normal}"
+        "the fixture phase copy carries no markers: {n_measured} vs {n_normal}"
     );
+    // Deinstrumenting the phase copy and re-assembling restores the normal
+    // answer byte for byte: nothing but markers is in the measured text.
+    assert_eq!(deinstrument_answer(tactic, &phase), normal);
+
+    // 2. The tracked library texts (in git, never in `.bench`).
+    let tracked: Vec<(String, String)> = emit::ANSWER_SOURCES
+        .iter()
+        .filter(|rel| rel.starts_with("tools/"))
+        .map(|rel| (rel.to_string(), read_repo_file(rel)))
+        .collect();
+    let tracked_phase = instrument_sources(&tracked);
+    assert_ne!(tracked_phase, tracked, "no tracked library was marked");
+    assert_eq!(
+        deinstrument_answer(tactic, &tracked_phase),
+        emit::inlined_answer_from(tactic, &as_refs(&tracked))
+    );
+
+    // 3. The real inlined set, which includes `.bench/hol-light/Cadical/`.
+    //    Needs the bench; skip it cleanly (and say why) when it is absent.
+    let cadical = repo().join(".bench/hol-light/Cadical");
+    if !cadical.is_dir() {
+        eprintln!(
+            "skipping the real-source half: {} is absent (offline CI). The \
+             fixture and tracked-library halves above proved \
+             `deinstrument ∘ instrument = id`.",
+            cadical.display()
+        );
+        return;
+    }
+    let real: Vec<(String, String)> = emit::ANSWER_SOURCES
+        .iter()
+        .map(|rel| (rel.to_string(), read_repo_file(rel)))
+        .collect();
+    let real_phase = instrument_sources(&real);
+    let measured = emit::inlined_answer_from(tactic, &as_refs(&real_phase));
+    let normal = emit::inlined_answer_from(tactic, &as_refs(&real));
+    assert!(normal.len() < measured.len());
+    assert_eq!(deinstrument_answer(tactic, &real_phase), normal);
+}
+
+/// Read a repository-relative source file.
+fn read_repo_file(rel: &str) -> String {
+    let path = repo().join(rel);
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// Which marker table applies to a source, by file name stem: the tracked
+/// `tools/csat_lib.ml` / `tools/bridge.ml` and the `*_min.ml` fixtures.
+fn library_kind(rel: &str) -> Option<&'static str> {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    if name.starts_with("csat_lib") {
+        Some("csat_lib")
+    } else if name.starts_with("bridge") {
+        Some("bridge")
+    } else {
+        None
+    }
+}
+
+/// Apply the emitter's marker table to whichever sources it names.
+fn instrument_sources(sources: &[(String, String)]) -> Vec<(String, String)> {
+    sources
+        .iter()
+        .map(|(rel, src)| {
+            let marked = match library_kind(rel) {
+                Some("csat_lib") => round_trip("csat_lib", &emit::instrument_csat_lib_markers, src),
+                Some("bridge") => round_trip("bridge", &emit::instrument_bridge_markers, src),
+                _ => src.clone(),
+            };
+            (rel.clone(), marked)
+        })
+        .collect()
+}
+
+/// Apply one instrumenter and prove `deinstrument ∘ instrument = id`, returning
+/// the marked (phase) text.
+fn round_trip(
+    which: &str,
+    inst: &dyn Fn(&str) -> Result<String, emit::EmitError>,
+    src: &str,
+) -> String {
+    let deinst: fn(&str) -> Result<String, emit::EmitError> = match which {
+        "csat_lib" => emit::deinstrument_csat_lib,
+        "bridge" => emit::deinstrument_bridge,
+        other => panic!("unknown library {other}"),
+    };
+    let marked = inst(src).unwrap_or_else(|e| panic!("{which}: {e}"));
+    assert_ne!(marked, src, "{which}: instrumentation did nothing");
+    let back = deinst(&marked).unwrap_or_else(|e| panic!("{which}: {e}"));
+    assert_eq!(&back, src, "{which}: instrumentation is not additive only");
+    marked
+}
+
+/// Deinstrument every library in a phase source list and assemble the answer.
+fn deinstrument_answer(tactic: &str, sources: &[(String, String)]) -> String {
+    let tracked: Vec<(String, String)> = sources
+        .iter()
+        .map(|(rel, src)| {
+            let back = match library_kind(rel) {
+                Some("csat_lib") => emit::deinstrument_csat_lib(src),
+                Some("bridge") => emit::deinstrument_bridge(src),
+                _ => Ok(src.clone()),
+            };
+            (rel.clone(), back.unwrap_or_else(|e| panic!("{rel}: {e}")))
+        })
+        .collect();
+    emit::inlined_answer_from(tactic, &as_refs(&tracked))
 }
 
 fn as_refs(v: &[(String, String)]) -> Vec<(&str, &str)> {

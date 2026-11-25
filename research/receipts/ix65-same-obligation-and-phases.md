@@ -682,3 +682,58 @@ What this §, and §2.7, said that now needs qualifying:
 One number in §2.5 is *not* refined: `replay` (30.35%) and every outer class
 (`initial` 0.90%, `play` 0.77%, `rewrite` 0.00%, `finalisation` 0.13%) reproduce
 exactly.
+
+---
+
+## 4. Correction log
+
+- **2026-11-25 (XV.0.3 / XV.A5) — the wall-clock comparison in §1.2 is
+  WITHHELD.** The aggregate seconds ratio **90.59×**, the per-task seconds ratio
+  median **106.97×** and the per-task seconds range **50.75×–163.84×** are **not
+  published comparisons**. The reason is the one XV.0.3 names: the human side
+  brackets the `_CORRECT` prove phrase (scope `prove_only`), while the generated
+  `seconds` values are the harness's whole-file `Running time` line (scope
+  `whole_file`) — or that is the unverified possibility, and the receipt does
+  not record which. Two numbers measured over different spans are not a ratio
+  of the same quantity, so no scope-honest ratio exists until both sides are
+  re-measured under one scope.
+- **The fix is structural, not textual.** `src/tools/dropin.rs` now carries
+  `TimeScope ∈ {prove_only, whole_file, judge_run, unrecorded}` on every measured
+  row, plus the statement digest and executable identity (XV.A3). `compare`
+  refuses a pair whose two sides' time scopes differ; the table refuses to
+  aggregate rows whose scopes differ or are unrecorded, and **names every row**
+  in the refusal.
+- **Demonstration on the same inputs.** The rows in
+  `research/receipts/ix65-same-obligation.json` and in `.bench/ix65/{human,
+  generated}.json` predate the field, so they read as `unrecorded`. Re-running
+  the §1.2 command with the fixed tool prints:
+
+  ```text
+  | aggregate inference ratio (n=6) | 70.87 |
+  | per-task inference ratio median (n=6) | 60.20 |
+  | human seconds | withheld: time scope not aggregatable |
+  | generated seconds | withheld: time scope not aggregatable |
+  | aggregate seconds ratio | withheld: time scope not aggregatable |
+
+  **SECONDS AGGREGATE REFUSED.** Every matched row records `unrecorded`, which is
+  not one of `prove_only`, `whole_file` or `judge_run`, so the span the seconds
+  were measured over is not established. No total or ratio over these rows is
+  published; the inference counts are unaffected.
+
+  | row | time scope |
+  |---|---|
+  | arm curve25519/add_p25519 | unrecorded |
+  | arm p384/add_p384 | unrecorded |
+  | arm p521/add_p521 | unrecorded |
+  | arm curve25519/neg_p25519 | unrecorded |
+  | x86 curve25519/add_p25519 | unrecorded |
+  | x86 sm2/neg_sm2 | unrecorded |
+  ```
+
+  The full output, the command and its exit status are in
+  `research/receipts/ix68-ci-and-integrity.md`.
+- **What stands.** The inference comparison — aggregate **70.87×**, per-task
+  median **60.20×**, range **12.93×–109.07×**, n = 6 of 27 — is unaffected and
+  remains the F3 number. The seconds figures in §1.2 stay in the record as raw
+  observations with their (mixed, unrecorded) provenance, and are marked
+  withheld as a comparison.

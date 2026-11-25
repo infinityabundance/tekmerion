@@ -291,8 +291,19 @@ Two unit tests in `tests/tools_emit.rs` carry the same claim in the other direct
   tactics. So "bitblast" is the cost of *reaching* the blasted term, which includes
   any discarded rewriting inside it. IX.65's limit stands unchanged.
 - **`encode` is measured, not assumed.** `dimacs_of_hol`, the CaDiCaL subprocess and
-  the IX.63 LRAT trim cost **0** primitive inferences on all six theorems (30 of 30
-  closes), as predicted: none of them calls the kernel. The 0 is a measurement.
+  the IX.63 LRAT trim cost **0** primitive inferences on all six theorems
+  (**21 of 21 closes across 22 CSAT attempts**), as predicted: none of them calls
+  the kernel. The 0 is a measurement.
+
+  > **Correction 2026-11-25 (XV.0.4).** This sentence previously read "30 of 30
+  > closes". No per-task row supports 30: §3.3 lists 4+4+4+3+4+2 = **21** closes in
+  > 4+4+4+4+4+2 = **22** CSAT attempts, and
+  > `research/receipts/ix66-bridge-split.json` agrees task for task
+  > (`sat_closes` 4/4/4/3/4/2, `csat_attempts` 4/4/4/4/4/2). The inference totals
+  > reconcile exactly (§3.1); it was the close-count sentence alone that was
+  > wrong. The count is now generated from the JSON by `src/bin/ix66_table.rs`,
+  > which asserts that the printed total equals the sum of the per-task counts and
+  > that each task's `sat_closes` equals the length of its `closes` list.
 - **`bridge rewrite` here includes the final `ACCEPT_TAC`** of the emitted goal
   (`sat-done → STAMP_INF_AFTER`, 10,714 on `neg_p25519`) and the `REWRITE_TAC`/
   `ASM_REWRITE_TAC` inside `BRIDGE_*_REF_TAC` before the split. Both are part of the
@@ -433,3 +444,19 @@ block rows plus a quotient by a measured total, so the receipt can be re-derived
 the checked-in `.correct` files and the two programs alone. The IX.65 cross-check
 column (`ix65_bridge_sat`) is the only quoted number in it, and it is quoted from
 IX.65 §2.5 for comparison, not used in any measured result.
+
+---
+
+## 8. Correction log
+
+- **2026-11-25 (XV.0.4) — the close-count sentence in §6 is corrected in place.**
+  It read "30 of 30 closes"; the receipt's own per-task table (§3.3) lists
+  **21 closes across 22 CSAT attempts**, and `ix66-bridge-split.json` carries
+  `sat_closes` 4/4/4/3/4/2 against `csat_attempts` 4/4/4/4/4/2. The inference
+  totals (§3.1) are unaffected and still reconcile exactly. The claim is now
+  generated, not typed: `src/bin/ix66_table.rs` reads the JSON, asserts
+  `sat_closes == closes.len()` and `csat_attempts == word_goal_sizes.len()` per
+  task, and asserts that the total re-parsed from its own printed table equals
+  the sum of the per-task counts (21 / 22). Its unit test also pins this
+  paragraph. The generator that originally printed the tables
+  (`.bench/ix66/build66.awk`) is git-ignored and was not modified.

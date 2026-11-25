@@ -2224,6 +2224,49 @@ impl TreeKind {
     }
 }
 
+/// The span a wall-clock number was measured over (XV.A5). Two seconds may
+/// only be compared, or summed, when the scope is **recorded** and agrees on
+/// both sides; `Unrecorded` is a distinct value precisely so that a receipt
+/// which does not say cannot be aggregated by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeScope {
+    /// The theorem's `prove` phrase alone — what IX.65's human side brackets
+    /// (`_CORRECT`), bootstrap and decode excluded.
+    ProveOnly,
+    /// The whole proof file as the harness loads it, bootstrap included.
+    WholeFile,
+    /// A full judged run: the proof plus `check_axioms`.
+    JudgeRun,
+    /// The receipt predates this field, or does not say.
+    Unrecorded,
+}
+
+impl TimeScope {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TimeScope::ProveOnly => "prove_only",
+            TimeScope::WholeFile => "whole_file",
+            TimeScope::JudgeRun => "judge_run",
+            TimeScope::Unrecorded => "unrecorded",
+        }
+    }
+
+    /// Parse the receipt token. An unrecognised token is `Unrecorded`, never a
+    /// guessed scope: a typo must not silently become aggregatable.
+    pub fn parse(s: &str) -> TimeScope {
+        match s {
+            "prove_only" => TimeScope::ProveOnly,
+            "whole_file" => TimeScope::WholeFile,
+            "judge_run" => TimeScope::JudgeRun,
+            _ => TimeScope::Unrecorded,
+        }
+    }
+
+    pub fn is_recorded(self) -> bool {
+        self != TimeScope::Unrecorded
+    }
+}
+
 /// Everything about *how* a proof was measured that must agree before two
 /// numbers may be put in the same aggregate. `tree_kind` must be the
 /// complementary human/generated pair; the remaining fields must be equal.
@@ -2245,12 +2288,24 @@ pub struct MeasurementScope {
 pub struct MeasuredProof {
     /// The exact theorem name printed by the run, not a derived label.
     pub theorem: String,
+    /// Canonical digest of the theorem's typed conclusion, when the receipt
+    /// records one. Identity is never the name alone (XV.A3): two different
+    /// theorems can share a name, and only the statement digest tells them
+    /// apart.
+    pub statement_digest: Option<String>,
+    /// The executable the theorem belongs to (`arch.dir.op`), when the receipt
+    /// records one. Carried next to the statement digest so a pair cannot be
+    /// made from two different executables that happen to prove a same-named
+    /// theorem.
+    pub executable: Option<String>,
     pub exit: Option<i32>,
     pub check_axioms: bool,
     pub theorem_proved: bool,
     pub seconds: Option<f64>,
     pub inferences: Option<u64>,
     pub scope: MeasurementScope,
+    /// The span `seconds` was measured over (XV.A5).
+    pub time_scope: TimeScope,
 }
 
 /// Every reason two measurements may be refused a comparison.
@@ -2278,6 +2333,27 @@ pub enum ComparisonError {
         field: &'static str,
         human: String,
         generated: String,
+    },
+    /// The names agree but the canonical statement digests do not: two
+    /// different theorems with the same name (XV.A3).
+    StatementIdentityMismatch {
+        human: String,
+        generated: String,
+    },
+    /// One side records no statement digest, so statement identity cannot be
+    /// established at all (XV.A3). `side` names the side that is missing it.
+    StatementIdentityUnrecorded {
+        side: &'static str,
+    },
+    /// The two sides belong to different executables (XV.A3).
+    ExecutableIdentityMismatch {
+        human: String,
+        generated: String,
+    },
+    /// The two sides' seconds were measured over different spans (XV.A5).
+    TimeScopeMismatch {
+        human: TimeScope,
+        generated: TimeScope,
     },
 }
 
@@ -2320,6 +2396,26 @@ impl std::fmt::Display for ComparisonError {
                 f,
                 "measurement scope differs in {field}: human {human:?}, generated {generated:?}"
             ),
+            ComparisonError::StatementIdentityMismatch { human, generated } => write!(
+                f,
+                "theorem statement differs although the names match: \
+                 human digest {human:?}, generated digest {generated:?}"
+            ),
+            ComparisonError::StatementIdentityUnrecorded { side } => write!(
+                f,
+                "{side} side records no theorem statement digest, so statement \
+                 identity cannot be established"
+            ),
+            ComparisonError::ExecutableIdentityMismatch { human, generated } => write!(
+                f,
+                "executable identity differs: human {human:?}, generated {generated:?}"
+            ),
+            ComparisonError::TimeScopeMismatch { human, generated } => write!(
+                f,
+                "time scope differs: human {}, generated {}",
+                human.as_str(),
+                generated.as_str()
+            ),
         }
     }
 }
@@ -2331,19 +2427,63 @@ fn fmt_exit(exit: Option<i32>) -> String {
 
 /// A comparison that may only exist when the two measurements are of the
 /// identical theorem, both succeeded, and the measurement conditions agree.
+///
+/// The fields are private and [`compare`] is the only constructor (XV.A2), so a
+/// caller cannot build or mutate one and bypass the preconditions. The
+/// accessors are read-only.
+///
+/// This must not compile, because the fields are private:
+///
+/// ```compile_fail
+/// use tekmerion::tools::dropin::{MatchedComparison, MeasuredProof};
+/// fn forge(h: MeasuredProof, g: MeasuredProof) -> MatchedComparison {
+///     MatchedComparison { human: h, generated: g }
+/// }
+/// ```
+///
+/// The supported path compiles, so the `compile_fail` above cannot be passing
+/// merely because the import is wrong:
+///
+/// ```no_run
+/// use tekmerion::tools::dropin::{compare, ComparisonError, MatchedComparison, MeasuredProof};
+/// fn only_way(h: &MeasuredProof, g: &MeasuredProof) -> Result<MatchedComparison, ComparisonError> {
+///     compare(h, g)
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchedComparison {
-    pub human: MeasuredProof,
-    pub generated: MeasuredProof,
+    human: MeasuredProof,
+    generated: MeasuredProof,
 }
 
 impl MatchedComparison {
+    /// The human side of the pair. Read-only.
+    pub fn human(&self) -> &MeasuredProof {
+        &self.human
+    }
+
+    /// The generated side of the pair. Read-only.
+    pub fn generated(&self) -> &MeasuredProof {
+        &self.generated
+    }
+
     pub fn theorem(&self) -> &str {
         &self.human.theorem
     }
 
-    /// `generated / human`, only when both numbers exist and human is non-zero.
+    /// The statement digest both sides agree on, when they recorded one.
+    pub fn statement_digest(&self) -> Option<&str> {
+        self.human.statement_digest.as_deref()
+    }
+
+    /// `generated / human` wall seconds, only when both numbers exist, human is
+    /// non-zero, **and the time scope is recorded** (XV.A5). A ratio whose span
+    /// is not established is withheld, not printed.
     pub fn seconds_ratio(&self) -> Option<f64> {
+        let scope = self.human.time_scope;
+        if !scope.is_recorded() || scope != self.generated.time_scope {
+            return None;
+        }
         ratio(self.human.seconds, self.generated.seconds)
     }
 
@@ -2438,6 +2578,39 @@ pub fn comparison_reasons(
             generated: b.kernel_build.clone(),
         });
     }
+    // XV.A3: identity is the typed statement plus the executable, never the
+    // name. Two same-named theorems with different conclusions refuse.
+    match (&human.statement_digest, &generated.statement_digest) {
+        (Some(h), Some(g)) if h != g => {
+            out.push(ComparisonError::StatementIdentityMismatch {
+                human: h.clone(),
+                generated: g.clone(),
+            });
+        }
+        (Some(_), None) => {
+            out.push(ComparisonError::StatementIdentityUnrecorded { side: "generated" });
+        }
+        (None, Some(_)) => {
+            out.push(ComparisonError::StatementIdentityUnrecorded { side: "human" });
+        }
+        _ => {}
+    }
+    match (&human.executable, &generated.executable) {
+        (Some(h), Some(g)) if h != g => {
+            out.push(ComparisonError::ExecutableIdentityMismatch {
+                human: h.clone(),
+                generated: g.clone(),
+            });
+        }
+        _ => {}
+    }
+    // XV.A5: seconds measured over different spans are not the same number.
+    if human.time_scope != generated.time_scope {
+        out.push(ComparisonError::TimeScopeMismatch {
+            human: human.time_scope,
+            generated: generated.time_scope,
+        });
+    }
     out
 }
 
@@ -2466,6 +2639,10 @@ struct TimedTask {
     op: String,
     fam: String,
     theorem: Option<String>,
+    /// Canonical digest of the typed conclusion, when the row carries it.
+    statement_digest: Option<String>,
+    /// The executable the theorem was judged for, when the row carries it.
+    executable: Option<String>,
     exit: Option<i32>,
     check_axioms: bool,
     seconds: Option<f64>,
@@ -2473,6 +2650,8 @@ struct TimedTask {
     /// Present only for instrumented runs: the delta from the first line,
     /// which includes the shared HOL Light bootstrap.
     inferences_whole_file: Option<u64>,
+    /// The span `seconds` was measured over (XV.A5).
+    time_scope: TimeScope,
     log: String,
 }
 
@@ -2557,6 +2736,10 @@ fn read_timed_tasks(
         kernel_build,
     };
     let empty = Vec::new();
+    let file_scope = j
+        .get("time_scope")
+        .and_then(|v| v.as_str())
+        .map(TimeScope::parse);
     let tasks = j.get("tasks").and_then(|v| v.as_array()).unwrap_or(&empty);
     let mut out = Vec::with_capacity(tasks.len());
     for t in tasks {
@@ -2565,6 +2748,20 @@ fn read_timed_tasks(
             .get("theorem")
             .and_then(|v| v.as_str())
             .map(str::to_string);
+        let statement_digest = t
+            .get("statement_digest")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let executable = t
+            .get("executable")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let time_scope = t
+            .get("time_scope")
+            .and_then(|v| v.as_str())
+            .map(TimeScope::parse)
+            .or(file_scope)
+            .unwrap_or(TimeScope::Unrecorded);
         let exit = t.get("exit").and_then(json_i32);
         let check_axioms = t.get("check_axioms").and_then(json_bool).unwrap_or(false);
         let seconds = match t.get("seconds") {
@@ -2579,11 +2776,14 @@ fn read_timed_tasks(
             op: field("op"),
             fam: field("family"),
             theorem,
+            statement_digest,
+            executable,
             exit,
             check_axioms,
             seconds,
             inferences,
             inferences_whole_file,
+            time_scope,
             log: field("log"),
         });
     }
@@ -2709,12 +2909,15 @@ impl Pair {
 fn measured(task: &TimedTask, scope: &MeasurementScope) -> MeasuredProof {
     MeasuredProof {
         theorem: task.theorem.clone().unwrap_or_default(),
+        statement_digest: task.statement_digest.clone(),
+        executable: task.executable.clone(),
         exit: task.exit,
         check_axioms: task.check_axioms,
         theorem_proved: task.theorem.is_some(),
         seconds: task.seconds,
         inferences: task.inferences,
         scope: scope.clone(),
+        time_scope: task.time_scope,
     }
 }
 
@@ -2786,7 +2989,7 @@ struct Group {
 impl Group {
     fn add(&mut self, m: &MatchedComparison) {
         self.n += 1;
-        if let (Some(h), Some(g)) = (m.human.seconds, m.generated.seconds) {
+        if let (Some(h), Some(g)) = (m.human().seconds, m.generated().seconds) {
             self.seconds_n += 1;
             self.human_seconds += h;
             self.generated_seconds += g;
@@ -2794,7 +2997,7 @@ impl Group {
                 self.seconds_ratios.push(g / h);
             }
         }
-        if let (Some(h), Some(g)) = (m.human.inferences, m.generated.inferences) {
+        if let (Some(h), Some(g)) = (m.human().inferences, m.generated().inferences) {
             self.inference_n += 1;
             self.human_inferences += h as u128;
             self.generated_inferences += g as u128;
@@ -2826,6 +3029,10 @@ fn refusal_code(e: &ComparisonError) -> &'static str {
         ComparisonError::GeneratedTheoremNotProved => "generated theorem",
         ComparisonError::WrongTreeKind { .. } => "tree kind",
         ComparisonError::ScopeMismatch { .. } => "scope",
+        ComparisonError::StatementIdentityMismatch { .. } => "statement identity",
+        ComparisonError::StatementIdentityUnrecorded { .. } => "statement unrecorded",
+        ComparisonError::ExecutableIdentityMismatch { .. } => "executable identity",
+        ComparisonError::TimeScopeMismatch { .. } => "time scope",
     }
 }
 
@@ -2845,6 +3052,56 @@ fn fmt_match_verdict(p: &Pair) -> String {
             None => "not compared".to_string(),
         }
     }
+}
+
+/// The one time scope shared by **every** matched row, or the refusal that
+/// names the rows (XV.A5). A seconds aggregate is published only when this is
+/// `Ok`: a `prove_only` row and a `whole_file` row are not quantities of the
+/// same kind, and an unrecorded scope is not established at all.
+fn aggregate_time_scope(rows: &[Pair]) -> Result<TimeScope, String> {
+    let matched: Vec<(&Pair, &MatchedComparison)> = rows
+        .iter()
+        .filter_map(|p| p.matched().map(|m| (p, m)))
+        .collect();
+    if matched.is_empty() {
+        return Err("no matched pairs".to_string());
+    }
+    let mut scopes: Vec<TimeScope> = Vec::new();
+    for (_, m) in &matched {
+        if !scopes.contains(&m.human().time_scope) {
+            scopes.push(m.human().time_scope);
+        }
+    }
+    if scopes.len() == 1 && scopes[0].is_recorded() {
+        return Ok(scopes[0]);
+    }
+    let mut out = String::new();
+    out.push_str("**SECONDS AGGREGATE REFUSED.** ");
+    if scopes.len() == 1 {
+        out.push_str(&format!(
+            "Every matched row records `{}`, which is not one of `prove_only`, \
+             `whole_file` or `judge_run`, so the span the seconds were measured \
+             over is not established. No total or ratio over these rows is \
+             published; the inference counts are unaffected.\n\n",
+            scopes[0].as_str()
+        ));
+    } else {
+        out.push_str(
+            "Matched rows carry differing time scopes, so their seconds are not \
+             sums of the same quantity. No total or ratio over these rows is \
+             published; the inference counts are unaffected.\n\n",
+        );
+    }
+    out.push_str("| row | time scope |\n|---|---|\n");
+    for (p, m) in &matched {
+        out.push_str(&format!(
+            "| {} {} | {} |\n",
+            p.arch,
+            p.label(),
+            m.human().time_scope.as_str()
+        ));
+    }
+    Err(out)
 }
 
 /// Render the matched check-time table. Pure so it can be tested without the
@@ -2912,6 +3169,7 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
     ));
 
     out.push_str("\n### Matched aggregates (denominator: n matched pairs)\n\n");
+    let seconds_scope = aggregate_time_scope(&rows);
     out.push_str("| metric | value |\n|---|---:|\n");
     out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
     if matched_count == 0 {
@@ -2924,24 +3182,43 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
         out.push_str("| aggregate inference ratio | n/a (n=0; not published) |\n");
         out.push_str("| per-task inference ratio median | n/a (n=0) |\n");
     } else {
-        out.push_str(&format!(
-            "| human total s (n={}) | {:.3} |\n",
-            all.seconds_n, all.human_seconds
-        ));
-        out.push_str(&format!(
-            "| generated total s (n={}) | {:.3} |\n",
-            all.seconds_n, all.generated_seconds
-        ));
-        out.push_str(&format!(
-            "| aggregate seconds ratio (n={}) | {} |\n",
-            all.seconds_n,
-            fmt_ratio(all.seconds_aggregate())
-        ));
-        out.push_str(&format!(
-            "| per-task seconds ratio median (n={}) | {} |\n",
-            all.seconds_n,
-            fmt_ratio(median(all.seconds_ratios.clone()))
-        ));
+        match &seconds_scope {
+            Ok(scope) => {
+                out.push_str(&format!(
+                    "| human total s (n={}) | {:.3} |\n",
+                    all.seconds_n, all.human_seconds
+                ));
+                out.push_str(&format!(
+                    "| generated total s (n={}) | {:.3} |\n",
+                    all.seconds_n, all.generated_seconds
+                ));
+                out.push_str(&format!(
+                    "| aggregate seconds ratio (n={}) | {} |\n",
+                    all.seconds_n,
+                    fmt_ratio(all.seconds_aggregate())
+                ));
+                out.push_str(&format!(
+                    "| per-task seconds ratio median (n={}) | {} |\n",
+                    all.seconds_n,
+                    fmt_ratio(median(all.seconds_ratios.clone()))
+                ));
+                out.push_str(&format!(
+                    "| time scope (n={}) | {} |\n",
+                    all.seconds_n,
+                    scope.as_str()
+                ));
+            }
+            Err(_) => {
+                out.push_str("| human total s | withheld: time scope not aggregatable |\n");
+                out.push_str("| generated total s | withheld: time scope not aggregatable |\n");
+                out.push_str(
+                    "| aggregate seconds ratio | withheld: time scope not aggregatable |\n",
+                );
+                out.push_str(
+                    "| per-task seconds ratio median | withheld: time scope not aggregatable |\n",
+                );
+            }
+        }
         out.push_str(&format!(
             "| human total inferences (n={}) | {} |\n",
             all.inference_n, all.human_inferences
@@ -2960,6 +3237,11 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
             all.inference_n,
             fmt_ratio(median(all.inference_ratios.clone()))
         ));
+    }
+
+    if let Err(refusal) = &seconds_scope {
+        out.push('\n');
+        out.push_str(refusal);
     }
 
     out.push_str("\n### Unmatched rows (excluded from every aggregate)\n\n");
@@ -3216,6 +3498,7 @@ fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
     ));
 
     out.push_str("\n### Matched totals (denominator: n matched pairs)\n\n");
+    let seconds_scope = aggregate_time_scope(&rows);
     out.push_str("| metric | value |\n|---|---:|\n");
     out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
     if matched_count == 0 {
@@ -3245,19 +3528,40 @@ fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
             all.inference_n,
             fmt_ratio(median(all.inference_ratios.clone()))
         ));
-        out.push_str(&format!(
-            "| human seconds (n={}) | {:.3} |\n",
-            all.seconds_n, all.human_seconds
-        ));
-        out.push_str(&format!(
-            "| generated seconds (n={}) | {:.3} |\n",
-            all.seconds_n, all.generated_seconds
-        ));
-        out.push_str(&format!(
-            "| aggregate seconds ratio (n={}) | {} |\n",
-            all.seconds_n,
-            fmt_ratio(all.seconds_aggregate())
-        ));
+        match &seconds_scope {
+            Ok(scope) => {
+                out.push_str(&format!(
+                    "| human seconds (n={}) | {:.3} |\n",
+                    all.seconds_n, all.human_seconds
+                ));
+                out.push_str(&format!(
+                    "| generated seconds (n={}) | {:.3} |\n",
+                    all.seconds_n, all.generated_seconds
+                ));
+                out.push_str(&format!(
+                    "| aggregate seconds ratio (n={}) | {} |\n",
+                    all.seconds_n,
+                    fmt_ratio(all.seconds_aggregate())
+                ));
+                out.push_str(&format!(
+                    "| time scope (n={}) | {} |\n",
+                    all.seconds_n,
+                    scope.as_str()
+                ));
+            }
+            Err(_) => {
+                out.push_str("| human seconds | withheld: time scope not aggregatable |\n");
+                out.push_str("| generated seconds | withheld: time scope not aggregatable |\n");
+                out.push_str(
+                    "| aggregate seconds ratio | withheld: time scope not aggregatable |\n",
+                );
+            }
+        }
+    }
+
+    if let Err(refusal) = &seconds_scope {
+        out.push('\n');
+        out.push_str(refusal);
     }
 
     out.push_str("\n### Unmatched rows (excluded from every aggregate)\n\n");
@@ -3385,20 +3689,32 @@ fn matched_json(
         matched_count,
         rows.len() - matched_count
     ));
+    let seconds_scope = aggregate_time_scope(&rows);
     let (hi, gi, ir, hs, gs, sr) = if matched_count == 0 {
         (None, None, None, None, None, None)
     } else {
+        // XV.A5: the totals are data, but no ratio is published when the two
+        // sides' spans are not established.
+        let sr = if seconds_scope.is_ok() {
+            all.seconds_aggregate()
+        } else {
+            None
+        };
         (
             Some(all.human_inferences),
             Some(all.generated_inferences),
             all.inference_aggregate(),
             Some(all.human_seconds),
             Some(all.generated_seconds),
-            all.seconds_aggregate(),
+            sr,
         )
     };
+    let scope_token = match &seconds_scope {
+        Ok(s) => json_str(s.as_str()),
+        Err(_) => "null".to_string(),
+    };
     out.push_str(&format!(
-        "  \"matched_totals\": {{\"denominator\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"inference_ratio\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"seconds_ratio\": {}}},\n",
+        "  \"matched_totals\": {{\"denominator\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"inference_ratio\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"seconds_ratio\": {}, \"time_scope\": {}}},\n",
         matched_count,
         hi.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
         gi.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
@@ -3406,6 +3722,7 @@ fn matched_json(
         json_opt_num(hs),
         json_opt_num(gs),
         json_opt_num(sr),
+        scope_token,
     ));
     out.push_str("  \"tasks\": [\n");
     for (i, p) in rows.iter().enumerate() {
@@ -4816,11 +5133,14 @@ mod tests {
                 op.to_uppercase(),
                 fam.to_uppercase()
             )),
+            statement_digest: None,
+            executable: None,
             exit: Some(0),
             check_axioms: true,
             seconds: secs,
             inferences: secs.map(|s| (s * 1_000_000.0) as u64),
             inferences_whole_file: None,
+            time_scope: TimeScope::ProveOnly,
             log: format!("logs-{arch}/{dir}_{op}_{fam}.log"),
         }
     }
@@ -4836,12 +5156,15 @@ mod tests {
     fn proof(theorem: &str, kind: TreeKind) -> MeasuredProof {
         MeasuredProof {
             theorem: theorem.to_string(),
+            statement_digest: None,
+            executable: None,
             exit: Some(0),
             check_axioms: true,
             theorem_proved: true,
             seconds: Some(10.0),
             inferences: Some(1_000),
             scope: scope_of(kind),
+            time_scope: TimeScope::ProveOnly,
         }
     }
 
@@ -4872,6 +5195,96 @@ mod tests {
                 generated: "BIGNUM_ADD_P521_SUBROUTINE_CORRECT".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn compare_refuses_two_different_statements_with_the_same_name() {
+        // XV.A3: identity is the typed statement, not the name. The two rows
+        // name the same theorem but their conclusion digests differ, so they
+        // are different theorems and must not pair.
+        let (h, mut g) = matched();
+        g.statement_digest = Some("6a1c".to_string());
+        let mut h2 = h.clone();
+        h2.statement_digest = Some("0f3d".to_string());
+        assert_eq!(
+            compare(&h2, &g),
+            Err(ComparisonError::StatementIdentityMismatch {
+                human: "0f3d".to_string(),
+                generated: "6a1c".to_string(),
+            })
+        );
+        // The same digest on both sides is accepted.
+        g.statement_digest = Some("0f3d".to_string());
+        assert!(compare(&h2, &g).is_ok());
+        assert_eq!(compare(&h2, &g).unwrap().statement_digest(), Some("0f3d"));
+    }
+
+    #[test]
+    fn compare_refuses_a_statement_digest_recorded_on_one_side_only() {
+        let (h, mut g) = matched();
+        g.statement_digest = Some("6a1c".to_string());
+        assert_eq!(
+            compare(&h, &g),
+            Err(ComparisonError::StatementIdentityUnrecorded { side: "human" })
+        );
+        let mut h2 = h.clone();
+        h2.statement_digest = Some("6a1c".to_string());
+        assert_eq!(
+            compare(&h2, &matched().1),
+            Err(ComparisonError::StatementIdentityUnrecorded { side: "generated" })
+        );
+    }
+
+    #[test]
+    fn compare_refuses_a_different_executable_identity() {
+        let (mut h, mut g) = matched();
+        h.executable = Some("arm.p521.add".to_string());
+        g.executable = Some("x86.p521.add".to_string());
+        assert_eq!(
+            compare(&h, &g),
+            Err(ComparisonError::ExecutableIdentityMismatch {
+                human: "arm.p521.add".to_string(),
+                generated: "x86.p521.add".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn compare_refuses_a_time_scope_difference() {
+        let (h, mut g) = matched();
+        g.time_scope = TimeScope::WholeFile;
+        assert_eq!(
+            compare(&h, &g),
+            Err(ComparisonError::TimeScopeMismatch {
+                human: TimeScope::ProveOnly,
+                generated: TimeScope::WholeFile,
+            })
+        );
+    }
+
+    /// XV.A2: `MatchedComparison` has no public fields and `compare` is its
+    /// only constructor, so the API cannot be used to build an unvalidated
+    /// pair. The compile-time half of this claim is the `compile_fail` doctest
+    /// on the type; this test pins the read-only shape at run time.
+    #[test]
+    fn matched_comparison_is_read_only_and_compare_is_the_only_constructor() {
+        let (h, g) = matched();
+        let m = compare(&h, &g).expect("matched");
+        // Accessors are borrows: the pair cannot be edited into a mismatch.
+        let human: &MeasuredProof = m.human();
+        let generated: &MeasuredProof = m.generated();
+        assert_eq!(human.theorem, generated.theorem);
+        assert_eq!(m.theorem(), human.theorem);
+        // Every precondition is still enforced on the way in.
+        let mut bad = g.clone();
+        bad.exit = Some(1);
+        assert!(compare(&h, &bad).is_err());
+        let mut bad = g.clone();
+        bad.scope.jobs = 2;
+        assert!(compare(&h, &bad).is_err());
+        let mut bad = g.clone();
+        bad.statement_digest = Some("beef".to_string());
+        assert!(compare(&h, &bad).is_err());
     }
 
     #[test]
@@ -5058,6 +5471,93 @@ mod tests {
     }
 
     #[test]
+    fn checktime_table_refuses_to_aggregate_mixed_time_scopes() {
+        // XV.A5: two rows, each internally consistent (both sides measured over
+        // the same span), but the two rows' spans differ. The inference counts
+        // may be summed; the seconds may not, and the refusal names the rows.
+        let mut ht = vec![
+            timed("arm", "p521", "add", "p521", Some(3.0)),
+            timed("arm", "p521", "sub", "p521", Some(4.0)),
+        ];
+        ht[1].time_scope = TimeScope::WholeFile;
+        let human = tfile(TreeKind::Human, ht);
+        let mut gt = vec![
+            timed("arm", "p521", "add", "p521", Some(12.0)),
+            timed("arm", "p521", "sub", "p521", Some(5.0)),
+        ];
+        gt[1].time_scope = TimeScope::WholeFile;
+        let generated = tfile(TreeKind::Generated, gt);
+        let text = render_checktime(&human, &generated);
+        assert!(text.contains("SECONDS AGGREGATE REFUSED"), "{text}");
+        assert!(
+            text.contains("Matched rows carry differing time scopes"),
+            "{text}"
+        );
+        // The refusal names both rows and their scopes.
+        assert!(
+            text.contains("| arm p521/add_p521 | prove_only |"),
+            "{text}"
+        );
+        assert!(
+            text.contains("| arm p521/sub_p521 | whole_file |"),
+            "{text}"
+        );
+        // No seconds aggregate is printed, but the inferences still are.
+        assert!(
+            text.contains("| aggregate seconds ratio | withheld: time scope not aggregatable |"),
+            "{text}"
+        );
+        assert!(!text.contains("| aggregate seconds ratio (n="), "{text}");
+        assert!(
+            text.contains("| aggregate inference ratio (n=2) |"),
+            "{text}"
+        );
+        assert!(text.contains("MATCHED 2/2 PAIRS"), "{text}");
+    }
+
+    #[test]
+    fn checktime_table_publishes_seconds_only_for_one_recorded_scope() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![
+                timed("arm", "p521", "add", "p521", Some(3.0)),
+                timed("arm", "p521", "sub", "p521", Some(4.0)),
+            ],
+        );
+        let generated = tfile(
+            TreeKind::Generated,
+            vec![
+                timed("arm", "p521", "add", "p521", Some(12.0)),
+                timed("arm", "p521", "sub", "p521", Some(5.0)),
+            ],
+        );
+        let text = render_checktime(&human, &generated);
+        assert!(!text.contains("SECONDS AGGREGATE REFUSED"), "{text}");
+        assert!(text.contains("| time scope (n=2) | prove_only |"), "{text}");
+        assert!(
+            text.contains("| aggregate seconds ratio (n=2) | 2.43 |"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn checktime_table_withholds_seconds_when_the_scope_is_unrecorded() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![timed("arm", "p521", "add", "p521", Some(3.0))],
+        );
+        let mut gt = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        gt[0].time_scope = TimeScope::Unrecorded;
+        let generated = tfile(TreeKind::Generated, gt);
+        let text = render_checktime(&human, &generated);
+        // The pair itself is refused first: two unrecorded spans are not the
+        // same span either.
+        assert!(text.contains("refused: time scope"), "{text}");
+        assert!(text.contains("| matched pairs (n) | 0 |"), "{text}");
+        assert!(text.contains("not published"), "{text}");
+    }
+
+    #[test]
     fn a_missing_row_cannot_yield_a_pair_or_a_ratio() {
         let human = tfile(
             TreeKind::Human,
@@ -5141,6 +5641,71 @@ mod tests {
             Some("BIGNUM_ADD_P256_SUBROUTINE_CORRECT")
         );
         assert_eq!(task.get("matched").unwrap(), &json::Json::Bool(false));
+    }
+
+    #[test]
+    fn matched_json_withholds_the_seconds_ratio_when_the_scope_is_unrecorded() {
+        let human = tfile(
+            TreeKind::Human,
+            vec![timed("arm", "p521", "add", "p521", Some(3.0))],
+        );
+        let mut gt = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        gt[0].time_scope = TimeScope::Unrecorded;
+        let generated = tfile(TreeKind::Generated, gt);
+        let j = matched_json(&human, &generated, "h.json", "g.json");
+        let v = json::parse(j.as_bytes()).expect("matched JSON must parse");
+        let totals = v.get("matched_totals").unwrap();
+        // The pair is refused (scopes disagree), so nothing is aggregated.
+        assert_eq!(totals.get("seconds_ratio"), Some(&json::Json::Null));
+        assert_eq!(totals.get("time_scope"), Some(&json::Json::Null));
+
+        // Both unrecorded is the legacy-receipt shape: the pair still matches
+        // on everything else, and the seconds ratio is withheld by the gate.
+        let mut hu = vec![timed("arm", "p521", "add", "p521", Some(3.0))];
+        hu[0].time_scope = TimeScope::Unrecorded;
+        let human = tfile(TreeKind::Human, hu);
+        let mut gu = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        gu[0].time_scope = TimeScope::Unrecorded;
+        let generated = tfile(TreeKind::Generated, gu);
+        let j = matched_json(&human, &generated, "h.json", "g.json");
+        let v = json::parse(j.as_bytes()).expect("matched JSON must parse");
+        let totals = v.get("matched_totals").unwrap();
+        assert_eq!(totals.get("denominator"), Some(&json::Json::Num(1.0)));
+        assert_eq!(totals.get("seconds_ratio"), Some(&json::Json::Null));
+        assert_eq!(totals.get("time_scope"), Some(&json::Json::Null));
+        assert_eq!(totals.get("inference_ratio"), Some(&json::Json::Num(4.0)));
+    }
+
+    #[test]
+    fn a_same_named_theorem_with_a_different_statement_is_refused_in_the_table() {
+        // XV.A3: the received-rows case. Same task key, same theorem name,
+        // different conclusion digest: the table must show a refusal, not a
+        // match.
+        let mut ht = vec![timed("arm", "p521", "add", "p521", Some(3.0))];
+        ht[0].statement_digest = Some("0f3d".to_string());
+        ht[0].executable = Some("arm.p521.add".to_string());
+        let human = tfile(TreeKind::Human, ht);
+        let mut gt = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        gt[0].statement_digest = Some("6a1c".to_string());
+        gt[0].executable = Some("arm.p521.add".to_string());
+        let generated = tfile(TreeKind::Generated, gt);
+        let text = render_checktime(&human, &generated);
+        assert!(text.contains("refused: statement identity"), "{text}");
+        assert!(text.contains("| matched pairs (n) | 0 |"), "{text}");
+        assert!(
+            text.contains("theorem statement differs although the names match"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn received_time_scope_is_parsed_and_unrecognised_tokens_are_unrecorded() {
+        assert_eq!(TimeScope::parse("prove_only"), TimeScope::ProveOnly);
+        assert_eq!(TimeScope::parse("whole_file"), TimeScope::WholeFile);
+        assert_eq!(TimeScope::parse("judge_run"), TimeScope::JudgeRun);
+        assert_eq!(TimeScope::parse("whatever"), TimeScope::Unrecorded);
+        assert!(TimeScope::ProveOnly.is_recorded());
+        assert!(!TimeScope::Unrecorded.is_recorded());
     }
 
     // --- obligation (XIII.E3) --------------------------------------------

@@ -2762,31 +2762,59 @@ Nothing omitted. `XV.H` supersedes `XIV.C` as the order of execution.
   meant per-file builds of a *different contract*; upstream coverage in upstream's sense was
   **0/27** until `_SUBROUTINE_CORRECT` was derived (IX.64). That correction is now in
   `ix54-upstream-dropin.md`; keep it there.
-- [ ] **XV.0.3. IX.65's elapsed-time ratio (90.59×) is withheld** until the scope discrepancy is
+- [x] **XV.0.3. IX.65's elapsed-time ratio (90.59×) is withheld** until the scope discrepancy is
   resolved: the human side brackets `_CORRECT`, while the generated seconds look like whole-file
   upstream timings. The **inference** ratio is the one that stands.
-- [ ] **XV.0.4. IX.66 close-count denominator.** The receipt says 30 SAT closes; the per-task
+  — **Withheld (IX.68):** `TimeScope` is now carried as data, `compare` refuses a pair whose two
+  sides' scopes differ, and the table refuses to aggregate mixed or unrecorded scopes by name.
+  Re-running IX.65's command prints `SECONDS AGGREGATE REFUSED` and keeps 70.87× / 60.20× for
+  inferences. Correction appended to `research/receipts/ix65-same-obligation-and-phases.md` §4;
+  evidence in `research/receipts/ix68-ci-and-integrity.md`.
+- [x] **XV.0.4. IX.66 close-count denominator.** The receipt says 30 SAT closes; the per-task
   table lists 21 closes across 22 attempts. The inference totals reconcile, but the denominator
   must be corrected and the receipts cross-checked.
+  — **Corrected (IX.68):** §6 now reads "21 of 21 closes across 22 CSAT attempts", with an inline
+  correction note and a §8 correction log. `src/bin/ix66_table.rs` regenerates the close column
+  from the receipt JSON and asserts the printed total equals the sum of the per-task counts
+  (`sat_closes == closes.len()` per task). Evidence in `research/receipts/ix68-ci-and-integrity.md`.
 
 ## XV.A — Restore CI and fix measurement integrity (blocking; do first)
 
-- [ ] **XV.A1. CI is red.** `ix66_markers_are_additive_and_the_normal_answer_is_recovered`
+- [x] **XV.A1. CI is red.** `ix66_markers_are_additive_and_the_normal_answer_is_recovered`
   (`tests/tools_emit.rs:429`) loads library sources that include `.bench/hol-light/Cadical/`,
   which does not exist offline. Fix with a synthetic fixture; the test must run offline and
   still prove `deinstrument ∘ instrument = id`. CI green is a precondition for everything below.
-- [ ] **XV.A2. `MatchedComparison` must not be constructible without validation.** Its fields are
+  — **Fixed (IX.68):** the test now runs three halves — committed fixtures
+  (`tests/fixtures/emit/`), the tracked `tools/*.ml` (always present), and the real inlined set
+  (skipped, with a printed reason, when `.bench` is absent). Verified by renaming
+  `.bench/hol-light/Cadical` for one test run; see `research/receipts/ix68-ci-and-integrity.md`.
+- [x] **XV.A2. `MatchedComparison` must not be constructible without validation.** Its fields are
   public. Make them private, expose accessors, and make the only constructor be `compare`. Add a
   compile-fail test or a unit test that the fields are inaccessible outside the module.
-- [ ] **XV.A3. Identity, not names.** The comparator matches theorem *names*. It must compare the
+  — **Fixed (IX.68):** fields private, `human()`/`generated()`/`theorem()`/`statement_digest()`
+  read-only accessors, `compare` the only constructor. A `compile_fail` doctest plus a passing
+  `no_run` companion pin the API shape (`cargo test --doc`), and unit tests re-check every
+  precondition.
+- [x] **XV.A3. Identity, not names.** The comparator matches theorem *names*. It must compare the
   full typed statement (or a canonical digest of it) plus the executable identity, so two
   different theorems with the same name cannot be paired.
-- [ ] **XV.A4. Fix the trimmer's success reporting.** `src/tools/lrat_trim.rs` can report success
+  — **Fixed (IX.68):** `MeasuredProof` carries `statement_digest` and `executable`; `compare`
+  refuses `StatementIdentityMismatch`, `StatementIdentityUnrecorded` and
+  `ExecutableIdentityMismatch`. Tests construct two same-named theorems with different digests
+  and require a refusal, both at `compare` and in the rendered table.
+- [x] **XV.A4. Fix the trimmer's success reporting.** `src/tools/lrat_trim.rs` can report success
   with negative hints present or a non-empty root. It must refuse (and say why) in both cases;
   its own tests must cover the refusals, not only the success path.
-- [ ] **XV.A5. Scope discipline in time comparisons.** Any timing comparison must carry its
+  — **Fixed (IX.68):** `TrimRefusal` names `negative_hint` / `no_empty_clause` (and the rest) in
+  the OCaml order and token; unit tests cover the refusals, and
+  `tests/csat_trim_agreement.rs` runs the shipped OCaml trimmer on the same table and requires
+  the same verdict and byte-identical output.
+- [x] **XV.A5. Scope discipline in time comparisons.** Any timing comparison must carry its
   scope (`prove` only, whole file, or judge run) as data, and the table must refuse to aggregate
   rows with different scopes.
+  — **Fixed (IX.68):** `TimeScope ∈ {prove_only, whole_file, judge_run, unrecorded}` is read from
+  each row; mixed or unrecorded scopes refuse the seconds aggregate with a named row table while
+  the inference counts stand. See `XV.0.3`.
 
 ## XV.B — Cone-of-influence slicing (the measured lever)
 
