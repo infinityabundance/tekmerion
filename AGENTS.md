@@ -66,6 +66,38 @@ When a subagent returns:
 - Keep at least 3 GB free on the project volume. Stop and report before filling it.
 - Each s2n-bignum proof can use ~5 GB RAM. Size parallelism as `RAM_GB / 6`.
 
+### 7a. OOM protection is mandatory, always
+
+Three machine OOM crashes were caused by uncapped proof builds. A verification
+project whose own runs take down the host cannot be trusted with a sealed result.
+These are hard rules, not guidance.
+
+- **Every** command that can allocate more than a couple of GB — HOL Light proof
+  builds, `make` in an s2n-bignum tree, native compilation, full sweeps, cargo
+  test over the bench — **must** run through `tools/cap.sh`:
+
+  ```
+  tools/cap.sh 12G -- make -j1 HOLDIR=… <target>.correct
+  tools/cap.sh 12G -- cargo test --offline
+  ```
+
+  The default cap for a single HOL Light proof is **12G** (a proof needs ~5G;
+  12G leaves headroom for OCaml's reserves). Raising it is a decision recorded in
+  the brief that asks for it, never a convenience.
+- **Never run two proof builds at once.** `-j1`, one target at a time, always. A
+  sweep is sequential even when the tasks look independent.
+- **Never run a proof build in the orchestrator's foreground.** Delegate it. If a
+  subagent cannot be started, run it capped, one at a time, and stop after one
+  target.
+- `systemd-run -p MemoryMax=` is **not** an acceptable mechanism on this host: it
+  is accepted but not applied (verified — the scope reports `MemoryMax=infinity`
+  and a 2 GB allocation succeeds under a 256 M setting). `tools/cap.sh` uses
+  `RLIMIT_AS`, which was verified to bite.
+- Before any long run, check `free -g` and record it in the receipt. If available
+  memory is under 3× the cap, stop and report instead of running.
+- A cap that fires is a **result**, not a retry: record it as `capped` with the
+  limit, and do not silently re-run without it.
+
 ## 8. Honesty over momentum
 
 - Report blockers plainly: missing model credentials, missing assembler, insufficient disk.

@@ -747,13 +747,35 @@ pub fn preamble(spec: &Spec) -> String {
 
 /// The close text for one operation.
 pub fn post_text(op: &str, state: &str, modulus: &str) -> String {
+    post_text_for(None, op, state, modulus)
+}
+
+/// IX.67: the tasks whose word residue is closed by `BRIDGE_ALGEBRA_TAC`
+/// (value-level rewriting plus linear arithmetic) instead of a certified-SAT
+/// close.  Exactly one theorem is claimed by the receipt; every other task,
+/// measured or not, keeps the tactic it had and therefore the same inference
+/// count.  The gate is here, at emission, so the library carries both entry
+/// points and the choice is visible in the emitted answer.
+pub const ALGEBRAIC_CLOSE_TASKS: &[&str] = &["arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT"];
+
+fn add_ref_entry(task: Option<&str>) -> &'static str {
+    match task {
+        Some(t) if ALGEBRAIC_CLOSE_TASKS.contains(&t) => "BRIDGE_ADD_REF_ALG_TAC",
+        _ => "BRIDGE_ADD_REF_TAC",
+    }
+}
+
+/// `post_text` for a named task: the only difference is which add entry point
+/// the emitted chain calls (see `ALGEBRAIC_CLOSE_TASKS`).
+pub fn post_text_for(task: Option<&str>, op: &str, state: &str, modulus: &str) -> String {
     match op {
         "add" => format!(
             "ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN\n\
              RULE_ASSUM_TAC(REWRITE_RULE [REAL_BITVAL_NOT; ADD_CLAUSES; VAL_WORD_BITVAL]) THEN\n\
              CONV_TAC SYM_CONV THEN CONV_TAC(RAND_CONV BIGNUM_LEXPAND_CONV) THEN\n\
              ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC \"{state}\" THEN\n\
-             BRIDGE_ADD_REF_TAC (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}"
+             {} (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}",
+            add_ref_entry(task)
         ),
         "sub" => format!(
             "ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN\n\
@@ -1357,7 +1379,7 @@ pub fn build_arm(op: &str, task: &str, policy: &GuardPolicy, repo: &Path) -> Res
     let tactic = [
         format!("{} THEN", preamble(&spec)),
         format!("{} THEN", arm_simulation(&exec_name, &accumulate, last)),
-        post_text(op, &format!("s{last}"), &modulus),
+        post_text_for(Some(task), op, &format!("s{last}"), &modulus),
     ]
     .join("\n");
     Ok(ArmInfo {
