@@ -855,6 +855,15 @@ let bridge_math_failure_shape s =
     Some "slice-too-strong"
   else None;;
 
+(* [IX.78] The classifier returns a portable triple `(kind, detail, limit)'
+   with `kind' one of "mathematical", "unsupported", "resource", "internal".
+   It used polymorphic variants, which cannot live in this file: the emitted
+   answer is preprocessed by HOL Light's camlp5r (revised syntax), where a
+   backtick starts a term quotation, so a variant constructor is a parse error
+   rather than a value.  The same block is also compiled by plain OCaml in
+   `tests/bridge_failure_selftest.sh'.  A string-tagged tuple is the only
+   representation that both readers accept.  (Taken from
+   `wip/xvi-f2-carry-range' and verified by building an answer, not assumed.) *)
 let bridge_failure_class ?(timeout=false) (e:exn) =
   let has_prefix = bridge_failure_has_prefix in
   let exit_code s =
@@ -872,31 +881,33 @@ let bridge_failure_class ?(timeout=false) (e:exn) =
         let k = digits j in
         if k = j then None
         else (try Some (int_of_string (String.sub s j (k - j))) with _ -> None) in
-  if timeout then `Resource ("timeout", "wall-clock budget")
-  else match e with
-  | Out_of_memory -> `Resource ("memory", "address space (RLIMIT_AS)")
-  | Stack_overflow -> `Resource ("stack", "OCaml stack limit")
-  | Sys.Break -> `Resource ("interrupt", "Sys.Break")
-  | Invalid_argument s -> `Unsupported s
-  | Failure s ->
-      let unsupported = "unsupported:" in
-      if has_prefix unsupported s then
-        `Unsupported
-          (String.sub s (String.length unsupported)
-             (String.length s - String.length unsupported))
-      else if has_prefix "CSAT_PROVE: Sanity check" s ||
-              has_prefix "CSAT_REFUTE: Sanity check failure" s then
-        `Internal s
-      else
-        (match exit_code s with
-         | Some 124 -> `Resource ("timeout", "exit 124")
-         | Some rc when rc >= 128 ->
-             `Resource ("signal", "exit " ^ string_of_int rc)
-         | _ ->
-             (match bridge_math_failure_shape s with
-              | Some _ -> `Mathematical s
-              | None -> `Internal ("unrecognised Failure: " ^ s)))
-  | e -> `Internal (Printexc.to_string e);;
+  let classify e =
+    match e with
+    | Out_of_memory -> ("resource", "memory", "address space (RLIMIT_AS)")
+    | Stack_overflow -> ("resource", "stack", "OCaml stack limit")
+    | Sys.Break -> ("resource", "interrupt", "Sys.Break")
+    | Invalid_argument s -> ("unsupported", s, "")
+    | Failure s ->
+        let unsupported = "unsupported:" in
+        if has_prefix unsupported s then
+          ("unsupported",
+           String.sub s (String.length unsupported)
+             (String.length s - String.length unsupported), "")
+        else if has_prefix "CSAT_PROVE: Sanity check" s ||
+                has_prefix "CSAT_REFUTE: Sanity check failure" s then
+          ("internal", s, "")
+        else
+          (match exit_code s with
+           | Some 124 -> ("resource", "timeout", "exit 124")
+           | Some rc when rc >= 128 ->
+               ("resource", "signal", "exit " ^ string_of_int rc)
+           | _ ->
+               (match bridge_math_failure_shape s with
+                | Some _ -> ("mathematical", s, "")
+                | None -> ("internal", "unrecognised Failure: " ^ s, "")))
+    | e -> ("internal", Printexc.to_string e, "") in
+  if timeout then ("resource", "timeout", "wall-clock budget")
+  else classify e;;
 
 (* The fallback counter is part of the tested surface: a resource exhaustion
    must leave it at zero. *)
@@ -906,21 +917,22 @@ let bridge_slice_retry ~task ~kept ~total ~attempt ~fallback ~note =
   try attempt ()
   with e ->
     (match bridge_failure_class e with
-     | `Mathematical _ ->
+     | ("mathematical", _, _) ->
          note (Printf.sprintf "SLICE fallback=%s reason=mathematical kept=%d/%d"
                  task kept total);
          incr bridge_fallback_count;
          fallback ()
-     | `Unsupported what ->
+     | ("unsupported", what, _) ->
          note (Printf.sprintf "CSAT unsupported=%s kept=%d/%d" what kept total);
          raise e
-     | `Resource (which, limit) ->
+     | ("resource", which, limit) ->
          note (Printf.sprintf "CSAT capped=%s limit=%s kept=%d/%d"
                  which limit kept total);
          raise e
-     | `Internal why ->
+     | ("internal", why, _) ->
          note (Printf.sprintf "CSAT internal=%s" why);
-         raise e);;
+         raise e
+     | (_, _, _) -> raise e);;
 (* END BRIDGE_FAILURE_STANDALONE *)
 
 let BRIDGE_CSAT_TAC : tactic =
@@ -957,7 +969,7 @@ let BRIDGE_CSAT_TAC : tactic =
           ~task:(!bridge_slice_task) ~kept:keptn ~total
           ~attempt:(fun () -> close kept)
           ~fallback:(fun () -> close hths)
-          ~note:bridge_slice_note in
+          ~note:(fun s -> bridge_slice_note "%s" s) in
     ACCEPT_TAC th' (asl,w);;
 
 (* everything that precedes the SAT call, on the goal *)
@@ -1269,6 +1281,643 @@ let BRIDGE_ATOM_BOUNDS_TAC : tactic =
     if facts = [] then ALL_TAC (asl,w)
     else (MP_TAC (end_itlist CONJ facts) THEN STRIP_TAC) (asl,w);;
 
+(* ------------------------------------------------------------------------- *)
+(* 6c. The oracle close (IX.78).                                             *)
+(*                                                                           *)
+(* IX.70 handed the whole residue to `ASM_INT_ARITH_TAC' and it exhausted the   *)
+(* stack.  The receipt isolated the reason: the procedure is a *rational*     *)
+(* linear prover, the accumulator carries are integers bounded by 0 and 1,    *)
+(* and nothing in the 60-hypothesis encoding lets it use that.  The human     *)
+(* s2n-bignum proof does three things instead (see                            *)
+(* `.bench/human-baseline/arm/proofs/bignum_add_p25519.ml'): it identifies    *)
+(* the top carry as a *flag* over the specification's own comparison         *)
+(* (`FLAG_FROM_CARRY_LE'), it collapses the limb equations with a            *)
+(* carry-conservation rule (`GEN_DECARRY_RULE'), and only then calls a        *)
+(* linear prover.                                                            *)
+(*                                                                           *)
+(* This section does the same, without naming a curve, a width or a limb      *)
+(* count:                                                                    *)
+(*                                                                           *)
+(*   1. Linearise every integer hypothesis into an exact rational form        *)
+(*      `sum (k_i * atom_i) + c = 0' (or `<=`/`<`), atoms being the opaque     *)
+(*      terms `&(val w)' and `&(bitval b)'.  Anything non-linear is dropped.  *)
+(*   2. Eliminate the atoms that do *not* occur in the goal, by exact          *)
+(*      Gauss-Jordan.  What is left are the *aggregate* identities -- the      *)
+(*      carry-conservation lemmas of `XV.E1' for this instance -- and the      *)
+(*      definitions of the eliminated atoms in terms of the goal's atoms.      *)
+(*      The elimination multiplies rows by each other's pivot coefficient, so  *)
+(*      every coefficient stays an integer: no division is introduced.         *)
+(*   3. The oracle: for each carry atom that survives, ask the *linear          *)
+(*      relaxation* (the same rational procedure `INT_ARITH' runs, but on the   *)
+(*      reduced system and only the hypotheses whose atoms it mentions) for a   *)
+(*      pinning value `c = 0' or `c = 1'.  A success is the solver's decision    *)
+(*      and yields the *proof* of the fact, so nothing is asserted.  A failure  *)
+(*      is reported as `undetermined' and the close simply proceeds without it. *)
+(*      The decision is per theorem: it is read from this goal's terms, its     *)
+(*      bounds and this system's elimination, never from a per-class template.  *)
+(*   4. Hand the residual -- the aggregate rows, the emitted facts and the      *)
+(*      integer hypotheses -- to the linear prover.  The system it now sees has *)
+(*      two or three equations, not sixty.                                     *)
+(*                                                                           *)
+(* The old route (`BRIDGE_SPLIT_TOP_CARRY_TAC' + `ASM_INT_ARITH_TAC') is kept   *)
+(* below and is no longer called; it is the IX.70 attempt, recorded in          *)
+(* `research/receipts/ix70-algebraic-close.md'.                                *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_int_add_tm = `(+):int->int->int`
+and bridge_int_mul_tm = `(*):int->int->int`
+and bridge_int_neg_tm = `(--):int->int`
+and bridge_int_of_num_tm = `int_of_num:num->int`;;
+
+(* an integer literal, negative ones as `-- &|k|' *)
+let bridge_int_lit k =
+  let m = mk_comb(bridge_int_of_num_tm, mk_numeral (Num.abs_num k)) in
+  if Num.lt_num k num_0 then mk_comb(bridge_int_neg_tm, m) else m;;
+
+(* ------------------------------------------------------------------------- *)
+(* 6c.1 Sparse exact rational linear forms.                                   *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_lf_coeff t xs =
+  try snd (List.find (fun (u,_) -> aconv u t) xs) with Not_found -> num_0;;
+
+(* the coefficient of an atom in a form (a form is `(sparse, constant)') *)
+let bridge_lf_coeff_in t (xs,_) = bridge_lf_coeff t xs;;
+
+let rec bridge_lf_addc xs t k =
+  match xs with
+  | [] -> if Num.eq_num k num_0 then [] else [(t,k)]
+  | (u,k0)::rest ->
+      if aconv u t then
+        (let k' = Num.add_num k0 k in
+         if Num.eq_num k' num_0 then rest else (u,k')::rest)
+      else (u,k0) :: bridge_lf_addc rest t k;;
+
+let bridge_lf_add (xs,c) (ys,d) =
+  let xs' = List.fold_left (fun a (t,k) -> bridge_lf_addc a t k) xs ys in
+  (xs', Num.add_num c d);;
+
+let bridge_lf_scale k (xs,c) =
+  if Num.eq_num k num_0 then ([], num_0)
+  else (List.map (fun (t,j) -> (t, Num.mult_num k j)) xs, Num.mult_num k c);;
+
+let bridge_lf_neg f = bridge_lf_scale (Num.minus_num num_1) f;;
+
+let bridge_lf_vars (xs,_) = List.map fst xs;;
+
+(* a numeral coefficient: `&k' is `int_of_num (&k)' *)
+let bridge_lf_num t =
+  match t with
+  | Comb(Const("int_of_num",_), n) when is_numeral n -> Some(dest_numeral n)
+  | _ -> None;;
+
+let rec bridge_lf_of_term tm =
+  match tm with
+  | Comb(Comb(Const("int_add",_),a),b) ->
+      (match bridge_lf_of_term a, bridge_lf_of_term b with
+       | Some x, Some y -> Some(bridge_lf_add x y)
+       | _ -> None)
+  | Comb(Comb(Const("int_sub",_),a),b) ->
+      (match bridge_lf_of_term a, bridge_lf_of_term b with
+       | Some x, Some y -> Some(bridge_lf_add x (bridge_lf_neg y))
+       | _ -> None)
+  | Comb(Const("int_neg",_),a) ->
+      (match bridge_lf_of_term a with Some x -> Some(bridge_lf_neg x) | None -> None)
+  | Comb(Comb(Const("int_mul",_),a),b) ->
+      (match bridge_lf_num a with
+       | Some k -> (match bridge_lf_of_term b with
+                    | Some y -> Some(bridge_lf_scale k y) | None -> None)
+       | None ->
+           (match bridge_lf_num b with
+            | Some k -> (match bridge_lf_of_term a with
+                         | Some x -> Some(bridge_lf_scale k x) | None -> None)
+            | None -> None))
+  | Comb(Const("int_of_num",_),n) when is_numeral n -> Some([], dest_numeral n)
+  | _ -> Some(([(tm, num_1)], num_0));;
+
+(* the row of an integer equation, `lhs - rhs = 0' *)
+let bridge_lf_row_of_thm th =
+  let t = concl th in
+  if not (is_eq t) || type_of (lhand t) <> `:int` then None else
+  match bridge_lf_of_term (lhand t), bridge_lf_of_term (rand t) with
+  | Some l, Some r -> Some(bridge_lf_add l (bridge_lf_neg r))
+  | _ -> None;;
+
+(* the integer hypotheses, as (theorem, linear form >= 0 / > 0, strict) *)
+let bridge_lf_ineqs asl =
+  List.filter_map
+    (fun (_,th) ->
+      let t = concl th in
+      if type_of t <> `:bool` then None else
+      match t with
+      | Comb(Comb(Const("int_le",_),a),b) ->
+          (match bridge_lf_of_term a, bridge_lf_of_term b with
+           | Some x, Some y -> Some(th, bridge_lf_add y (bridge_lf_neg x), false)
+           | _ -> None)
+      | Comb(Comb(Const("int_lt",_),a),b) ->
+          (match bridge_lf_of_term a, bridge_lf_of_term b with
+           | Some x, Some y -> Some(th, bridge_lf_add y (bridge_lf_neg x), true)
+           | _ -> None)
+      | _ -> None)
+    asl;;
+
+(* build `sum k_i * x_i' as one int term *)
+let bridge_lf_term (xs,c) =
+  let prods = List.map (fun (t,k) ->
+      if Num.eq_num k num_1 then t
+      else mk_binop bridge_int_mul_tm (bridge_int_lit k) t) xs in
+  let all = if Num.eq_num c num_0 then prods else prods @ [bridge_int_lit c] in
+  match all with
+  | [] -> bridge_int_lit num_0
+  | t::ts -> List.fold_left (fun a b -> mk_binop bridge_int_add_tm a b) t ts;;
+
+(* the equation `sum k_i * x_i + c = 0' in the shape `lhs = rhs' *)
+let bridge_lf_eq (xs,c) =
+  mk_eq(bridge_lf_term (xs, num_0), bridge_int_lit (Num.minus_num c));;
+
+(* ------------------------------------------------------------------------- *)
+(* 6c.2 Exact Gauss-Jordan over the integer hypotheses.                       *)
+(*                                                                           *)
+(* Rows are `(id, support, form)' with `form = 0'.  A variable is *internal*  *)
+(* when it does not occur in the goal.  Internal variables are eliminated     *)
+(* one at a time, from every row *and every definition already found*, so a   *)
+(* definition is always expressed in the final free atoms.  The elimination   *)
+(* is `k2 * row2 - k1 * row1', which keeps integer coefficients.              *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_lf_in_goal keep t = List.exists (aconv t) keep;;
+
+(* the carry atoms, first in the elimination order, so that each carry of a
+   chain is a pivot in its own definition *)
+let bridge_is_bitval_atom t =
+  match t with
+  | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) -> true
+  | _ -> false;;
+
+let bridge_prioritise_carries vars =
+  let carries, others = List.partition bridge_is_bitval_atom vars in
+  carries @ others;;
+
+let bridge_internal_vars keep forms =
+  let rec go acc = function
+    | [] -> List.rev acc
+    | (xs,_)::rest ->
+        let acc' = List.fold_left (fun a (t,_) ->
+            if List.exists (aconv t) a || bridge_lf_in_goal keep t then a
+            else if bridge_is_bitval_atom t then a @ [t]
+            else a) acc xs in
+        go acc' rest in
+  go [] forms;;
+
+let rec bridge_eliminate_from v pivot psup rows =
+  (* replace each row by `kv * row - k * pivot', carrying the pivot's support *)
+  match rows with
+  | [] -> []
+  | (j,sup,f)::rest ->
+      let k = bridge_lf_coeff_in v f in
+      let f' = if Num.eq_num k num_0 then f
+               else bridge_lf_add (bridge_lf_scale (bridge_lf_coeff_in v pivot) f)
+                      (bridge_lf_neg (bridge_lf_scale k pivot)) in
+      let sup' = if Num.eq_num k num_0 then sup else sup @ psup in
+      (j,sup',f') :: bridge_eliminate_from v pivot psup rest;;
+
+let bridge_gauss_jordan keep rows =
+  let vars = bridge_prioritise_carries
+               (bridge_internal_vars keep (List.map (fun (_,_,f) -> f) rows)) in
+  (* eliminate the new pivot `v' from an older definition, keeping integers *)
+  let elim_def v psup pivot (w,dsup,f) =
+    let kv = bridge_lf_coeff_in v pivot
+    and k = bridge_lf_coeff_in v f in
+    if Num.eq_num k num_0 then (w,dsup,f)
+    else (w, dsup @ psup,
+          bridge_lf_add (bridge_lf_scale kv f)
+            (bridge_lf_neg (bridge_lf_scale k pivot))) in
+  let rec loop vars rows defs =
+    match vars with
+    | [] -> (List.rev defs, rows)
+    | v::vs ->
+        (match List.find_opt
+                 (fun (_,_,f) -> not (Num.eq_num (bridge_lf_coeff_in v f) num_0))
+                 rows with
+         | None -> loop vs rows defs
+         | Some (i,sup,f) ->
+             let others = List.filter (fun (j,_,_) -> j <> i) rows in
+             let others = bridge_eliminate_from v f sup others in
+             let defs' = List.map (elim_def v sup f) defs in
+             loop vs others ((v, sup, f) :: defs'))
+  in loop vars rows [];;
+
+(* ------------------------------------------------------------------------- *)
+(* 6c.3a The interval relaxation.                                            *)
+(*                                                                           *)
+(* `INT_ARITH' on a *false* bound is expensive (it searches for a            *)
+(* contradiction that is not there: measured Stack_overflow after ~18 s on   *)
+(* `carry_s3 < 1', and one 12 G cap firing in the third bridge of           *)
+(* arm/add_p25519).  So the oracle does not ask the procedure whether a       *)
+(* value holds; it *computes* the rational interval first, with exact        *)
+(* arithmetic, and asks only for the bounds it already knows are true.       *)
+(*                                                                           *)
+(* The engine is interval arithmetic over the linear forms, with one          *)
+(* relational hypothesis used per bound.  That is what is needed: the top    *)
+(* carry of an add is bounded by `M + N < B^n', a fact about a *sum* of      *)
+(* atoms, not by any single atom's bound.                                    *)
+(* ------------------------------------------------------------------------- *)
+
+(* (value, strict) meaning `x > value' when strict and `x >= value' otherwise;
+   None means no bound.  No variant type: this file is also read by camlp5r. *)
+let bridge_bound_join_lo a b =
+  match a,b with
+  | None, x | x, None -> x
+  | Some(v1,s1), Some(v2,s2) ->
+      if Num.lt_num v1 v2 then Some(v1,s1)
+      else if Num.lt_num v2 v1 then Some(v2,s2)
+      else Some(v1, s1 || s2);;
+
+let bridge_bound_join_hi a b =
+  match a,b with
+  | None, x | x, None -> x
+  | Some(v1,s1), Some(v2,s2) ->
+      if Num.lt_num v2 v1 then Some(v1,s1)
+      else if Num.lt_num v1 v2 then Some(v2,s2)
+      else Some(v1, s1 || s2);;
+
+(* direct one-atom bounds from the hypotheses: a form with one variable and a
+   constant is a lower bound when its coefficient is positive, an upper bound
+   when it is negative *)
+let bridge_direct_bounds ineqs =
+  let add tbl t lo hi =
+    let (lo0,hi0) = try List.assoc t tbl with Not_found -> (None,None) in
+    (t,(bridge_bound_join_lo lo0 lo, bridge_bound_join_hi hi0 hi))
+    :: List.remove_assoc t tbl in
+  List.fold_left (fun tbl (_,(xs,c),strict) ->
+      match xs with
+      | [(x,k)] ->
+          let v = (Num.div_num (Num.minus_num c) k, strict) in
+          if Num.lt_num num_0 k then add tbl x (Some v) None
+          else add tbl x None (Some v)
+      | _ -> tbl) [] ineqs;;
+
+let bridge_lookup_bound tbl t =
+  try List.assoc t tbl with Not_found -> (None,None);;
+
+(* bounds of a linear form from the one-atom table.  For `k > 0', k*x is
+   increasing (lower bound from x's lower, upper from x's upper); for
+   `k < 0' it is decreasing (the two swap). *)
+let bridge_form_bounds tbl (xs,c) =
+  List.fold_left (fun (lo,hi) (t,k) ->
+      let (l,h) = bridge_lookup_bound tbl t in
+      let lo_add b = match b with None -> lo
+        | Some(v,s) -> bridge_bound_join_lo lo (Some (Num.mult_num k v, s))
+      and hi_add b = match b with None -> hi
+        | Some(v,s) -> bridge_bound_join_hi hi (Some (Num.mult_num k v, s)) in
+      if Num.lt_num num_0 k then (lo_add l, hi_add h)
+      else (lo_add h, hi_add l))
+    ((Some (c,false)), (Some (c,false))) xs;;
+
+(* upper bound of a form, using one relational hypothesis; `None' if none
+   applies.  `t = alpha * f + rest' where `f' shares a proportional part. *)
+let bridge_rel_hi tbl ineqs t =
+  let (txs,_) = t in
+  let try_one (_,(fxs,fc),strict) =
+    let shared = List.filter (fun (x,_) ->
+        List.exists (fun (y,_) -> aconv x y) txs) fxs in
+    match shared with
+    | [] -> None
+    | (x0,_)::_ ->
+        let k0 = bridge_lf_coeff x0 txs and kf = bridge_lf_coeff x0 fxs in
+        if Num.eq_num kf num_0 then None else
+        let alpha = Num.div_num k0 kf in
+        let prop = List.for_all (fun (x,_) ->
+            Num.eq_num (bridge_lf_coeff x txs)
+                       (Num.mult_num alpha (bridge_lf_coeff x fxs))) shared in
+        if not prop || not (Num.lt_num alpha num_0) then None else
+        let f = (fxs,fc) in
+        let rest = bridge_lf_add t (bridge_lf_neg (bridge_lf_scale alpha f)) in
+        let (_,hi) = bridge_form_bounds tbl rest in
+        (match hi with
+         | Some(v,s) ->
+             (* alpha < 0 and f > 0 (or >= 0): alpha*f < 0 (strict if f strict) *)
+             if strict then Some (v,true) else Some (v,s)
+         | None -> None) in
+  List.fold_left (fun acc ineq ->
+      match acc with
+      | Some _ -> acc
+      | None -> try_one ineq) None ineqs;;
+
+let bridge_hi tbl ineqs t =
+  let (_,hi) = bridge_form_bounds tbl t in
+  match bridge_rel_hi tbl ineqs t with
+  | None -> hi
+  | Some h -> bridge_bound_join_hi hi (Some h);;
+
+let bridge_lo_of_neg tbl ineqs t = 
+  match bridge_hi tbl ineqs (bridge_lf_neg t) with
+  | Some(v,s) -> Some(Num.minus_num v, s)
+  | None -> None;;
+
+(*                                                                           *)
+(* The *linear relaxation* of the system is the equations plus the interval   *)
+(* bounds read as rationals; the procedure that decides its consequences is   *)
+(* the same one `INT_ARITH' uses.  It is consulted only on a *reduced*        *)
+(* system (the definition of the atom, and the hypotheses all of whose atoms  *)
+(* occur in that definition), so a negative answer is cheap and cannot        *)
+(* wander into the 60-hypothesis search that exhausted the stack under       *)
+(* IX.70.                                                                     *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_lf_atoms form = List.map fst (fst form);;
+
+let bridge_atom_in atoms u = List.exists (aconv u) atoms;;
+
+(* the hypotheses whose atoms are all among `atoms' *)
+let bridge_cone atoms ineqs =
+  List.filter (fun (_,f,_) -> List.for_all (bridge_atom_in atoms) (bridge_lf_vars f))
+    ineqs;;
+
+let bridge_mk_imps sups goal =
+  itlist (fun a b -> mk_imp(a,b)) (List.map concl sups) goal;;
+
+(* remove the `+ &0' and `-- &1 *' artefacts the normalisation leaves behind;
+   they are semantically inert but multiply the linear forms the prover
+   builds. *)
+let bridge_int_clean_rules =
+  [INT_ADD_LID; INT_ADD_RID; INT_MUL_LID; INT_MUL_RID;
+   INT_MUL_LZERO; INT_MUL_RZERO; INT_NEG_LMUL; INT_MUL_LNEG; INT_NEG_NEG;
+   INT_NEG_0];;
+
+let bridge_clean_th th = REWRITE_RULE bridge_int_clean_rules th;;
+
+(* A *deep* flattening conversion: every integer subterm is replaced by the
+   canonical `sum k_i * atom_i + c' built from its linear form.  The IX.70
+   residue is full of nested `B * (B * (B * a + b) + c) + d' coefficients, and
+   the rational prover's monomial expansion of those is what exhausted the
+   stack; the flat form `B^3 * a + B^2 * b + B * c + d' is decided in 0.2 s
+   (probe `A_zero', `research/receipts/ix78-oracle-arithmetic-close.md').
+   Each rewrite is proved by `INT_RING', so nothing is asserted. *)
+let rec bridge_flat_conv tm =
+  if type_of tm = `:int` then
+    (match bridge_lf_of_term tm with
+     | Some lf ->
+         let flat = bridge_lf_term lf in
+         if aconv flat tm then REFL tm
+         else (try prove(mk_eq(tm, flat), CONV_TAC INT_RING)
+               with _ -> REFL tm)
+     | None -> REFL tm)
+  else if is_comb tm then
+    MK_COMB(bridge_flat_conv (rator tm), bridge_flat_conv (rand tm))
+  else if is_abs tm then
+    ABS (fst (dest_abs tm)) (bridge_flat_conv (snd (dest_abs tm)))
+  else REFL tm;;
+
+let bridge_flat_th th = CONV_RULE bridge_flat_conv th;;
+
+let bridge_clean_tm tm =
+  try snd (dest_eq (concl (REWRITE_CONV bridge_int_clean_rules tm)))
+  with _ -> tm;;
+
+let bridge_bitval_bool t =
+  match t with
+  | Comb(Const("int_of_num",_), Comb(Const("bitval",_), b)) -> Some b
+  | _ -> None;;
+
+(* The fallback close: case-split every *still undetermined* carry (the oracle
+   has already decided the pinned ones), reduce `&(bitval b)' with
+   BITVAL_CLAUSES, and let linear arithmetic see only the val atoms.  This is
+   the IX.70 route done on the *reduced* system -- the oracle has already
+   removed the carry whose integrality is load-bearing, and the residual is
+   flat -- so the split is small and each branch is a pure value equation. *)
+let bridge_split_close ants goal =
+  let bools = List.fold_left (fun acc th ->
+      List.fold_left (fun acc t ->
+          match bridge_bitval_bool t with
+          | Some b when not (List.exists (aconv b) acc) -> b :: acc
+          | _ -> acc)
+        acc (find_terms (fun _ -> true) (concl th))) [] ants in
+  let bools = List.rev bools in
+  let tac =
+    EVERY (List.map (fun b ->
+        ASM_CASES_TAC b THEN ASM_REWRITE_TAC[BITVAL_CLAUSES]) bools)
+    THEN INT_ARITH_TAC in
+  prove(bridge_mk_imps ants goal, tac);;
+
+let bridge_prove_from sups goal =
+  let th = prove(bridge_mk_imps sups goal, INT_ARITH_TAC) in
+  List.fold_left (fun acc h -> MP acc h) th sups;;
+
+(* try `v = k' from the definition and the cone; returns the proof or None *)
+let bridge_try_value def_th cone v k =
+  let ants = def_th :: List.map (fun (th,_,_) -> th) cone in
+  try
+    let goal = mk_eq(v, bridge_int_lit k) in
+    let th = prove(bridge_mk_imps ants goal, INT_ARITH_TAC) in
+    Some(List.fold_left (fun acc h -> MP acc h) th ants)
+  with _ -> None;;
+
+(* facts for every carry that is the pivot of a definition.  The *decision*
+   comes from the exact interval relaxation above; the procedure is asked only
+   to *prove* a value the relaxation already pinned. *)
+let bridge_val_gt b thr =
+  match b with
+  | Some(v,s) -> Num.lt_num thr v || (Num.eq_num v thr && s)
+  | None -> false;;
+
+let bridge_val_lt b thr =
+  match b with
+  | Some(v,s) -> Num.lt_num v thr || (Num.eq_num v thr && s)
+  | None -> false;;
+
+let bridge_val_le b thr =
+  match b with Some(v,_) -> Num.le_num v thr | None -> false;;
+
+let bridge_val_ge b thr =
+  match b with Some(v,_) -> Num.le_num thr v | None -> false;;
+
+(* `0', `1' or `None', from `k * v + rest = 0' and the interval relaxation *)
+let bridge_carry_value tbl ineqs v form =
+  let k = bridge_lf_coeff_in v form in
+  if Num.eq_num k num_0 then None else
+  let rest = bridge_lf_add form
+               (bridge_lf_neg (bridge_lf_scale k ([ (v, num_1) ], num_0))) in
+  let (lo_v, hi_v) = bridge_lookup_bound tbl v in
+  let rest_lo = bridge_lo_of_neg tbl ineqs rest
+  and rest_hi = bridge_hi tbl ineqs rest in
+  let one = num_1 in
+  if Num.lt_num num_0 k then
+    (* v = -rest/k : v < 1 <=> rest > -k ; v > 0 <=> rest < 0 *)
+    (if bridge_val_gt rest_lo (Num.minus_num k) && bridge_val_ge lo_v num_0
+     then Some num_0
+     else if bridge_val_lt rest_hi num_0 && bridge_val_le hi_v one
+     then Some one else None)
+  else
+    (* v = rest/(-k) : v < 1 <=> rest < -k ; v > 0 <=> rest > 0 *)
+    (if bridge_val_lt rest_hi (Num.minus_num k) && bridge_val_ge lo_v num_0
+     then Some num_0
+     else if bridge_val_gt rest_lo num_0 && bridge_val_le hi_v one
+     then Some one else None);;
+
+let bridge_oracle_facts defs ineqs =
+  let tbl = bridge_direct_bounds ineqs in
+  let out = ref [] in
+  List.iter (fun (v, sup, form) ->
+      if bridge_is_bitval_atom v then begin
+        let atoms = bridge_lf_atoms form in
+        let cone = bridge_cone atoms ineqs in
+        let decided = bridge_carry_value tbl ineqs v form in
+        match decided with
+        | None ->
+            bridge_slice_note "ORACLE undetermined %s why=relaxation"
+              (string_of_term v)
+        | Some k ->
+            let def_th = bridge_prove_from sup (bridge_lf_eq form) in
+            (match bridge_try_value def_th cone v k with
+             | Some th ->
+                 bridge_slice_note "ORACLE fact %s = %s why=relaxation"
+                   (string_of_term v) (Num.string_of_num k);
+                 out := th :: !out
+             | None ->
+                 (* the relaxation's interval said so, but the procedure could
+                    not prove it from the local cone; the *tactic* is the
+                    arbiter, so the fact is not emitted. *)
+                 bridge_slice_note
+                   "ORACLE undetermined %s why=not-proved-from-cone"
+                   (string_of_term v))
+      end) defs;
+  List.rev !out;;
+
+(* ------------------------------------------------------------------------- *)
+(* 6c.4 The close.                                                            *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_int_hyps asl =
+  List.filter (fun (_,th) ->
+      let t = concl th in
+      List.exists (fun u -> match u with
+          | Comb(Const("int_of_num",_),_) -> true | _ -> false)
+        (find_terms (fun _ -> true) t)) asl;;
+
+(* A hypothesis that is only a one-sided bound on one atom (`&0 <= x',   *)
+(* `x < &B', `x <= &1', or the same with the atom on the right) is not     *)
+(* needed once the oracle has decided that atom; the *relational* ones     *)
+(* (`p <= M + N', `M + N < &2 EXP 256', `m < p', a negated comparison) are *)
+(* what distinguish the branches.  Keeping the 50-odd bounds in the final  *)
+(* call is what exhausted the stack in IX.70, so they are dropped here.   *)
+let bridge_lf_is_literal (xs,_) = xs = [];;
+let bridge_lf_is_atomic (xs,_) =
+  List.length xs = 1 &&
+  (Num.eq_num (snd (List.hd xs)) num_1 ||
+   Num.eq_num (snd (List.hd xs)) (Num.minus_num num_1));;
+
+let bridge_lf_of_concl t =
+  match t with
+  | Comb(Comb(Const("int_le",_),a),b)
+  | Comb(Comb(Const("int_lt",_),a),b) ->
+      (match bridge_lf_of_term a, bridge_lf_of_term b with
+       | Some x, Some y -> Some(x, y)
+       | _ -> None)
+  | _ -> None;;
+
+let bridge_is_direct_bound th =
+  match bridge_lf_of_concl (concl th) with
+  | Some (x, y) ->
+      (bridge_lf_is_atomic x && bridge_lf_is_literal y) ||
+      (bridge_lf_is_atomic y && bridge_lf_is_literal x)
+  | None -> false;;
+
+let bridge_close_hyps asl =
+  List.filter (fun (_,th) -> not (bridge_is_direct_bound th))
+    (bridge_int_hyps asl);;
+
+let BRIDGE_ORACLE_TAC : tactic =
+  fun (asl,w) ->
+    try
+      let keep =
+        match bridge_lf_of_term (lhand w), bridge_lf_of_term (rand w) with
+        | Some l, Some r -> bridge_lf_atoms (bridge_lf_add l (bridge_lf_neg r))
+        | _ -> failwith "BRIDGE_ORACLE_TAC: goal is not linear" in
+      let eqs = List.filter_map (fun (th) ->
+          match bridge_lf_row_of_thm th with
+          | Some f -> Some(th, f) | None -> None) (map snd asl) in
+      let rows = List.mapi (fun i (th,f) -> (i, [th], f)) eqs in
+      let (defs, resids) = bridge_gauss_jordan keep rows in
+      List.iter (fun (v,_,form) ->
+          bridge_slice_note "ORACLE def %s : %s"
+            (string_of_term v) (string_of_term (bridge_lf_eq form))) defs;
+      let ineqs = bridge_lf_ineqs asl in
+      let facts = bridge_oracle_facts defs ineqs in
+      bridge_slice_note "ORACLE system defs=%d residual=%d facts=%d"
+        (List.length defs) (List.length resids) (List.length facts);
+      let def_ths = List.map (fun (v,sup,form) ->
+          (v, bridge_prove_from sup (bridge_lf_eq form))) defs in
+      let res_ths = List.map (fun (_,sup,form) ->
+          bridge_prove_from sup (bridge_lf_eq form)) resids in
+      let facts' = facts in
+      (* The close set: the aggregate rows (the carry-conservation relations),
+         the emitted facts, and the *relational* hypotheses.  The carry
+         definitions and the one-sided bounds are deliberately excluded: the
+         definitions carry the accumulated B^n coefficients that drive
+         INT_ARITH's equality elimination into rational coefficient blow-up
+         (measured: 12 G cap firing), and the bounds are subsumed by the
+         aggregate rows for the branches that are decided.  This set is small
+         enough that a failure is a clean `linear_ineqs: no contradiction'. *)
+      let is_carry_bound th =
+        match bridge_lf_of_concl (concl th) with
+        | Some (x,y) ->
+            let atoms = bridge_lf_vars x @ bridge_lf_vars y in
+            atoms <> [] && List.for_all bridge_is_bitval_atom atoms
+        | None -> false in
+      let is_int_eq th =
+        match concl th with
+        | Comb(Comb(Const("=",_),a),b) -> type_of a = `:int`
+        | _ -> false in
+      let hyps_used =
+        List.filter (fun (_,th) ->
+            not (is_int_eq th) && not (is_carry_bound th) &&
+            not (bridge_is_direct_bound th))
+          (bridge_int_hyps asl) in
+      let ants = res_ths @ facts' @
+                 List.map (fun (_,th) -> bridge_flat_th th) hyps_used in
+      (* small-coefficient carry definitions are cheap and carry the corrected
+         chain's relation; the B^n-coefficient ones are what blow up, so they
+         are the ones left out *)
+      let is_small_def (v,_,form) =
+        Num.le_num (Num.abs_num (bridge_lf_coeff_in v form)) num_1 in
+      let small_defs = List.filter_map (fun (v,th) ->
+          match List.find_opt (fun (w,_,_) -> aconv w v) defs with
+          | Some d when is_small_def d -> Some th
+          | _ -> None) def_ths in
+      let ants = small_defs @ ants in
+      let w_eq = bridge_flat_conv w in
+      let w' = rand (concl w_eq) in
+      bridge_slice_note "ORACLE close ants=%d size=%d"
+        (List.length ants)
+        (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 ants);
+      let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in
+      let closed = List.fold_left (fun acc h -> MP acc h) th ants in
+      let closed = EQ_MP (SYM w_eq) closed in
+      bridge_slice_note "ORACLE close ok";
+      ACCEPT_TAC closed (asl,w)
+    with e ->
+      bridge_slice_note "ORACLE close failed: %s" (Printexc.to_string e);
+      raise e;;
+
+(* A kept branch condition is a *disjunction* (`word_ult s x \/ word_ule p s')
+   after normalisation.  Handing that to `INT_ARITH' makes it case-split
+   internally, which multiplies the constraint set and exhausted the stack.
+   Split it explicitly instead: one branch per disjunct, each conjunctive. *)
+let bridge_is_int_disj th =
+  match concl th with
+  | Comb(Comb(Const("\\/",_),a),b) ->
+      let has_int t = List.exists (fun u -> match u with
+          | Comb(Const("int_of_num",_),_) -> true | _ -> false)
+          (find_terms (fun _ -> true) t) in
+      has_int a && has_int b
+  | _ -> false;;
+
+let rec BRIDGE_SPLIT_INT_DISJ_TAC (asl,w) =
+  match List.find_opt (fun (_,th) -> bridge_is_int_disj th) asl with
+  | None -> ALL_TAC (asl,w)
+  | Some (_,th) -> (DISJ_CASES_TAC th THEN BRIDGE_SPLIT_INT_DISJ_TAC) (asl,w);;
+
 (* report the residual goal and hypotheses when a stage does not finish.  It
    prints only under `--mode phase' (csat_mark_enabled), so a normal answer is
    silent; a failure is still a failure. *)
@@ -1292,9 +1941,8 @@ let BRIDGE_ALGEBRA_TAC : tactic =
      at "decide-bitvals" BRIDGE_DECIDE_BITVALS_TAC THEN
      at "bounds" BRIDGE_ATOM_BOUNDS_TAC THEN
      at "reduce" BRIDGE_INT_REDUCE_TAC THEN
-     at "split-top-carry" BRIDGE_SPLIT_TOP_CARRY_TAC THEN
-     at "discard" BRIDGE_DISCARD_IRRELEVANT_TAC THEN
-     at "arith" ASM_INT_ARITH_TAC) g;;
+     at "split-disj" BRIDGE_SPLIT_INT_DISJ_TAC THEN
+     at "oracle" BRIDGE_ORACLE_TAC) g;;
 
 (* the same route, with the residue closed algebraically and no SAT call *)
 let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =

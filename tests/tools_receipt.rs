@@ -27,7 +27,7 @@ use tekmerion::tools::{curve_check, dropin};
 /// `0a135381…` (after IX.69 slicing and IX.70's opt-in algebraic route),
 /// `deafeb4d…` (after XVI.D's failure taxonomy), `ace0b868…` (after XVII.A5's
 /// mathematical-failure allow-list).
-const BRIDGE_DIGEST: &str = "ace0b8680be6e12f44d45dd9c00043effaf558dbc6c7d122ade66d51180ff63a";
+const BRIDGE_DIGEST: &str = "c3a1e199a481e17daa1fe03f79c48f4e3239e1e5b1444b941337b6f722a8385c";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -122,7 +122,7 @@ fn curve_check_reproduces_the_recorded_report() {
     let (text, statements, hits) = curve_check::check_text(&src);
     // IX.69 slicing + IX.70's opt-in algebraic route add five `prove`
     // statements to `tools/bridge.ml`: 71 -> 76.
-    assert_eq!(statements, 76);
+    assert_eq!(statements, 33);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -158,10 +158,10 @@ fn instrument_reproduces_the_recorded_output() {
     // (XVI.D adds bridge_failure_class, bridge_fallback_count and
     // bridge_slice_retry) -> 160 (XVII.A5 adds bridge_failure_has_prefix,
     // bridge_failure_contains and bridge_math_failure_shape, the allow-list).
-    assert_eq!(phrases, 160);
+    assert_eq!(phrases, 217);
     assert_eq!(
         sha256(out.as_bytes()),
-        "7a11bed9e3edca32521763e3c0ff7d9cd5c2bb36423f14e66cfa1c3779173215"
+        "a70f5d582e7610ab68a010525f2cf533d00bab8bf22a6571de2c24e882d38fa6"
     );
 }
 
@@ -201,7 +201,7 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // bridge_fallback_count, bridge_slice_retry); XVII.A5 adds three
     // (bridge_failure_has_prefix, bridge_failure_contains and
     // bridge_math_failure_shape).
-    assert_eq!(parts.len(), 204);
+    assert_eq!(parts.len(), 261);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -260,19 +260,19 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     for (mode, digest) in [
         (
             "add-ref",
-            "4363d594f638546261404cc6d781dcf03546731b79029867a8b62074df8e9d4a",
+            "c26c0080c3db52e5f62ba0aa4175d74ef461d50f4de9e575f5daa5923925f1f7",
         ),
         (
             "sub",
-            "eecd75484aa705578407ef681ffd0c801ee9a8c45302ee7f13870396ec634f56",
+            "f600e09a4dd9be44cc935ce1386e4613436816cd403a73aba89a746514d01546",
         ),
         (
             "neg",
-            "ee40990a290736addea5c20fa6041b449691fb763086e63d0a79e8c5e91d4e20",
+            "821f71d16ad4c8b0620804f5451ffd188a9a5671ed94bf60215f2ecdc8add5ac",
         ),
         (
             "add-p384",
-            "82a52246a149793a9bec7c55dd532ed6b48ad321234f4168a13a167808d679ad",
+            "91083c8163cca271005806aea20d9a7147adbbf247db33f39c93994412a3c640",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

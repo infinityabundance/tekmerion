@@ -3080,20 +3080,33 @@ failure.
 The reviewers converge: stop optimising SAT preprocessing; eliminate intermediate variables
 **before** the solver, with three certificate types.
 
-- [ ] **XVI.F1. Conservation certificate.** Local step `a_i + b_i + c_i = s_i + B·c_{i+1}` at
+- [~] **XVI.F1. Conservation certificate.** Local step `a_i + b_i + c_i = s_i + B·c_{i+1}` at
   radix `B = 2^k`; composed by induction over the limb list to
   `Σ_{i<n} B^i(a_i+b_i) = Σ_{i<n} B^i s_i + B^n c_n − c_0`. Proved **once**, parametric in radix
   and limb count. Intermediate carries cancel exactly; that cancellation is the point.
-- [ ] **XVI.F2. Range certificate.** Bounds on inputs, outputs and carries — including the
+  *IX.78: the elimination is implemented and per-theorem (`bridge_gauss_jordan`); it produces the
+  corrected chain's aggregate but destroys the raw one when a `2^256`-coefficient carry is a
+  pivot. Composing the raw aggregate as a projection is the remaining step.*
+- [~] **XVI.F2. Range certificate.** Bounds on inputs, outputs and carries — including the
   integrality `c_i ∈ {0,1}` that `INT_ARITH` cannot infer, which is exactly what made IX.70
   overflow.
+  *IX.78: the exact rational interval relaxation (`bridge_carry_value`) decides the top carry's
+  integrality per theorem and the fact is emitted and proved (`&(bitval carry_s8) = &0`); the
+  other six carries are correctly reported undetermined. A `BOUNDER`-style engine that emits the
+  bounds rather than re-deriving each by `INT_ARITH` is still missing.*
 - [ ] **XVI.F3. Selection certificate.** That the conditional correction yields the canonical
   residue (the `word_ult`/mask/csel step), as its own certificate rather than a blast.
-- [ ] **XVI.F4. Reconstruction.** Recover the premises of (F1)–(F3) automatically from the
+- [~] **XVI.F4. Reconstruction.** Recover the premises of (F1)–(F3) automatically from the
   simulator's accumulator relationships, for ARM and x86, without per-curve or per-width lemmas.
+  *IX.78: the linearisation, elimination target and interval facts are read from each theorem's
+  own terms; no curve, width or limb count is named. Not yet run on x86 or on sub/neg.*
 - [ ] **XVI.F5. First complete solver-free proof.** `arm.bignum_add_p25519`, same theorem,
   **0 SAT closes**, `check_axioms` passing, with the inference number reported against
   111,501,987 (sliced SAT) and 1,848,494 (human `_CORRECT`).
+  *IX.78 attempted it: 0 SAT closes, 0 solver invocations, the statement unchanged, and the
+  oracle emits the correct fact — but the close still fails (`linear_ineqs: no contradiction`)
+  because the raw chain aggregate is absent. No inference total. See
+  `research/receipts/ix78-oracle-arithmetic-close.md` §6 for the exact missing mechanism.*
 - [ ] **XVI.F6. Generalise to the nine additions**, then the same representation for
   multiplication, squaring and Montgomery reduction.
 - [ ] **XVI.F7. One representation, two checkers.** The same certificate objects must be
@@ -3251,6 +3264,16 @@ proof objects + a kernel that certifies its own binary.
    linear arithmetic with those facts supplied, so nothing case-splits. Measure inferences against
    111,501,987 (current) and 1,848,494 (human). If it lands near the human figure, that is also how
    double, half and the rest come in cheaply.
+   *IX.78 outcome: built, sound, **not closing**. An exact rational oracle (linearise → eliminate
+   the non-goal carries by integer-preserving Gauss–Jordan → interval relaxation with one
+   relational hypothesis → emit and prove the decided fact) runs per theorem, performs 0 SAT
+   closes and 0 solver invocations, and correctly decides `&(bitval carry_s8) = 0` while leaving
+   the other six carries undetermined. The close still fails in 0.65 s with
+   `linear_ineqs: no contradiction`: the **raw chain aggregate** (`M + N = W_raw + 2^256·c8`) is
+   missing, because Gauss–Jordan destroys it when the top carry is a pivot with a `2^256`
+   coefficient. Next step: project that definition onto the goal's atoms and emit *both* chain
+   aggregates (the `GEN_DECARRY_RULE` step), then close — not a larger `INT_ARITH` call. Details:
+   `research/receipts/ix78-oracle-arithmetic-close.md`.*
 3. **XVII.B1–B3** — proof-object import and the framework core, with `CIRCUIT` + `LIA`.
 4. **XVII.C1** after its prior-art sweep — the route to the Montgomery families.
 5. **XVII.C5, XVII.C6** — the two claims engineers cannot argue with.

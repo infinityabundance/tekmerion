@@ -126,13 +126,13 @@ let () =
 let () =
   check "classify timeout flag"
     (bridge_failure_class ~timeout:true (Failure "x") =
-     `Resource ("timeout", "wall-clock budget"));
+     ("resource", "timeout", "wall-clock budget"));
   check "classify exit 124"
     (bridge_failure_class (Failure "CSAT: cadical did not report UNSAT, exit 124") =
-     `Resource ("timeout", "exit 124"));
+     ("resource", "timeout", "exit 124"));
   check "classify signal 137"
     (bridge_failure_class (Failure "CSAT: cadical did not report UNSAT, exit 137") =
-     `Resource ("signal", "exit 137"));
+     ("resource", "signal", "exit 137"));
   reset ();
   expect_raises "resource-signal"
     (function Failure _ -> true | _ -> false)
@@ -144,19 +144,19 @@ let () =
 let () =
   check "classify generic Failure is internal"
     (match bridge_failure_class (Failure "boom") with
-     | `Internal _ -> true
+     | ("internal", _, _) -> true
      | _ -> false);
   check "classify allow-listed exit 10 is mathematical"
     (bridge_failure_class
        (Failure "CSAT: cadical did not report UNSAT, exit 10") =
-     `Mathematical "CSAT: cadical did not report UNSAT, exit 10");
+     ("mathematical", "CSAT: cadical did not report UNSAT, exit 10", ""));
   check "classify SATISFIABLE is mathematical"
     (match bridge_failure_class (Failure "solver: SATISFIABLE") with
-     | `Mathematical _ -> true
+     | ("mathematical", _, _) -> true
      | _ -> false);
   check "classify slice-too-strong is mathematical"
     (match bridge_failure_class (Failure "SLICE_TOO_STRONG: x") with
-     | `Mathematical _ -> true
+     | ("mathematical", _, _) -> true
      | _ -> false)
 
 let () =

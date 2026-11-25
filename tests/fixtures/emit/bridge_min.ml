@@ -46,6 +46,6 @@ let BRIDGE_ALGEBRA_TAC : tactic =
   let at stage (t:tactic) : tactic = fun g -> t g in
   fun g ->
     (at "normalise" BRIDGE_ALG_NORM_TAC THEN
-     at "arith" ASM_INT_ARITH_TAC) g;;
+     at "oracle" BRIDGE_ORACLE_TAC) g;;
 
 let bridge_anchor_count = 6;;

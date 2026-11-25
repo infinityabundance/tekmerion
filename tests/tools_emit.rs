@@ -626,8 +626,8 @@ fn ix69_slice_falls_back_only_on_a_mathematical_failure() {
     assert_eq!(src.matches("CSAT internal=%s").count(), 1);
     assert_eq!(src.matches("ACCEPT_TAC th' (asl,w)").count(), 1);
     // The two resource exceptions that must never reach the fallback.
-    assert!(src.contains("| Out_of_memory -> `Resource"));
-    assert!(src.contains("| Stack_overflow -> `Resource"));
+    assert!(src.contains("(\"resource\", \"memory\", \"address space (RLIMIT_AS)\")"));
+    assert!(src.contains("(\"resource\", \"stack\", \"OCaml stack limit\")"));
 
     let tactic = "BRIDGE_ADD_REF_TAC EXPAND P";
     let task = "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";

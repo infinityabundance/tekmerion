@@ -1,8 +1,8 @@
 {
   "schema": "tekmerion-freeze-closure/1",
   "tag": "freeze-rust-closure-v6",
-  "repo_commit": "dec848071498b571edf96513ef0b92a405ec8c4c",
-  "created_at": 1795602773,
+  "repo_commit": "5c2430306854480ffe4c18f0ebbdbcd74835df7e",
+  "created_at": 1795617375,
   "source": [
     {"path": "Cargo.lock", "sha256": "bb23bec90e5ead40633fe4db645113c536c3048e6d1e9214e73d798ba1226637"},
     {"path": "Cargo.toml", "sha256": "3508653340f12801d900537f9e34e127aaf09c760f4498399883aeb2905cd010"},
@@ -46,7 +46,7 @@
     {"path": "src/tools/derive.rs", "sha256": "34a5e9ab40fa9d678aa7863b67ad5c4242960638cafcebebb8290f422210aa4d"},
     {"path": "src/tools/disasm.rs", "sha256": "c1ce9ed7efa523bb46b1417fdb7e491301babc94a3aaff74a659d42f48497bcf"},
     {"path": "src/tools/dropin.rs", "sha256": "4f90094e50359c9565f8cc07ca37a9a8c96a4a57e9c6ccf47e448312a04c094b"},
-    {"path": "src/tools/emit.rs", "sha256": "b02430f48f4afe4aac53a7c097e3b339d0ad8427077824198a3e7da610684a66"},
+    {"path": "src/tools/emit.rs", "sha256": "3084c4523f51d22e6d6d74ff7050c05a8d7ececa91d677cf9460e93921b13b23"},
     {"path": "src/tools/fcdist.rs", "sha256": "48029a4d1e2c607c4f388924fe7e9d789e28ec330be985d4f407711e6fce1537"},
     {"path": "src/tools/freeze.rs", "sha256": "c6ee68ccb5681519c34602299670a407707e0da6b2db79cd1c42f6b46f76611c"},
     {"path": "src/tools/guard.rs", "sha256": "bd059f83b497f571fc3242aef497366cf2a7d960e74893da05e7dc321e7cbafc"},
@@ -65,7 +65,7 @@
     {"path": "src/tools/sha256.rs", "sha256": "b6acf5146b1b8b02ef504219cce549dfe04f083b709389064f8e426406d95bd0"},
     {"path": "src/tools/trace_conformance.rs", "sha256": "1d029358def2fcf2c22698b8f5f8508feb03f966e0503f1c466fcfccc322ccec"},
     {"path": "src/wire.rs", "sha256": "039c593854e90da2f657f5bd0455e1f033833eeeb94a2535eaf71f508e265857"},
-    {"path": "tools/bridge.ml", "sha256": "ace0b8680be6e12f44d45dd9c00043effaf558dbc6c7d122ade66d51180ff63a"},
+    {"path": "tools/bridge.ml", "sha256": "c3a1e199a481e17daa1fe03f79c48f4e3239e1e5b1444b941337b6f722a8385c"},
     {"path": "tools/cap.sh", "sha256": "56a532be1101fea43006ba580e4f6a95cba4966ec80c7d1041754c0ed8b6cdda"},
     {"path": "tools/csat_bridge.ml", "sha256": "8c1dc799f508d3e4f2df5e0b549ec2cd9f36bbda6e85f723464596ee31e2e726"},
     {"path": "tools/csat_hol.ml", "sha256": "8be2fff7c1849f8666a0a676aeb82b31fdc1a4251f8f834a7178fe348347ca33"},
@@ -77,10 +77,10 @@
     {"path": "tools/selftest.sh", "sha256": "9d96617723fe797e9a212965bb7528c4849cfcf4dfe5dea6f0a360c077b922e7"},
     {"path": "tools/w1_hol_capture.ml", "sha256": "f577754b03f707e370b24f7dc4fc856830adfd4ace7a94a5306499ad6c09bde6"}
   ],
-  "source_digest": "d2a802ed1be6a466d0e2edf6c6f89596ea5840126e37ce8b4ddc6329f60e7159",
+  "source_digest": "e798c9b09709efef153fb036bbe2762663a1ee05397948d202feb37358bf6429",
   "configuration": {"env": {"TEKMERION_ALG_CLOSE": "unset", "TEKMERION_FAULT": "unset", "TEKMERION_PROBLEMS": "unset", "TEKMERION_RECORD_ANSWERS": "unset", "TEKMERION_SLICE_CONTROL": "unset", "TEKMERION_SLICE_DEBUG": "unset"}, "flags": {"mode": "unspecified", "stamp": "unspecified", "force": "unspecified", "slice": "off"}},
   "runtime": {
-    "executable": {"path": "target/release/emit", "sha256": "700091131d617a50e5061fed69adb202c480fc49a387eea76d9fdb8dc5a0e1fb"},
+    "executable": {"path": "target/release/emit", "sha256": "f692f1662254481e7240e62c70f9da6a74f5dab30310300367d1db28c5b43bfc"},
     "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
     "cargo_lock_sha256": "bb23bec90e5ead40633fe4db645113c536c3048e6d1e9214e73d798ba1226637",
     "hol_light": {
@@ -94,7 +94,7 @@
       "version": "2.1.2"
     },
     "ocaml_bridge": [
-      {"path": "tools/bridge.ml", "sha256": "ace0b8680be6e12f44d45dd9c00043effaf558dbc6c7d122ade66d51180ff63a"},
+      {"path": "tools/bridge.ml", "sha256": "c3a1e199a481e17daa1fe03f79c48f4e3239e1e5b1444b941337b6f722a8385c"},
       {"path": "tools/csat_bridge.ml", "sha256": "8c1dc799f508d3e4f2df5e0b549ec2cd9f36bbda6e85f723464596ee31e2e726"},
       {"path": "tools/csat_hol.ml", "sha256": "8be2fff7c1849f8666a0a676aeb82b31fdc1a4251f8f834a7178fe348347ca33"},
       {"path": "tools/csat_lib.ml", "sha256": "c6ac06c783f1a88dd395d3193a41b1c7bf7734a79067bb684d4213d83e122e1a"},
