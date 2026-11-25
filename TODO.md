@@ -2961,3 +2961,138 @@ subterm) rather than with the goal (51 subterms at bridge entry).
 5. **XV.E** — carry-conservation certificate, parametric, proved once.
 6. **XIV.G1**'s remaining scope → **XV.G3** first new family, then **XV.G2** native G1.
 7. Freeze **v6** immediately before the first sealed run, not before.
+
+---
+
+# XVI — Intake 2026-11-25 (after `7f426bc`): two reviews
+
+Nothing omitted. `XVI.G` supersedes `XV.H`. Two reviews: the first is the one already
+absorbed as `XV` (slicing, integrity, carry-chain abstraction); the second adds findings
+from the IX.69/IX.70 commits.
+
+## XVI.0 — Status of the measurements they correct
+
+- [x] **XVI.0.1.** The check-time gap is **60.20× median in inferences** (12.93×–109.07×), not
+  the original "10–20×" nor the retraction's "1.2–5×". Both earlier figures are superseded;
+  neither is deleted.
+- [x] **XVI.0.2.** Upstream coverage in upstream's sense was **0/27** before IX.64 and is
+  **27/27** now (same contract, same theorem names, whole-tree default `make` green, with an
+  `ALL_TAC` control failing).
+- [x] **XVI.0.3.** Slicing is measured: **49,018,056** inferences removed (4.93% of the six-task
+  total), 27/27 accepted, 0 fallbacks — and it **does not** reach the 30% target, for a measured
+  reason: the kept hypotheses are the arithmetic obligation. One x86 add proof *regresses* by
+  6.58%; smaller instances do not imply shorter proofs.
+- [x] **XVI.0.4.** The algebraic route (`BRIDGE_ADD_REF_ALG_TAC`) is **sound but incomplete**:
+  0 SAT closes, aborts with `Stack_overflow` in `ASM_INT_ARITH_TAC` at 2,620,473 inferences. The
+  2.62M is **not** a proof cost and must never be cited as an improvement.
+
+## XVI.A — CI is still red, and the fix must be real (do first)
+
+Three tests fail in CI because they need `.bench/problems.json` (and the tree around it):
+`arm_answers_are_byte_identical`, `x86_answers_are_byte_identical`,
+`sealed_freeze_verification_end_to_end`.
+
+- [ ] **XVI.A1.** Commit **input** fixtures so the offline suite genuinely exercises what it
+  claims: the task entries the emitter needs (`query`, `inlined_locations`, family/op) for the 27
+  tasks, in `tests/fixtures/problems.json`, with a test asserting the fixture and the live
+  `.bench/problems.json` agree on those 27 entries whenever `.bench` is present.
+- [ ] **XVI.A2.** No silent early returns. If a fixture is missing, the test must **fail** with a
+  message saying which fixture, not skip. Skips are only allowed for things that are genuinely
+  machine-specific (e.g. a different HOL Light build), and must print a reason.
+- [ ] **XVI.A3.** Reproduce the CI condition locally (bench-free copy of the tree) and show
+  `cargo test --offline` green there, then push and confirm the workflow.
+
+## XVI.B — Identity-bound comparison must be distinguishable from a diagnostic one
+
+- [ ] **XVI.B1.** `comparison_reasons()` still permits a comparison when **both** statement
+  digests are absent, and executable identity is permissive when missing on either side.
+- [ ] **XVI.B2.** Introduce two types: `DiagnosticComparison` (legacy, may proceed on names and
+  prints what identity evidence is missing) and `IdentityBoundComparison` (requires statement
+  digest **and** executable identity on both sides, plus successful judgments and identical
+  scopes). Only the second may back a frontier performance claim; the tables must print which
+  type they produced.
+- [ ] **XVI.B3.** Make a producer write `statement_digest` and the executable identity, so the
+  identity-bound path is exercised on real data (even if only for the six measured tasks).
+- [ ] **XVI.B4.** Tests: two different statements with the same name refuse; missing digests force
+  the diagnostic type and the claim is visibly downgraded; a row cannot silently upgrade.
+
+## XVI.C — The freeze must bind the effective execution configuration
+
+`TEKMERION_ALG_CLOSE` and `TEKMERION_SLICE_CONTROL` change the reasoning path without changing any
+source file or executable hash.
+
+- [ ] **XVI.C1.** Record the effective configuration in the run record and freeze it with the
+  source/runtime closure: every `TEKMERION_*` variable that is read, with its value, plus the
+  flags that change behaviour (`--mode`, `--stamp`, `--force`, slice on/off).
+- [ ] **XVI.C2.** Enumerate the variables the binary reads (grep the source; do not guess) and
+  assert the list in a test, so a new variable cannot appear unnoticed.
+- [ ] **XVI.C3.** `freeze verify` refuses when the recorded configuration differs from the live
+  environment, naming the variable.
+- [ ] **XVI.C4.** Firing control: flip one recorded variable and show the refusal.
+
+## XVI.D — Resource failure must not trigger a more expensive retry
+
+`BRIDGE_CSAT_TAC` propagates `Out_of_memory` but its general handler retries the full hypothesis
+set for other exceptions — potentially including stack overflow, which may itself be a resource
+failure.
+
+- [ ] **XVI.D1.** Classify failures into distinct outcomes: **mathematical** (closed: false),
+  **unsupported input**, **resource exhausted** (OOM, stack overflow, timeout), **internal error**.
+  Each has its own message and its own policy.
+- [ ] **XVI.D2.** Resource exhaustion must **not** fall back to a larger instance. It reports and
+  stops; a retry at a larger budget is a decision, recorded.
+- [ ] **XVI.D3.** Tests for each class, including a synthetic stack-overflow-shaped failure.
+
+## XVI.E — `cap.sh` is per-process; say so and close the gap
+
+`RLIMIT_AS` caps one process, not a tree.
+
+- [ ] **XVI.E1.** State the limitation in `AGENTS.md` §7a and in `tools/cap.sh`'s header.
+- [ ] **XVI.E2.** Add the aggregate guarantee that is actually available here: run the capped
+  command in its own process group, kill the group on overrun, and report peak RSS for the tree
+  (`/usr/bin/time -v` or `wait4` rusage) into the receipt. Where a cgroup is enforceable, use it;
+  where it is not (this host: `MemoryMax` is ignored), say so and fall back to the group kill plus
+  the documented per-process cap.
+- [ ] **XVI.E3.** A control showing the tree is killed, not just the leaf: a parent that spawns a
+  child allocating past the cap must end with both gone.
+
+## XVI.F — The carry-conservation certificate compiler (the real target)
+
+The reviewers converge: stop optimising SAT preprocessing; eliminate intermediate variables
+**before** the solver, with three certificate types.
+
+- [ ] **XVI.F1. Conservation certificate.** Local step `a_i + b_i + c_i = s_i + B·c_{i+1}` at
+  radix `B = 2^k`; composed by induction over the limb list to
+  `Σ_{i<n} B^i(a_i+b_i) = Σ_{i<n} B^i s_i + B^n c_n − c_0`. Proved **once**, parametric in radix
+  and limb count. Intermediate carries cancel exactly; that cancellation is the point.
+- [ ] **XVI.F2. Range certificate.** Bounds on inputs, outputs and carries — including the
+  integrality `c_i ∈ {0,1}` that `INT_ARITH` cannot infer, which is exactly what made IX.70
+  overflow.
+- [ ] **XVI.F3. Selection certificate.** That the conditional correction yields the canonical
+  residue (the `word_ult`/mask/csel step), as its own certificate rather than a blast.
+- [ ] **XVI.F4. Reconstruction.** Recover the premises of (F1)–(F3) automatically from the
+  simulator's accumulator relationships, for ARM and x86, without per-curve or per-width lemmas.
+- [ ] **XVI.F5. First complete solver-free proof.** `arm.bignum_add_p25519`, same theorem,
+  **0 SAT closes**, `check_axioms` passing, with the inference number reported against
+  111,501,987 (sliced SAT) and 1,848,494 (human `_CORRECT`).
+- [ ] **XVI.F6. Generalise to the nine additions**, then the same representation for
+  multiplication, squaring and Montgomery reduction.
+- [ ] **XVI.F7. One representation, two checkers.** The same certificate objects must be
+  consumable by the native TNPS checker, so the HOL producer and the native kernel converge
+  (`XV.G2`, `XIII.H`).
+- [ ] **XVI.F8.** A lemma whose omission does not break the proof is not being used: every
+  certificate type needs its own firing control.
+
+## XVI.G — Order of execution (supersedes `XV.H`)
+
+1. **XVI.A** — CI green with real input fixtures. Nothing else is credible while CI is red.
+2. **XVI.D + XVI.E** — failure taxonomy and the cap's documented scope. Small, and they protect
+   every later run.
+3. **XVI.B + XVI.C** — identity-bound comparison and configuration-bound freeze. These decide
+   which numbers may be called results.
+4. **XVI.F1–F5** — conservation certificate, range certificate, selection certificate, automatic
+   premise reconstruction, first solver-free proof.
+5. **XVI.F6–F8** — generalise across the nine additions, then multiplication/Montgomery, then the
+   TNPS representation.
+6. Freeze **v6** immediately before the first sealed run that cites any of this, with the
+   configuration of `XVI.C` bound.
