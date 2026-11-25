@@ -3115,3 +3115,142 @@ The reviewers converge: stop optimising SAT preprocessing; eliminate intermediat
    TNPS representation.
 6. Freeze **v6** immediately before the first sealed run that cites any of this, with the
    configuration of `XVI.C` bound.
+
+---
+
+# XVII — Intake 2026-11-25 (after `2b38c37`): decision, review, kernel charter, inversions
+
+Nothing omitted. `XVII.D` supersedes `XVI.G`.
+
+**Decision recorded:** Tekmerion builds its own kernel (TNK) — a logical framework with verified
+computation at its core, in which HOL is the *first guest theory*, not the ceiling. The charter is
+a project document; this section is the queue it implies.
+
+## XVII.0 — Corrections and standing negatives
+
+- [x] **XVII.0.1.** Slicing was my recommendation and it was wrong: **4.93%**, not 30%. All of the
+  saving is replay; the kept hypotheses *are* the obligation. The non-monotonicity (one dropped
+  hypothesis saves 32.9M on `add_p521`, costs 7.4M on `x86_add_p25519`) is recorded so nobody
+  tunes the SAT path further without knowing it.
+- [x] **XVII.0.2.** The algebraic route is sound, needs **0 SAT closes**, and fails at
+  `Stack_overflow` in `ASM_INT_ARITH_TAC` because `INT_ARITH` is real-linear and cannot use carry
+  integrality. The isolated probe closed the same system in **0.48 s** once the top carry was
+  given as `0 \/ 1`. That is the most informative number of the week.
+- [x] **XVII.0.3.** A partial carry-range attempt is preserved at branch
+  `wip/xvi-f2-carry-range` (tests red, library text changed, fixtures not re-recorded). It is not
+  cited anywhere. Staging stays green.
+- [ ] **XVII.0.4.** The reviewer's allocation is noted as guidance, not measurement: 40% arithmetic
+  structure compiler, 30% native foundations, 20% new-family coverage, 10% infrastructure.
+
+## XVII.A — Integrity defects that block any claim (do first)
+
+- [ ] **XVII.A1. CI is red again**: three ARM tests fail because the runner's `objdump` cannot
+  disassemble AArch64 (`can't disassemble for architecture UNKNOWN`). `find_objdump()` in
+  `src/tools/disasm.rs` takes the first executable found without checking capability.
+  - Provision `binutils-aarch64-linux-gnu` in CI;
+  - **and** fix the architecture: probe the candidate disassembler on a known instruction from a
+    committed fixture object, accept only a tool that decodes it, and bind the tool's version and
+    digest into the evaluation environment record.
+  - Do not weaken the tests.
+- [ ] **XVII.A2. Executable identity must be digests, not a label.** `dropin.rs` currently writes
+  `format!("{arch}.{dir}.{op}")`, so two different objects with the same tuple compare equal.
+  Introduce `ExecutableIdentity { architecture, object_sha256, code_sha256, semantics_sha256 }` and
+  require it in `IdentityBoundComparison`.
+- [ ] **XVII.A3. The sealed-run guard must enforce the configuration check.** `freeze verify` does;
+  `guard::verify_freeze` does not. Integrate it, with a firing control.
+- [ ] **XVII.A4. Freeze tag validation must bind the whole committed manifest**, not selected
+  fields: a tag whose committed manifest differs anywhere must refuse.
+- [ ] **XVII.A5. Only recognised mathematical outcomes may retry.** Generic OCaml `Failure` must
+  not be assumed mathematical; the classifier needs an explicit allow-list of mathematical failure
+  shapes, everything else stopping.
+- [ ] **XVII.A6. Statement identity from typed terms, not printed text.** Introduce a canonical
+  serialization of the actual kernel term (structure, types, sharing-independent) and use it for
+  `statement_digest`; keep the printed form only for display.
+- [ ] **XVII.A7.** Regenerate `freeze-closure-v6.json` after A3–A6, then seal `freeze-rust-
+  closure-v6` as a recorded decision.
+
+## XVII.B — The Tekmerion kernel charter (TNK)
+
+The design: framework core + guest theories + verified computation primitives + content-addressed
+proof objects + a kernel that certifies its own binary.
+
+- [ ] **XVII.B1. Proof-object import from HOL Light** — the 27 generated and the matching human
+  proofs. This is the differential corpus; nothing downstream means anything without it.
+- [ ] **XVII.B2. Framework core + HOL guest in Rust.** Replay every imported object; agree on every
+  conclusion with HOL Light.
+- [ ] **XVII.B3. `CIRCUIT` (promote the existing native LRAT checker) + `LIA`** (Farkas + cuts).
+  Re-check the six tasks and measure against the **14,019,340** human-step figure.
+- [ ] **XVII.B4. `EVAL` + `STEP` on AArch64.** One routine proved end to end by evaluation, not
+  rewriting.
+- [ ] **XVII.B5. Lean soundness per rule**, bit-blaster first (this is `G1`).
+- [ ] **XVII.B6. Finitary arithmetic guest + checked translation**; the first foundation stamp that
+  discriminates (in HOL Light everything carries all three axioms — measured).
+- [ ] **XVII.B7. `IDEAL`** (ideal-membership certificates) and the first Montgomery-family theorem.
+- [ ] **XVII.B8. Aeneas refinement of the rules**, then self-certification of the kernel binary by
+  Tekmerion's own machine-code method — the first kernel whose shipped bytes are proved directly,
+  with no compiler in the trust base.
+- [ ] **XVII.B9. Kernel targets, all measured on statements HOL Light also accepts**: six-task
+  steps **< 14.0M**; all 27 accepted by both from the same statement bytes; corpus re-check faster
+  than HOL Light's rebuild, DAG-parallel and deterministic; checks/second for agents published;
+  discriminating stamps; unproved trusted-base lines fewer than HOL Light + OCaml.
+- [ ] **XVII.B10. Agent-native API**: structured rejection data (failing rule, failing subterm) as
+  a first-class channel, millions of checks per second.
+- [ ] **XVII.B11.** DAG-parallel, deterministic checking.
+- [ ] **XVII.B12. Certificates carry five identities**: judgment, derivation, theory, subject,
+  attestation. A changed checker executable renews the attestation; it does not make a theorem
+  false.
+
+## XVII.C — Inversion programme (13 items; ★ = chase first)
+
+- [ ] **XVII.C1 ★ Assembly as hardware.** Extract the straight-line routine's dataflow graph as a
+  circuit and verify it algebraically against the spec polynomial (Gröbner / polynomial-calculus
+  certificates, the Biere–Kauers–Kaufmann line, verified far beyond 256 bits), checked by `IDEAL`.
+  Symbolic simulation drops out and Montgomery multiplication becomes a circuit problem. **Prior-art
+  sweep first** — this has neighbours in the literature.
+- [ ] **XVII.C2. Infer the spec from the binary, then diff it against the stated spec.** Every
+  disagreement is a spec bug, a hidden precondition or a documented quirk. Verification normally
+  runs spec → code; this audits the spec.
+- [ ] **XVII.C3. Prove the mutants wrong.** Generate one-edit mutants per routine (flipped carry,
+  wrong limb, off-by-one shift) and require a concrete counterexample theorem for each. Publish a
+  **proof mutation score** per routine. Prior-art sweep first.
+- [ ] **XVII.C4. Prove ARM ≡ x86** by normalising both dataflow graphs; one spec proof then covers
+  both ISAs and divergence is caught directly.
+- [ ] **XVII.C5 ★ Prover as optimiser.** Combine SLOTHY/CryptOpt-style search with proofs to emit
+  *faster* assembly than s2n-bignum's hand-tuned routines, proved. The claim is measured in cycles
+  against AWS's own code. Verify the optimiser's move set, not each output.
+- [ ] **XVII.C6 ★ Universal second judge.** Import Lean proof objects and re-check other people's
+  proofs, starting with AlphaProof Code's libsignal work. An independent kernel re-checking
+  DeepMind's Signal proofs is a frontier event and makes dual acceptance a public utility.
+- [ ] **XVII.C7. ZK-wrapped verdicts.** STARK of the kernel's execution so a vendor can prove a
+  closed-source binary meets a public spec without revealing it. The proof object stays the
+  authority; the ZK layer only lets a verdict travel.
+- [ ] **XVII.C8. Proof cost as a change detector.** Nightly regeneration with per-theorem
+  inference-count time series: a jump on a new binary version means its semantics or structure
+  changed even when the proof still passes.
+- [ ] **XVII.C9. Mine lemmas from kernel traces, not tactics.** 3.7 billion inferences on record;
+  find repeated sub-derivations and promote them to lemmas. Prior-art sweep first.
+- [ ] **XVII.C10. Failed LLM proofs as a fuzz corpus.** Realistic malformed inputs, unlike random
+  fuzzing.
+- [ ] **XVII.C11. Depend on instruction *properties*, not the whole ISA model.** Record which
+  properties each proof used, so a model revision revokes only the proofs whose properties changed.
+- [ ] **XVII.C12. Publish each proof's shadow.** Generate what the theorem does *not* guarantee
+  (unconstrained registers, frame gaps, timing) mechanically.
+- [ ] **XVII.C13. Proof shape as a constant-time screen.** Shape invariance is not a proof, but it
+  is a cheap filter for which routines deserve a relational proof.
+
+## XVII.D — Order of execution
+
+1. **XVII.A** — CI and the six integrity defects, then v6 regenerated and sealed. Nothing is
+   citable until the identity and configuration guarantees are enforced rather than recorded.
+2. **The decisive experiment** (from `XVI.F`, still the gate): oracle-guided arithmetic close on
+   `arm.bignum_add_p25519`. SAT is used **offline at emission time** to identify which carries are
+   undetermined and which bounds pin the rest; each needed fact is emitted as a small lemma proved
+   by bounds plus integrality (the `REAL_INTEGER_TAC`/`BOUNDER_TAC` idiom); the residual goes to
+   linear arithmetic with those facts supplied, so nothing case-splits. Measure inferences against
+   111,501,987 (current) and 1,848,494 (human). If it lands near the human figure, that is also how
+   double, half and the rest come in cheaply.
+3. **XVII.B1–B3** — proof-object import and the framework core, with `CIRCUIT` + `LIA`.
+4. **XVII.C1** after its prior-art sweep — the route to the Montgomery families.
+5. **XVII.C5, XVII.C6** — the two claims engineers cannot argue with.
+6. **XVII.B4–B8** — `EVAL`/`STEP`, Lean rules, finitary guest, `IDEAL`, self-certification.
+7. **XVII.C2, C3, C9, C11–C13** in whatever order the measurements favour.
