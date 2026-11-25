@@ -28,6 +28,10 @@ let BRIDGE_CSAT_TAC : tactic =
     let hths = map snd asl in
     let imp = list_mk_imp (hths, w) in
     let th = prove(imp, CSAT_TAC) in
-    PROVE_HYP th (ACCEPT_TAC w);;
+    let th' = List.fold_left (fun acc hth -> MP acc hth) th hths in
+    ACCEPT_TAC th' (asl,w);;
+
+(* everything that precedes the SAT call, on the goal *)
+let BRIDGE_PREPARE_TAC expand : tactic = ALL_TAC;;
 
 let bridge_anchor_count = 6;;

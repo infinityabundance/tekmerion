@@ -868,13 +868,20 @@ pub fn phase_class(line: &str) -> PhaseClass {
 const PHASE_PREFIX: &str = "(csat_mark_reader := inference_count;\ncsat_mark_enabled := true;\n";
 const INIT_MARK: &str = "csat_mark \"init finalisation\" THEN ";
 
+/// The measurement prefix, including the task id so that the library's
+/// `SLICE ...` lines (XV.B) name the task they belong to. The id is emitted as
+/// an OCaml string literal; task ids are ASCII, so `{:?}` is exact.
+fn phase_prefix(task: &str) -> String {
+    format!("{PHASE_PREFIX}bridge_slice_task := {task:?};\n")
+}
+
 /// The measurement answer's tactic.  Labels are `<line> <class>`.  There is no
 /// trailing marker: the last block is closed by `BRIDGE_*_TAC`, which solves the
 /// goal, so a tactic after it would never run.  The receipt reconciles the last
 /// block as `STAMP_INF_AFTER - last_mark_count`.
-pub fn phase_tactic(tactic: &str) -> String {
+pub fn phase_tactic(tactic: &str, task: &str) -> String {
     let mut out = String::with_capacity(tactic.len() + 4096);
-    out.push_str(PHASE_PREFIX);
+    out.push_str(&phase_prefix(task));
     let lines: Vec<&str> = tactic.split('\n').collect();
     for (i, line) in lines.iter().enumerate() {
         out.push_str(&format!(
@@ -902,7 +909,10 @@ pub fn phase_tactic(tactic: &str) -> String {
 /// `None`) when the text does not have the shape `phase_tactic` emits, so a
 /// silent partial strip is impossible.
 pub fn strip_phase_marks(phase: &str) -> Option<String> {
-    let body = phase.strip_prefix(PHASE_PREFIX)?.strip_suffix(')')?;
+    let body = phase.strip_prefix(PHASE_PREFIX)?;
+    let body = body.strip_prefix("bridge_slice_task := ")?;
+    let body = body.split_once(";\n")?.1;
+    let body = body.strip_suffix(')')?;
     let mut out = Vec::new();
     for line in body.split('\n') {
         let line = strip_one_mark(line)?;
@@ -1008,8 +1018,8 @@ const BRIDGE_EDITS: &[MarkerEdit] = &[
         marked: "let BRIDGE_CSAT_TAC : tactic =\n  fun (asl,w) ->\n    csat_mark_at \"bridge:pre-bitblast\";\n    csat_mark_size \"bridge:word-goal\" w;\n    let hths = map snd asl in",
     },
     MarkerEdit {
-        plain: "    let th = prove(imp, CSAT_TAC) in",
-        marked: "    let th = prove(imp, CSAT_TAC) in\n    csat_mark_at \"bridge:sat-done\";",
+        plain: "    ACCEPT_TAC th' (asl,w);;\n\n(* everything that precedes the SAT call, on the goal *)",
+        marked: "    csat_mark_at \"bridge:sat-done\";\n    ACCEPT_TAC th' (asl,w);;\n\n(* everything that precedes the SAT call, on the goal *)",
     },
 ];
 
@@ -2023,7 +2033,7 @@ fn emit_arm(args: &EmitArgs, repo: &Path) -> Result<()> {
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
     } else if args.mode == "phase" {
-        inlined_answer_measured(&phase_tactic(&info.tactic), repo)?
+        inlined_answer_measured(&phase_tactic(&info.tactic, &args.task), repo)?
     } else {
         dev_script_arm(&info, &policy, repo)?
     };
@@ -2071,7 +2081,7 @@ fn emit_x86(args: &EmitArgs, repo: &Path) -> Result<()> {
     let text = if args.mode == "answer" {
         inlined_answer(&info.tactic, repo)?
     } else if args.mode == "phase" {
-        inlined_answer_measured(&phase_tactic(&info.tactic), repo)?
+        inlined_answer_measured(&phase_tactic(&info.tactic, &args.task), repo)?
     } else {
         dev_script_x86(&info, &policy, repo)?
     };

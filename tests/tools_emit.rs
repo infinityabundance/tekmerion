@@ -409,7 +409,7 @@ fn phase_markers_are_removable_and_the_class_is_mechanical() {
                   ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN\n\
                   ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC \"s4\" THEN\n\
                   BRIDGE_ADD_REF_TAC (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) p";
-    let phase = emit::phase_tactic(tactic);
+    let phase = emit::phase_tactic(tactic, "test.task");
     assert_eq!(emit::strip_phase_marks(&phase).as_deref(), Some(tactic));
     assert_eq!(
         emit::phase_class("MAP_EVERY X_GEN_TAC [`z:int64`]"),
@@ -443,10 +443,13 @@ fn phase_mode_is_the_normal_emitter_plus_marks() {
     let parsed = guard::parse_task_id(task).expect("declared task id");
     let info = emit::build_arm(&parsed.op, task, &policy, &repo()).expect("build");
     let normal = emit::inlined_answer(&info.tactic, &repo()).expect("normal answer");
-    let phase = emit::inlined_answer_measured(&emit::phase_tactic(&info.tactic), &repo())
+    let phase = emit::inlined_answer_measured(&emit::phase_tactic(&info.tactic, task), &repo())
         .expect("phase answer");
     assert_ne!(normal, phase);
-    assert_eq!(answer_tactic(&phase), emit::phase_tactic(&info.tactic));
+    assert_eq!(
+        answer_tactic(&phase),
+        emit::phase_tactic(&info.tactic, task)
+    );
     let stripped = emit::strip_phase_marks(&answer_tactic(&phase)).expect("strip");
     assert_eq!(stripped, info.tactic);
     assert_eq!(answer_tactic(&normal), info.tactic);
@@ -455,6 +458,39 @@ fn phase_mode_is_the_normal_emitter_plus_marks() {
     // library functions, so the libraries differ, and the difference must be the
     // marker phrases alone.
     assert!(normal.len() < phase.len());
+}
+
+/// IX.69 (XV.B): the slice is tried before the full set, and a failed slice is
+/// reported as a fallback. The measured controls live in
+/// `research/receipts/ix69-slicing.md`; this pins the code shape so the fallback
+/// cannot be removed without a test failure. It also pins that the phase prefix
+/// carries the task id the `SLICE` lines name.
+#[test]
+fn ix69_slice_falls_back_to_the_full_set_and_the_prefix_names_the_task() {
+    let src = fs::read_to_string(repo().join("tools/bridge.ml")).expect("tools/bridge.ml");
+    let slice = src.find("try close kept").expect("the sliced close");
+    let fallback = src.find("SLICE fallback").expect("the fallback report");
+    let retry = src.rfind("close hths").expect("the full-set retry");
+    assert!(slice < fallback, "the slice must be attempted first");
+    assert!(
+        fallback < retry,
+        "the full set must be retried only after the fallback report"
+    );
+    assert_eq!(
+        src.matches("SLICE fallback=%s reason=%s kept=%d/%d")
+            .count(),
+        2
+    );
+    assert_eq!(src.matches("ACCEPT_TAC th' (asl,w)").count(), 1);
+
+    let tactic = "BRIDGE_ADD_REF_TAC EXPAND P";
+    let task = "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
+    let phase = emit::phase_tactic(tactic, task);
+    assert!(phase.contains(&format!("bridge_slice_task := {task:?};")));
+    assert_eq!(emit::strip_phase_marks(&phase).as_deref(), Some(tactic));
+    // A phase tactic without the task binding is refused, not silently stripped.
+    let old_shape = "(csat_mark_reader := inference_count;\ncsat_mark_enabled := true;\ns0)";
+    assert_eq!(emit::strip_phase_marks(old_shape), None);
 }
 
 /// IX.66: the instrumentation is additive only, and the normal answer is

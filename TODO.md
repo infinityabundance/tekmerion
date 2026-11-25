@@ -2834,21 +2834,49 @@ the generated proofs are already within **~1.3×** of hand-written ones. **The e
 the SAT close**, and the close scales with the hypothesis set (~28 inferences per bit-blasted
 subterm) rather than with the goal (51 subterms at bridge entry).
 
-- [ ] **XV.B1. Slice before blasting.** Compute, from the simulator's dependency information
+- [x] **XV.B1. Slice before blasting.** Compute, from the simulator's dependency information
   (the W1 dataflow analysis already computes per-state dependencies), the cone of influence of
   the output words and the selection flag, and hand `CSAT_TAC` only the hypotheses in that cone.
   Everything else stays as an assumption but is not blasted.
-- [ ] **XV.B2. What the slicing is must be** (typed and checkable):
+  — **Done (IX.69), with the syntactic criterion the brief specified rather than the simulator
+  dataflow:** `BRIDGE_CSAT_TAC` keeps the connected component of the goal under "shares a free
+  variable with", transitively, and `MP`s only those hypotheses; the full set is retried on
+  failure and reported as `SLICE fallback=… kept=k/n`. All 27 tasks slice; default fallback
+  rate **0/27**. See `research/receipts/ix69-slicing.md`.
+- [x] **XV.B2. What the slicing is must be** (typed and checkable):
   - **Sound**: a hypothesis may be dropped only if the conclusion's truth cannot depend on it;
   - **Deterministic**: the same input yields the same sliced instance;
   - **Measured**: subterms blasted, CNF clauses, inferences per class, and total, against the
     six-task baseline;
   - **Statement-preserving**: `equals_thm` against the current theorem, `check_axioms` passing.
-- [ ] **XV.B3. Refuse to be vacuous.** Firing controls: a hypothesis the output *does* depend on
+  — **Done (IX.69):** soundness is the monotonicity argument (a smaller antecedent is stronger;
+  the fallback retries the full set, so only incompleteness is possible); determinism is two
+  independent runs of `x86_neg_sm2` with identical kept counts and total (15,444,067 twice); the
+  measurement is `ix69-slicing.json` (blasted subterms, CNF clauses, bitblast/clausify/replay,
+  total); statements are identical by construction (`prove` against the frozen `query`) and by
+  byte-identical printed `_CORRECT`/`_SUBROUTINE_CORRECT` statements, `check_axioms` exit 0.
+  `equals_thm` itself is not invoked in one session (that would replay both proofs); stated in
+  the receipt.
+- [x] **XV.B3. Refuse to be vacuous.** Firing controls: a hypothesis the output *does* depend on
   must not be sliced away (construct one deliberately and show it is kept); slicing everything
   must fail, not succeed.
+  — **Done (IX.69):** `TEKMERION_SLICE_DEBUG=1` shows the 1227-subterm range condition `word_ult`
+  is kept; `TEKMERION_SLICE_CONTROL=drop-largest` and `drop-non-eq` make 2 of 4 `add_p521` closes
+  return SAT and fall back; `keep-none` fails all 4. The theorems are still accepted via the
+  fallback, which is the point.
 - [ ] **XV.B4. Target.** At least 30% off the six-task total (993,573,633) with all six still
   accepted; or a precise blocker with the numbers.
+  — **Blocker (IX.69):** six-task total **993,573,633 → 944,555,577 (−4.93%)**, all six accepted
+  and all 27 tasks accepted with 0 fallbacks, but far short of 695M. The entire saving is replay
+  (301,587,637 → 253,762,924); bitblast moves by −0.19% and clausify by −0.14%, because the kept
+  hypotheses are the obligation (two digit equations, the range condition, the 19 accumulator
+  equations) and S3 shows dropping them fails the close. Replay is also non-monotone: the same
+  `nonoverlapping_modulo` drop saves 32.9M on `add_p521` and costs 7.4M on `x86_add_p25519`.
+  Reaching 695M needs the architectural route (XV.D / IX.67), not slicing.
+
+> **Freeze note (do not create here):** `tools/bridge.ml` is inside the frozen runtime, so any
+> sealed run after IX.69 requires a **`v6` freeze** — create and verify it first. IX.69 creates
+> no tag and no freeze; see `research/receipts/ix69-slicing.md` §10.
 
 ## XV.C — Re-measure the certificate after slicing
 

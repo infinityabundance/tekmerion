@@ -18,7 +18,7 @@ use tekmerion::tools::{curve_check, dropin};
 
 /// sha256 of `tools/bridge.ml` when the recorded goldens were captured. The
 /// differential tests skip if the file has since moved.
-const BRIDGE_DIGEST: &str = "ceb690a8a24589614886953337caaf05ab64a8c62cc50cd6500f36c413a5ea4c";
+const BRIDGE_DIGEST: &str = "ca300bd2e35ca84893021d47249fd5cd892fef6eb0aa13d5565439850e24fa2e";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -139,10 +139,11 @@ fn instrument_reproduces_the_recorded_output() {
         return;
     };
     let (out, phrases) = instrument::instrument_text(&src, "tools/bridge.ml");
-    assert_eq!(phrases, 119);
+    // IX.69 adds eight slice phrases to `tools/bridge.ml` (119 -> 127).
+    assert_eq!(phrases, 127);
     assert_eq!(
         sha256(out.as_bytes()),
-        "f4bba97fba1ba3281acd60cb8aa09275ef7f62a205d3c32254c858a5999c5b23"
+        "205c432b739d94a1f5e00df2386c9ba14fd837a0316a115215c70ca1d107d43b"
     );
 }
 
@@ -174,7 +175,9 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     let parts = inline_answer::collect(&repo).unwrap();
     // 155 before IX.63; the trimmer adds five `let` phrases to csat_lib.ml.
     // 160 after IX.63; the IX.65 phase markers add three more `let` phrases.
-    assert_eq!(parts.len(), 163);
+    // 163 after IX.65; IX.69 adds eight `let` phrases to bridge.ml (the slice,
+    // its diagnostics, and the S3 controls).
+    assert_eq!(parts.len(), 171);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -193,22 +196,31 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // tactics are unchanged (the marker block is a no-op unless a measurement
     // answer sets `csat_mark_enabled`), so the change is the appended library
     // text only. The IX.63 values stay here as the boundary, not an assertion.
+    // IX.69 boundary. The IX.65 digests were:
+    //   add-ref   ce830bce4eea32d0e6e20b25d17bcc2003f39eda44b3fefc45eeebbded7f17f0
+    //   sub       0f6d299d9ff7ccd0d3183a7866e6aab2d74ccbf65507cffaa6f5963aca8884c6
+    //   neg       a22340aad872514a0cb869982ec8fcc817d5297091481b6d06b74c49f10cace0
+    //   add-p384  0de579654cb3e618cd25a80cc7f2cab3a7109967570928c1ed6f8fefaac105ed
+    // `tools/bridge.ml` gained the hypothesis-cone slice (XV.B); every inlined
+    // answer carries the new library text, exactly as the IX.63 trimmer and the
+    // IX.65 markers did. The tactics are unchanged, so the change is the
+    // appended library text only.
     for (mode, digest) in [
         (
             "add-ref",
-            "ce830bce4eea32d0e6e20b25d17bcc2003f39eda44b3fefc45eeebbded7f17f0",
+            "c0bf89af740d442826a17c0ac8a9b1db04db69333c5a490535203921447fd183",
         ),
         (
             "sub",
-            "0f6d299d9ff7ccd0d3183a7866e6aab2d74ccbf65507cffaa6f5963aca8884c6",
+            "84c13e28b9e944a74ca444b25b9f84b6735d928d631b73784c2321b3c955f894",
         ),
         (
             "neg",
-            "a22340aad872514a0cb869982ec8fcc817d5297091481b6d06b74c49f10cace0",
+            "38792791e9bab492c4644e9d3f29fca3751255a949fc652fa9832a1f483fc884",
         ),
         (
             "add-p384",
-            "0de579654cb3e618cd25a80cc7f2cab3a7109967570928c1ed6f8fefaac105ed",
+            "37095cc23aed03d1b19414f7af79c1cbf43604741849d68e417811234d181f5c",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

@@ -1490,18 +1490,154 @@ in
 (* presented as one closed implication so that no hypothesis is lost.        *)
 (* ------------------------------------------------------------------------- *)
 
+(* ------------------------------------------------------------------------- *)
+(* 6a. Hypothesis-cone slicing before the blast (XV.B).                      *)
+(*                                                                           *)
+(* The certified close pays ~28 primitive inferences per bit-blasted         *)
+(* subterm, and the blasted term is built from the *hypotheses*, not from    *)
+(* the goal (IX.66: the word goal has 51 subterms at the bridge entry, the   *)
+(* bit-blasted term ~1.99M).  So the cost is governed by the hypothesis set. *)
+(*                                                                           *)
+(* Slicing keeps the connected component of the goal under "shares a free    *)
+(* variable with", transitively, seeded by the goal's free variables.  A     *)
+(* hypothesis outside that component shares no variable, transitively, with  *)
+(* the conclusion; proving `(conj S) ==> w` for S subset of the hypotheses   *)
+(* and applying MP only to S still yields `|- w` with the same conclusion.   *)
+(* A smaller hypothesis set makes the obligation *stronger*, never weaker,   *)
+(* so dropping hypotheses cannot produce a false theorem -- it can only fail  *)
+(* to close.  That is why the fallback below is mandatory and why an         *)
+(* incompleteness result is a legitimate outcome, not a bug.                 *)
+(*                                                                           *)
+(* The criterion is syntactic (free-variable sharing), not semantic.  It is  *)
+(* sound and deterministic; it is not complete, and it may keep hypotheses   *)
+(* that are mathematically irrelevant.  It never drops one it cannot         *)
+(* justify structurally, which is why a failure is a fallback.               *)
+(*                                                                           *)
+(* `TEKMERION_SLICE_CONTROL' exists only for the S3/XV.B3 refutation and for   *)
+(* the class diagnostics: `keep-none' removes every hypothesis, `drop-largest' *)
+(* removes the largest kept one, `drop-non-eq' keeps only equations, `drop-one' *)
+(* removes the last kept one, and `only-true'/`drop-true'/`drop-nonoverlap'    *)
+(* isolate one syntactic class on the full set.  Every one of them makes the  *)
+(* obligation stronger and can only turn a success into a fallback; none can  *)
+(* weaken what is proved.  Unset, the criterion is the one above.             *)
+(* ------------------------------------------------------------------------- *)
+
+let rec bridge_term_size tm =
+  (match tm with
+   | Comb(s,t) -> 1 + bridge_term_size s + bridge_term_size t
+   | Abs(_,b) -> 1 + bridge_term_size b
+   | _ -> 1)
+in
+let bridge_slice_control =
+  try Sys.getenv "TEKMERION_SLICE_CONTROL" with Not_found -> ""
+in
+let bridge_slice_debug =
+  try Sys.getenv "TEKMERION_SLICE_DEBUG" = "1" with Not_found -> false
+in
+(* `--mode phase' sets this, so a SLICE line names its task.  It is inert and  *)
+(* unread in a normal answer, which prints no measurement lines at all.       *)
+let bridge_slice_task = ref "unknown"
+in
+let bridge_slice_note fmt =
+  Printf.ksprintf
+    (fun s ->
+       if !csat_mark_enabled then (print_string s; print_newline (); flush stdout))
+    fmt
+in
+(* The connected component of the goal under "shares a free variable with",
+   transitively, in the original order of `asl'.  Terms are compared
+   structurally; `frees' returns the free `Var' nodes of a conclusion. *)
+let bridge_slice_hyps hths w =
+  let hs = Array.of_list hths in
+  let n = Array.length hs in
+  let fv = Array.map (fun th -> frees (concl th)) hs in
+  let reach = ref (frees w) in
+  let in_reach v = List.exists (fun x -> x = v) !reach in
+  let kept = Array.make n false in
+  let changed = ref true in
+  while !changed do
+    changed := false;
+    for i = 0 to n - 1 do
+      if not kept.(i) && List.exists in_reach fv.(i) then begin
+        kept.(i) <- true;
+        List.iter (fun v -> if not (in_reach v) then reach := v :: !reach) fv.(i);
+        changed := true
+      end
+    done
+  done;
+  let out = ref [] in
+  Array.iteri (fun i th -> if kept.(i) then out := th :: !out) hs;
+  List.rev !out
+in
+(* The S3 control: one deliberate over-slice.  A no-op unless the environment
+   asked for it.  `only-true', `drop-true', `drop-nonoverlap' and
+   `drop-largest' are diagnostics: they apply to the full set (or, for
+   `drop-largest', to one kept hypothesis), so the effect of one syntactic class
+   can be isolated. *)
+let bridge_has_nonoverlap th =
+  List.exists
+    (fun t -> try fst (dest_const t) = "nonoverlapping_modulo" with _ -> false)
+    (find_terms (fun _ -> true) (concl th))
+in
+let bridge_slice_forced hths kept =
+  match bridge_slice_control with
+  | "keep-none" -> []
+  | "drop-one" ->
+      (match List.rev kept with [] -> [] | _ :: rest -> List.rev rest)
+  | "drop-non-eq" -> List.filter (fun th -> is_eq (concl th)) kept
+  | "drop-largest" ->
+      (match kept with
+       | [] -> []
+       | h :: tl ->
+           let sz th = bridge_term_size (concl th) in
+           let big = List.fold_left (fun a b -> if sz b > sz a then b else a) h tl in
+           List.filter (fun th -> not (th == big)) kept)
+  | "only-true" -> List.filter (fun th -> concl th = `T`) hths
+  | "drop-true" -> List.filter (fun th -> not (concl th = `T`)) hths
+  | "drop-nonoverlap" -> List.filter (fun th -> not (bridge_has_nonoverlap th)) hths
+  | _ -> kept
+in
 let BRIDGE_CSAT_TAC : tactic =
   fun (asl,w) ->
     let hths = map snd asl in
-    let hyps = map concl hths in
-    let imp = itlist (fun a b -> mk_imp(a,b)) hyps w in
-    let th = prove(imp, CSAT_TAC) in
+    let total = List.length hths in
+    let component = bridge_slice_hyps hths w in
+    if bridge_slice_debug then
+      List.iteri
+        (fun i th ->
+           let tm = concl th in
+           let s = string_of_term tm in
+           let s = if String.length s > 240 then String.sub s 0 240 ^ "..." else s in
+           bridge_slice_note "SLICE_HYP %d/%d kept=%d size=%d frees=%d %s"
+             (i + 1) total (if List.memq th component then 1 else 0)
+             (bridge_term_size tm) (List.length (frees tm)) s)
+        hths;
+    let kept = bridge_slice_forced hths component in
+    let keptn = List.length kept in
+    bridge_slice_note "SLICE kept=%d/%d task=%s" keptn total !bridge_slice_task;
     (* The old tail was `MP_TAC th THEN ASM_REWRITE_TAC[]'.  That rewrites the
        antecedents away but leaves `w` itself as the goal, so the tactic
        reported success while never closing anything (measured: the four SAT
        refutations all succeeded and four goals remained).  Chaining MP with
-       the assumption theorems yields `|- w` directly. *)
-    let th' = List.fold_left (fun acc hth -> MP acc hth) th hths in
+       the produced assumption theorems yields `|- w` directly. *)
+    let close hs =
+      let imp = itlist (fun a b -> mk_imp(a,b)) (map concl hs) w in
+      let th = prove(imp, CSAT_TAC) in
+      List.fold_left (fun acc hth -> MP acc hth) th hs in
+    let th' =
+      if keptn = total then close hths
+      else
+        try close kept
+        with
+        | Out_of_memory -> raise Out_of_memory
+        | Failure s ->
+            bridge_slice_note "SLICE fallback=%s reason=%s kept=%d/%d"
+              !bridge_slice_task s keptn total;
+            close hths
+        | e ->
+            bridge_slice_note "SLICE fallback=%s reason=%s kept=%d/%d"
+              !bridge_slice_task (Printexc.to_string e) keptn total;
+            close hths in
     ACCEPT_TAC th' (asl,w)
 in
 (* everything that precedes the SAT call, on the goal *)
