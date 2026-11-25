@@ -2784,6 +2784,16 @@ Nothing omitted. `XV.H` supersedes `XIV.C` as the order of execution.
   (`tests/tools_emit.rs:429`) loads library sources that include `.bench/hol-light/Cadical/`,
   which does not exist offline. Fix with a synthetic fixture; the test must run offline and
   still prove `deinstrument ∘ instrument = id`. CI green is a precondition for everything below.
+  **Done.** Fixtures under `tests/fixtures/emit/`; the real-source half skips with a printed
+  reason. Also fixed the *local* red: the three answer-parity tests compared against git-ignored
+  `.bench` references that went stale when the library changed, so the references are now
+  tracked at `tests/fixtures/answers/` (27 files, 3.0 MB) and re-recorded deliberately with
+  `TEKMERION_RECORD_ANSWERS=1`. Gate: 40 suites green, clippy and fmt clean, every run through
+  `tools/cap.sh`.
+- [x] **XV.A6. The IX.67 algebraic-close WIP is reverted from the tree** (preserved at
+  `0336cb2`). It was unverified, gated to one task, and changed the library that every answer
+  inlines, breaking the recorded baselines. It must be redone as a measured experiment with the
+  `XV.B3`-style controls, not blessed as-is. The idea stands and is the `XV.D1` fallback.
   — **Fixed (IX.68):** the test now runs three halves — committed fixtures
   (`tests/fixtures/emit/`), the tracked `tools/*.ml` (always present), and the real inlined set
   (skipped, with a printed reason, when `.bench` is absent). Verified by renaming
