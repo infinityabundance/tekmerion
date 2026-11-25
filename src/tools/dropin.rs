@@ -14,7 +14,7 @@
 //! three operations on p25519, p256, p256k1, p384, p521, sm2); `--arch all`
 //! runs ARM then x86 in one pass.
 
-use crate::tools::json;
+use crate::tools::{config, json, sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -674,6 +674,13 @@ pub struct TaskResult {
     /// `Some("BIGNUM_<OP>_<FAM>_CORRECT")` iff the `.correct` file carries the
     /// `val <THEOREM> : thm` line.
     pub theorem: Option<String>,
+    /// SHA-256 of the theorem's canonical typed conclusion, when the `.correct`
+    /// file prints one. A name alone is not identity (XVI.B3).
+    pub statement_digest: Option<String>,
+    /// The executable this theorem belongs to (`arch.dir.op`), carried next to
+    /// the digest so two executables that prove a same-named theorem cannot
+    /// pair by accident.
+    pub executable: Option<String>,
     /// Implied by exit 0: upstream's template runs `check_axioms ()` before it
     /// prints anything, and `run-proof.sh` exits non-zero on failure.
     pub check_axioms: bool,
@@ -1267,6 +1274,11 @@ fn build_logged(
     let theorem = correct_text
         .as_deref()
         .and_then(|t| theorem_marker(t, &p.op, &p.fam));
+    let statement_digest = match (correct_text.as_deref(), theorem.as_deref()) {
+        (Some(text), Some(name)) => statement_digest(text, name),
+        _ => None,
+    };
+    let executable = Some(format!("{}.{}.{}", p.arch, p.dir, p.op));
     let seconds = correct_text.as_deref().and_then(running_time);
     let exception = log_text.contains("ANSWER_EXCEPTION")
         || log_text.contains("Fatal error")
@@ -1290,6 +1302,8 @@ fn build_logged(
         fam: p.fam.clone(),
         exit: Some(exit),
         theorem,
+        statement_digest,
+        executable,
         check_axioms: exit == 0,
         seconds,
         timeout: hit_timeout,
@@ -1368,13 +1382,15 @@ fn task_json_line(r: &TaskResult) -> String {
         })
         .unwrap_or_default();
     format!(
-        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"inference_delta_whole_file\": {}, \"footprint\": [{}], \"log\": {}}}",
+        "{{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"exit\": {}, \"theorem\": {}, \"statement_digest\": {}, \"executable\": {}, \"check_axioms\": {}, \"seconds\": {}, \"timeout\": {}, \"stamp_required\": {}, \"stamp_ok\": {}, \"stamp_theorem\": {}, \"axioms\": {}, \"inference_delta\": {}, \"inference_delta_whole_file\": {}, \"footprint\": [{}], \"log\": {}}}",
         json_str(&r.arch),
         json_str(&r.dir),
         json_str(&r.op),
         json_str(&r.fam),
         json_opt_int(r.exit),
         json_opt_str(r.theorem.as_deref()),
+        json_opt_str(r.statement_digest.as_deref()),
+        json_opt_str(r.executable.as_deref()),
         r.check_axioms,
         json_opt_num(r.seconds),
         r.timeout,
@@ -1406,6 +1422,11 @@ fn results_json(
     let mut out = String::new();
     out.push_str("{\n");
     out.push_str(&format!("  \"generated_at\": {generated_at},\n"));
+    let effective = config::EffectiveConfig::capture(config::RunFlags::producer(stamp, force));
+    out.push_str(&format!(
+        "  \"configuration\": {},\n",
+        config::render_json(&effective)
+    ));
     out.push_str(&format!("  \"arch\": {},\n", json_str(arch)));
     out.push_str(&format!("  \"s2n_bignum_pin\": {},\n", json_str(s2n_pin)));
     out.push_str(&format!("  \"hol_light_pin\": {},\n", json_str(hol_pin)));
@@ -1591,6 +1612,8 @@ pub fn sweep(args: &[String]) -> Result<i32, String> {
                     fam: p.fam.clone(),
                     exit: None,
                     theorem: None,
+                    statement_digest: None,
+                    executable: Some(format!("{}.{}.{}", p.arch, p.dir, p.op)),
                     check_axioms: false,
                     seconds: None,
                     timeout: false,
@@ -1729,10 +1752,10 @@ pub fn run(args: &[String]) -> i32 {
              stamp-table: dropin stamp-table --json <sweep-json>
              \n\
              checktime-table: dropin checktime-table --human <json> --generated <json>
-             \x20        [--human-kernel K] [--generated-kernel K]
+             \x20        [--human-kernel K] [--generated-kernel K] [--diagnostic]
              \n\
              matched-table: dropin matched-table --human <json> --generated <json>
-             \x20        [--json <path>] [--human-kernel K] [--generated-kernel K]
+             \x20        [--json <path>] [--human-kernel K] [--generated-kernel K] [--diagnostic]
              \n\
              obligation: dropin obligation --human-tree <dir> --generated-tree <dir>
              \x20        [--generated-theorem <correct|subroutine>] [--json <path>]
@@ -2074,6 +2097,12 @@ fn measure_json(m: &MeasureArgs, generated_at: u64, results: &[TaskResult]) -> S
     let mut out = String::new();
     out.push_str("{\n");
     out.push_str(&format!("  \"generated_at\": {generated_at},\n"));
+    let effective =
+        config::EffectiveConfig::capture(config::RunFlags::producer(m.instrument, m.force));
+    out.push_str(&format!(
+        "  \"configuration\": {},\n",
+        config::render_json(&effective)
+    ));
     out.push_str(&format!("  \"label\": {},\n", json_str(&m.label)));
     out.push_str(&format!("  \"arch\": {},\n", json_str(&m.arch)));
     out.push_str(&format!(
@@ -2350,6 +2379,11 @@ pub enum ComparisonError {
         human: String,
         generated: String,
     },
+    /// One side records no executable identity, so an identity-bound
+    /// comparison cannot be established (XVI.B).
+    ExecutableIdentityUnrecorded {
+        side: &'static str,
+    },
     /// The two sides' seconds were measured over different spans (XV.A5).
     TimeScopeMismatch {
         human: TimeScope,
@@ -2410,6 +2444,11 @@ impl std::fmt::Display for ComparisonError {
                 f,
                 "executable identity differs: human {human:?}, generated {generated:?}"
             ),
+            ComparisonError::ExecutableIdentityUnrecorded { side } => write!(
+                f,
+                "{side} side records no executable identity, so an identity-bound \
+                 comparison cannot be established"
+            ),
             ComparisonError::TimeScopeMismatch { human, generated } => write!(
                 f,
                 "time scope differs: human {}, generated {}",
@@ -2425,44 +2464,112 @@ fn fmt_exit(exit: Option<i32>) -> String {
         .unwrap_or_else(|| "missing".to_string())
 }
 
-/// A comparison that may only exist when the two measurements are of the
-/// identical theorem, both succeeded, and the measurement conditions agree.
+/// Exactly which identity evidence a pair carries (XVI.B). Recorded on every
+/// [`DiagnosticComparison`]; all four fields present means the pair is fully
+/// bound and the identity-bound path accepts it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IdentityEvidence {
+    pub human_statement_digest: Option<String>,
+    pub generated_statement_digest: Option<String>,
+    pub human_executable: Option<String>,
+    pub generated_executable: Option<String>,
+}
+
+impl IdentityEvidence {
+    fn of(human: &MeasuredProof, generated: &MeasuredProof) -> IdentityEvidence {
+        IdentityEvidence {
+            human_statement_digest: human.statement_digest.clone(),
+            generated_statement_digest: generated.statement_digest.clone(),
+            human_executable: human.executable.clone(),
+            generated_executable: generated.executable.clone(),
+        }
+    }
+
+    /// The sides whose statement digest is absent, in human-then-generated
+    /// order.
+    pub fn missing_statement_digest(&self) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        if self.human_statement_digest.is_none() {
+            out.push("human");
+        }
+        if self.generated_statement_digest.is_none() {
+            out.push("generated");
+        }
+        out
+    }
+
+    /// The sides whose executable identity is absent, in the same order.
+    pub fn missing_executable(&self) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        if self.human_executable.is_none() {
+            out.push("human");
+        }
+        if self.generated_executable.is_none() {
+            out.push("generated");
+        }
+        out
+    }
+
+    /// Every piece of evidence is present on both sides.
+    pub fn is_complete(&self) -> bool {
+        self.missing_statement_digest().is_empty() && self.missing_executable().is_empty()
+    }
+
+    /// `none` for a complete record, otherwise exactly what is missing.
+    pub fn describe_missing(&self) -> String {
+        let mut parts = Vec::new();
+        let statement = self.missing_statement_digest();
+        if !statement.is_empty() {
+            parts.push(format!(
+                "statement digest missing on {}",
+                statement.join(", ")
+            ));
+        }
+        let executable = self.missing_executable();
+        if !executable.is_empty() {
+            parts.push(format!(
+                "executable identity missing on {}",
+                executable.join(", ")
+            ));
+        }
+        if parts.is_empty() {
+            "none".to_string()
+        } else {
+            parts.join("; ")
+        }
+    }
+}
+
+/// A comparison that may exist on weaker evidence than identity: the names,
+/// judgments, tree kinds and measurement scopes agree, and any statement or
+/// executable evidence that **is** present agrees, but evidence may be missing.
+/// It records exactly what is missing in [`IdentityEvidence`] and is never
+/// allowed to back a result.
 ///
-/// The fields are private and [`compare`] is the only constructor (XV.A2), so a
-/// caller cannot build or mutate one and bypass the preconditions. The
-/// accessors are read-only.
+/// The fields are private and [`diagnose`] is the only constructor, so a caller
+/// cannot build or mutate one and bypass the preconditions. The accessors are
+/// read-only.
 ///
 /// This must not compile, because the fields are private:
 ///
 /// ```compile_fail
-/// use tekmerion::tools::dropin::{MatchedComparison, MeasuredProof};
-/// fn forge(h: MeasuredProof, g: MeasuredProof) -> MatchedComparison {
-///     MatchedComparison { human: h, generated: g }
-/// }
-/// ```
-///
-/// The supported path compiles, so the `compile_fail` above cannot be passing
-/// merely because the import is wrong:
-///
-/// ```no_run
-/// use tekmerion::tools::dropin::{compare, ComparisonError, MatchedComparison, MeasuredProof};
-/// fn only_way(h: &MeasuredProof, g: &MeasuredProof) -> Result<MatchedComparison, ComparisonError> {
-///     compare(h, g)
+/// use tekmerion::tools::dropin::{DiagnosticComparison, MeasuredProof};
+/// fn forge(h: MeasuredProof, g: MeasuredProof) -> DiagnosticComparison {
+///     DiagnosticComparison { human: h, generated: g }
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatchedComparison {
+pub struct DiagnosticComparison {
     human: MeasuredProof,
     generated: MeasuredProof,
+    evidence: IdentityEvidence,
 }
 
-impl MatchedComparison {
-    /// The human side of the pair. Read-only.
+impl DiagnosticComparison {
     pub fn human(&self) -> &MeasuredProof {
         &self.human
     }
 
-    /// The generated side of the pair. Read-only.
     pub fn generated(&self) -> &MeasuredProof {
         &self.generated
     }
@@ -2471,14 +2578,17 @@ impl MatchedComparison {
         &self.human.theorem
     }
 
-    /// The statement digest both sides agree on, when they recorded one.
-    pub fn statement_digest(&self) -> Option<&str> {
-        self.human.statement_digest.as_deref()
+    /// Exactly what identity evidence is missing on which side.
+    pub fn evidence(&self) -> &IdentityEvidence {
+        &self.evidence
     }
 
-    /// `generated / human` wall seconds, only when both numbers exist, human is
-    /// non-zero, **and the time scope is recorded** (XV.A5). A ratio whose span
-    /// is not established is withheld, not printed.
+    pub fn missing_evidence(&self) -> String {
+        self.evidence.describe_missing()
+    }
+
+    /// `generated / human` wall seconds. A diagnostic ratio is never a result;
+    /// this exists so a `--diagnostic` table can print it under that label.
     pub fn seconds_ratio(&self) -> Option<f64> {
         let scope = self.human.time_scope;
         if !scope.is_recorded() || scope != self.generated.time_scope {
@@ -2487,12 +2597,90 @@ impl MatchedComparison {
         ratio(self.human.seconds, self.generated.seconds)
     }
 
-    /// `generated / human` primitive inferences, same guard.
     pub fn inference_ratio(&self) -> Option<f64> {
-        match (self.human.inferences, self.generated.inferences) {
-            (Some(h), Some(g)) if h > 0 => Some(g as f64 / h as f64),
-            _ => None,
+        ratio_u64(self.human.inferences, self.generated.inferences)
+    }
+}
+
+/// A comparison bound to the identity of both sides: statement digest present
+/// and equal on both sides, executable identity present and equal on both
+/// sides, both judgments successful, and identical recorded `TimeScope`.
+/// **Only this type may be cited as a performance result.**
+///
+/// The fields are private and [`bind_identity`] is the only constructor
+/// (XVI.B), so a caller cannot build or mutate one and bypass the
+/// preconditions.
+///
+/// This must not compile, because the fields are private:
+///
+/// ```compile_fail
+/// use tekmerion::tools::dropin::{IdentityBoundComparison, MeasuredProof};
+/// fn forge(h: MeasuredProof, g: MeasuredProof) -> IdentityBoundComparison {
+///     IdentityBoundComparison { human: h, generated: g }
+/// }
+/// ```
+///
+/// The supported path compiles, so the `compile_fail` above cannot be passing
+/// merely because the import is wrong:
+///
+/// ```no_run
+/// use tekmerion::tools::dropin::{
+///     bind_identity, ComparisonError, IdentityBoundComparison, MeasuredProof,
+/// };
+/// fn only_way(
+///     h: &MeasuredProof,
+///     g: &MeasuredProof,
+/// ) -> Result<IdentityBoundComparison, ComparisonError> {
+///     bind_identity(h, g)
+/// }
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct IdentityBoundComparison {
+    human: MeasuredProof,
+    generated: MeasuredProof,
+}
+
+impl IdentityBoundComparison {
+    pub fn human(&self) -> &MeasuredProof {
+        &self.human
+    }
+
+    pub fn generated(&self) -> &MeasuredProof {
+        &self.generated
+    }
+
+    pub fn theorem(&self) -> &str {
+        &self.human.theorem
+    }
+
+    /// Present and equal on both sides by construction.
+    pub fn statement_digest(&self) -> &str {
+        self.human
+            .statement_digest
+            .as_deref()
+            .expect("identity-bound comparison carries a statement digest")
+    }
+
+    /// Present and equal on both sides by construction.
+    pub fn executable(&self) -> &str {
+        self.human
+            .executable
+            .as_deref()
+            .expect("identity-bound comparison carries an executable identity")
+    }
+
+    /// `generated / human` wall seconds, only when both numbers exist, human is
+    /// non-zero, **and the time scope is recorded** (XV.A5).
+    pub fn seconds_ratio(&self) -> Option<f64> {
+        let scope = self.human.time_scope;
+        if !scope.is_recorded() || scope != self.generated.time_scope {
+            return None;
         }
+        ratio(self.human.seconds, self.generated.seconds)
+    }
+
+    pub fn inference_ratio(&self) -> Option<f64> {
+        ratio_u64(self.human.inferences, self.generated.inferences)
     }
 }
 
@@ -2503,9 +2691,17 @@ fn ratio(human: Option<f64>, generated: Option<f64>) -> Option<f64> {
     }
 }
 
-/// All the reasons the pair is not a `MatchedComparison`, in a fixed order.
-/// The first element is what `compare` returns.
-pub fn comparison_reasons(
+fn ratio_u64(human: Option<u64>, generated: Option<u64>) -> Option<f64> {
+    match (human, generated) {
+        (Some(h), Some(g)) if h > 0 => Some(g as f64 / h as f64),
+        _ => None,
+    }
+}
+
+/// The reasons a **diagnostic** comparison is still refused. Identity evidence
+/// that is present must agree; evidence that is absent is recorded on the
+/// resulting [`DiagnosticComparison`] rather than refused (XVI.B).
+pub fn diagnostic_reasons(
     human: &MeasuredProof,
     generated: &MeasuredProof,
 ) -> Vec<ComparisonError> {
@@ -2578,31 +2774,23 @@ pub fn comparison_reasons(
             generated: b.kernel_build.clone(),
         });
     }
-    // XV.A3: identity is the typed statement plus the executable, never the
-    // name. Two same-named theorems with different conclusions refuse.
-    match (&human.statement_digest, &generated.statement_digest) {
-        (Some(h), Some(g)) if h != g => {
+    // XV.A3: two same-named theorems with different conclusions do not pair,
+    // even diagnostically. Missing evidence is handled by the constructors.
+    if let (Some(h), Some(g)) = (&human.statement_digest, &generated.statement_digest) {
+        if h != g {
             out.push(ComparisonError::StatementIdentityMismatch {
                 human: h.clone(),
                 generated: g.clone(),
             });
         }
-        (Some(_), None) => {
-            out.push(ComparisonError::StatementIdentityUnrecorded { side: "generated" });
-        }
-        (None, Some(_)) => {
-            out.push(ComparisonError::StatementIdentityUnrecorded { side: "human" });
-        }
-        _ => {}
     }
-    match (&human.executable, &generated.executable) {
-        (Some(h), Some(g)) if h != g => {
+    if let (Some(h), Some(g)) = (&human.executable, &generated.executable) {
+        if h != g {
             out.push(ComparisonError::ExecutableIdentityMismatch {
                 human: h.clone(),
                 generated: g.clone(),
             });
         }
-        _ => {}
     }
     // XV.A5: seconds measured over different spans are not the same number.
     if human.time_scope != generated.time_scope {
@@ -2614,15 +2802,46 @@ pub fn comparison_reasons(
     out
 }
 
-/// The typed precondition. A `MatchedComparison` cannot be constructed any
-/// other way, so a caller cannot aggregate a non-matching row by accident.
-pub fn compare(
+/// The reasons an **identity-bound** comparison is refused: every diagnostic
+/// reason plus every missing piece of identity evidence, naming the side.
+pub fn identity_reasons(human: &MeasuredProof, generated: &MeasuredProof) -> Vec<ComparisonError> {
+    let mut out = diagnostic_reasons(human, generated);
+    let evidence = IdentityEvidence::of(human, generated);
+    for side in evidence.missing_statement_digest() {
+        out.push(ComparisonError::StatementIdentityUnrecorded { side });
+    }
+    for side in evidence.missing_executable() {
+        out.push(ComparisonError::ExecutableIdentityUnrecorded { side });
+    }
+    out
+}
+
+/// Build a [`DiagnosticComparison`]. This is the legacy path: it may proceed on
+/// names and whatever identity evidence is present, but it records what is
+/// missing.
+pub fn diagnose(
     human: &MeasuredProof,
     generated: &MeasuredProof,
-) -> Result<MatchedComparison, ComparisonError> {
-    match comparison_reasons(human, generated).into_iter().next() {
+) -> Result<DiagnosticComparison, ComparisonError> {
+    match diagnostic_reasons(human, generated).into_iter().next() {
         Some(reason) => Err(reason),
-        None => Ok(MatchedComparison {
+        None => Ok(DiagnosticComparison {
+            human: human.clone(),
+            generated: generated.clone(),
+            evidence: IdentityEvidence::of(human, generated),
+        }),
+    }
+}
+
+/// Build an [`IdentityBoundComparison`]. This is the only comparison type that
+/// may be cited as a result.
+pub fn bind_identity(
+    human: &MeasuredProof,
+    generated: &MeasuredProof,
+) -> Result<IdentityBoundComparison, ComparisonError> {
+    match identity_reasons(human, generated).into_iter().next() {
+        Some(reason) => Err(reason),
+        None => Ok(IdentityBoundComparison {
             human: human.clone(),
             generated: generated.clone(),
         }),
@@ -2829,8 +3048,28 @@ fn fam_rank(f: &str) -> usize {
         .unwrap_or(ARM_FAMILIES.len())
 }
 
+/// What a joined row produced (XVI.B): only `IdentityBound` may contribute to
+/// a published aggregate.
+#[derive(Debug, Clone, PartialEq)]
+enum PairVerdict {
+    IdentityBound(IdentityBoundComparison),
+    Diagnostic(DiagnosticComparison),
+    Refused(ComparisonError),
+}
+
+impl PairVerdict {
+    fn kind(&self) -> &'static str {
+        match self {
+            PairVerdict::IdentityBound(_) => "identity-bound",
+            PairVerdict::Diagnostic(_) => "diagnostic",
+            PairVerdict::Refused(_) => "refused",
+        }
+    }
+}
+
 /// One joined human/generated row. The verdict is `None` only when a side is
-/// absent; otherwise it is exactly what `compare` said.
+/// absent; otherwise it records whether the pair is identity-bound, merely
+/// diagnostic, or refused.
 #[derive(Debug, Clone, PartialEq)]
 struct Pair {
     arch: String,
@@ -2841,7 +3080,7 @@ struct Pair {
     generated: Option<TimedTask>,
     human_proof: Option<MeasuredProof>,
     generated_proof: Option<MeasuredProof>,
-    verdict: Option<Result<MatchedComparison, ComparisonError>>,
+    verdict: Option<PairVerdict>,
     reasons: Vec<ComparisonError>,
 }
 
@@ -2850,9 +3089,40 @@ impl Pair {
         format!("{}/{}_{}", self.dir, self.op, self.fam)
     }
 
-    fn matched(&self) -> Option<&MatchedComparison> {
+    /// Present only for a fully bound pair.
+    fn bound(&self) -> Option<&IdentityBoundComparison> {
         match &self.verdict {
-            Some(Ok(m)) => Some(m),
+            Some(PairVerdict::IdentityBound(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    /// Present only for a diagnostic-only pair.
+    fn diagnostic(&self) -> Option<&DiagnosticComparison> {
+        match &self.verdict {
+            Some(PairVerdict::Diagnostic(d)) => Some(d),
+            _ => None,
+        }
+    }
+
+    /// Both sides were present and the diagnostic preconditions held, so the
+    /// row is paired (though not necessarily identity-bound).
+    fn compared(&self) -> bool {
+        matches!(
+            self.verdict,
+            Some(PairVerdict::IdentityBound(_)) | Some(PairVerdict::Diagnostic(_))
+        )
+    }
+
+    fn refused(&self) -> bool {
+        !self.compared()
+    }
+
+    /// The two proofs of any compared pair, for the legacy aggregate.
+    fn compared_proofs(&self) -> Option<(&MeasuredProof, &MeasuredProof)> {
+        match &self.verdict {
+            Some(PairVerdict::IdentityBound(m)) => Some((m.human(), m.generated())),
+            Some(PairVerdict::Diagnostic(d)) => Some((d.human(), d.generated())),
             _ => None,
         }
     }
@@ -2873,10 +3143,6 @@ impl Pair {
         self.generated.as_ref().and_then(|t| t.inferences)
     }
 
-    fn refused(&self) -> bool {
-        !matches!(self.verdict, Some(Ok(_)))
-    }
-
     /// A single line for the unmatched list: the first refusal, with the
     /// remaining reasons named so nothing is hidden.
     fn refusal_reason(&self) -> String {
@@ -2887,8 +3153,8 @@ impl Pair {
             return "no generated measurement".to_string();
         }
         let first = match &self.verdict {
-            Some(Err(e)) => e.to_string(),
-            Some(Ok(_)) => return "matched".to_string(),
+            Some(PairVerdict::Refused(e)) => e.to_string(),
+            Some(_) => return "compared".to_string(),
             None => "not compared".to_string(),
         };
         let extra: Vec<String> = self
@@ -2942,7 +3208,19 @@ fn pair_rows(human: &TimedFile, generated: &TimedFile) -> Vec<Pair> {
             let human_proof = h.map(|t| measured(t, &human.scope));
             let generated_proof = g.map(|t| measured(t, &generated.scope));
             let (verdict, reasons) = match (&human_proof, &generated_proof) {
-                (Some(hp), Some(gp)) => (Some(compare(hp, gp)), comparison_reasons(hp, gp)),
+                (Some(hp), Some(gp)) => {
+                    let reasons = diagnostic_reasons(hp, gp);
+                    match reasons.first() {
+                        Some(first) => (Some(PairVerdict::Refused(first.clone())), reasons),
+                        None => match bind_identity(hp, gp) {
+                            Ok(bound) => (Some(PairVerdict::IdentityBound(bound)), Vec::new()),
+                            Err(_) => match diagnose(hp, gp) {
+                                Ok(diag) => (Some(PairVerdict::Diagnostic(diag)), Vec::new()),
+                                Err(e) => (Some(PairVerdict::Refused(e.clone())), vec![e]),
+                            },
+                        },
+                    }
+                }
                 _ => (None, Vec::new()),
             };
             Pair {
@@ -2969,10 +3247,12 @@ fn fmt_ratio(v: Option<f64>) -> String {
     v.map(|x| format!("{x:.2}")).unwrap_or_else(|| "n/a".into())
 }
 
-/// An aggregate over **matched pairs only**. Every `add` takes a
-/// `MatchedComparison`, so an unmatched row cannot enter. Each metric has its
-/// own denominator: a matched pair contributes to the seconds total only when
-/// both times exist, and to the inference total only when both counts exist.
+/// An aggregate over the rows a caller is entitled to aggregate. `add` takes
+/// the two proofs explicitly, so a refused row cannot enter; whether a
+/// diagnostic row may enter is decided by the caller and, for published
+/// numbers, it may not. Each metric has its own denominator: a pair
+/// contributes to the seconds total only when both times exist, and to the
+/// inference total only when both counts exist.
 #[derive(Default)]
 struct Group {
     n: usize,
@@ -2987,9 +3267,9 @@ struct Group {
 }
 
 impl Group {
-    fn add(&mut self, m: &MatchedComparison) {
+    fn add(&mut self, human: &MeasuredProof, generated: &MeasuredProof) {
         self.n += 1;
-        if let (Some(h), Some(g)) = (m.human().seconds, m.generated().seconds) {
+        if let (Some(h), Some(g)) = (human.seconds, generated.seconds) {
             self.seconds_n += 1;
             self.human_seconds += h;
             self.generated_seconds += g;
@@ -2997,7 +3277,7 @@ impl Group {
                 self.seconds_ratios.push(g / h);
             }
         }
-        if let (Some(h), Some(g)) = (m.human().inferences, m.generated().inferences) {
+        if let (Some(h), Some(g)) = (human.inferences, generated.inferences) {
             self.inference_n += 1;
             self.human_inferences += h as u128;
             self.generated_inferences += g as u128;
@@ -3032,6 +3312,7 @@ fn refusal_code(e: &ComparisonError) -> &'static str {
         ComparisonError::StatementIdentityMismatch { .. } => "statement identity",
         ComparisonError::StatementIdentityUnrecorded { .. } => "statement unrecorded",
         ComparisonError::ExecutableIdentityMismatch { .. } => "executable identity",
+        ComparisonError::ExecutableIdentityUnrecorded { .. } => "executable unrecorded",
         ComparisonError::TimeScopeMismatch { .. } => "time scope",
     }
 }
@@ -3047,29 +3328,31 @@ fn fmt_match_verdict(p: &Pair) -> String {
         "no generated row".to_string()
     } else {
         match &p.verdict {
-            Some(Ok(_)) => "matched".to_string(),
-            Some(Err(e)) => format!("refused: {}", refusal_code(e)),
+            Some(PairVerdict::IdentityBound(_)) => "identity-bound".to_string(),
+            Some(PairVerdict::Diagnostic(d)) => {
+                format!("diagnostic: {}", d.missing_evidence())
+            }
+            Some(PairVerdict::Refused(e)) => format!("refused: {}", refusal_code(e)),
             None => "not compared".to_string(),
         }
     }
 }
 
-/// The one time scope shared by **every** matched row, or the refusal that
+/// The one time scope shared by **every** row in `rows`, or the refusal that
 /// names the rows (XV.A5). A seconds aggregate is published only when this is
 /// `Ok`: a `prove_only` row and a `whole_file` row are not quantities of the
 /// same kind, and an unrecorded scope is not established at all.
-fn aggregate_time_scope(rows: &[Pair]) -> Result<TimeScope, String> {
-    let matched: Vec<(&Pair, &MatchedComparison)> = rows
-        .iter()
-        .filter_map(|p| p.matched().map(|m| (p, m)))
-        .collect();
+fn time_scope_over<'a>(
+    rows: impl Iterator<Item = (&'a Pair, &'a MeasuredProof)>,
+) -> Result<TimeScope, String> {
+    let matched: Vec<(&Pair, &MeasuredProof)> = rows.collect();
     if matched.is_empty() {
         return Err("no matched pairs".to_string());
     }
     let mut scopes: Vec<TimeScope> = Vec::new();
     for (_, m) in &matched {
-        if !scopes.contains(&m.human().time_scope) {
-            scopes.push(m.human().time_scope);
+        if !scopes.contains(&m.time_scope) {
+            scopes.push(m.time_scope);
         }
     }
     if scopes.len() == 1 && scopes[0].is_recorded() {
@@ -3098,24 +3381,45 @@ fn aggregate_time_scope(rows: &[Pair]) -> Result<TimeScope, String> {
             "| {} {} | {} |\n",
             p.arch,
             p.label(),
-            m.human().time_scope.as_str()
+            m.time_scope.as_str()
         ));
     }
     Err(out)
 }
 
+/// The identity-bound rows only (the default aggregate).
+fn bound_time_scope(rows: &[Pair]) -> Result<TimeScope, String> {
+    time_scope_over(
+        rows.iter()
+            .filter_map(|p| p.bound().map(|m| (p, m.human()))),
+    )
+}
+
+/// Every compared row, bound or diagnostic: the legacy aggregate.
+fn legacy_time_scope(rows: &[Pair]) -> Result<TimeScope, String> {
+    time_scope_over(
+        rows.iter()
+            .filter_map(|p| p.compared_proofs().map(|(h, _)| (p, h))),
+    )
+}
+
 /// Render the matched check-time table. Pure so it can be tested without the
-/// `.bench` trees.
-fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
+/// `.bench` trees. `diagnostic` admits the legacy aggregate, always labelled
+/// `NOT A RESULT` on the same line.
+fn render_checktime(human: &TimedFile, generated: &TimedFile, diagnostic: bool) -> String {
     let rows = pair_rows(human, generated);
     let mut out = String::new();
 
-    out.push_str("## Matched check-time table (XIV.A)\n\n");
+    out.push_str("## Matched check-time table (XIV.A, XVI.B)\n\n");
     out.push_str(
-        "A row contributes to an aggregate only when `compare` returns a\n\
-         `MatchedComparison`: exact theorem identity, both judgments successful,\n\
-         and identical measurement scopes. `human s` and `generated s` are the\n\
-         `Running time:` value parsed from each task's `.correct` file.\n\n",
+        "A row is *compared* when the theorem name, both judgments, the tree kinds\n\
+         and the measurement scopes agree. It is **identity-bound** only when, in\n\
+         addition, the statement digest is present and equal on both sides and\n\
+         the executable identity is present and equal on both sides. Only\n\
+         identity-bound rows contribute to a published aggregate; a diagnostic\n\
+         row shows exactly which evidence is missing and is never a result.\n\
+         `human s` and `generated s` are the `Running time:` value parsed from\n\
+         each task's `.correct` file.\n\n",
     );
     out.push_str(
         "| arch | task | human theorem | generated theorem | human s | generated s | verdict |\n",
@@ -3140,20 +3444,16 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
         ));
     }
 
-    let matched: Vec<&MatchedComparison> = rows.iter().filter_map(|p| p.matched()).collect();
-    let matched_count = matched.len();
+    let bound_count = rows.iter().filter(|p| p.bound().is_some()).count();
+    let diagnostic_count = rows.iter().filter(|p| p.diagnostic().is_some()).count();
+    let compared_count = bound_count + diagnostic_count;
     let both_rows = rows
         .iter()
         .filter(|p| p.human.is_some() && p.generated.is_some())
         .count();
     let unmatched: Vec<&Pair> = rows.iter().filter(|p| p.refused()).collect();
 
-    let mut all = Group::default();
-    for m in &matched {
-        all.add(m);
-    }
-
-    out.push_str("\n### Measurement counts (XIV.A3/A4)\n\n");
+    out.push_str("\n### Measurement counts (XIV.A3/A4, XVI.B)\n\n");
     out.push_str("| quantity | value |\n|---|---:|\n");
     out.push_str(&format!("| human rows parsed | {} |\n", human.tasks.len()));
     out.push_str(&format!(
@@ -3162,23 +3462,29 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
     ));
     out.push_str(&format!("| task rows (union of keys) | {} |\n", rows.len()));
     out.push_str(&format!("| rows with both sides present | {both_rows} |\n"));
-    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
+    out.push_str(&format!("| pairs compared (n) | {compared_count} |\n"));
+    out.push_str(&format!("| identity-bound pairs (n) | {bound_count} |\n"));
+    out.push_str(&format!("| diagnostic pairs (n) | {diagnostic_count} |\n"));
     out.push_str(&format!(
-        "| unmatched rows | {} |\n",
-        rows.len() - matched_count
+        "| refused or unpaired rows | {} |\n",
+        rows.len() - compared_count
     ));
 
-    out.push_str("\n### Matched aggregates (denominator: n matched pairs)\n\n");
-    let seconds_scope = aggregate_time_scope(&rows);
+    out.push_str("\n### Identity-bound aggregates (the only results)\n\n");
+    let mut all = Group::default();
+    for m in rows.iter().filter_map(Pair::bound) {
+        all.add(m.human(), m.generated());
+    }
+    let seconds_scope = bound_time_scope(&rows);
     out.push_str("| metric | value |\n|---|---:|\n");
-    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
-    if matched_count == 0 {
-        out.push_str("| human total s (n=0) | n/a (no matched pairs) |\n");
-        out.push_str("| generated total s (n=0) | n/a (no matched pairs) |\n");
+    out.push_str(&format!("| identity-bound pairs (n) | {bound_count} |\n"));
+    if bound_count == 0 {
+        out.push_str("| human total s (n=0) | n/a (no identity-bound pairs) |\n");
+        out.push_str("| generated total s (n=0) | n/a (no identity-bound pairs) |\n");
         out.push_str("| aggregate seconds ratio | n/a (n=0; not published) |\n");
         out.push_str("| per-task seconds ratio median | n/a (n=0) |\n");
-        out.push_str("| human total inferences (n=0) | n/a (no matched pairs) |\n");
-        out.push_str("| generated total inferences (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| human total inferences (n=0) | n/a (no identity-bound pairs) |\n");
+        out.push_str("| generated total inferences (n=0) | n/a (no identity-bound pairs) |\n");
         out.push_str("| aggregate inference ratio | n/a (n=0; not published) |\n");
         out.push_str("| per-task inference ratio median | n/a (n=0) |\n");
     } else {
@@ -3244,9 +3550,13 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
         out.push_str(refusal);
     }
 
+    if diagnostic {
+        push_legacy_checktime(&mut out, &rows);
+    }
+
     out.push_str("\n### Unmatched rows (excluded from every aggregate)\n\n");
     if unmatched.is_empty() {
-        out.push_str("None: every row is a matched pair.\n");
+        out.push_str("None: every row is at least compared.\n");
     } else {
         out.push_str(
             "| arch | task | human theorem | generated theorem | human s | generated s | reason |\n",
@@ -3272,6 +3582,120 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
         }
     }
 
+    push_side_totals(&mut out, human, generated);
+
+    let warn = CHECKTIME_BUDGET_SECONDS * CHECKTIME_WARN_FRACTION;
+    out.push_str(&format!(
+        "\n### XII.F9.2 budget: {:.0} s (70% = {:.0} s)\n\n",
+        CHECKTIME_BUDGET_SECONDS, warn
+    ));
+    let over: Vec<&Pair> = rows
+        .iter()
+        .filter(|p| p.bound().is_some())
+        .filter(|p| p.generated_seconds().is_some_and(|g| g > warn))
+        .collect();
+    if bound_count == 0 {
+        out.push_str("No identity-bound generated task to test (n=0).\n");
+    } else if over.is_empty() {
+        out.push_str(&format!(
+            "No identity-bound generated task exceeds {warn:.0} s (n={bound_count}).\n"
+        ));
+    } else {
+        out.push_str("| arch | task | generated s | % of 120 s | over 70% | over 100% |\n");
+        out.push_str("|---|---|---:|---:|---|---|\n");
+        for p in over {
+            let g = p.generated_seconds().unwrap_or(0.0);
+            out.push_str(&format!(
+                "| {} | {} | {:.3} | {:.1} | {} | {} |\n",
+                p.arch,
+                p.label(),
+                g,
+                g / CHECKTIME_BUDGET_SECONDS * 100.0,
+                py_bool(g > warn),
+                py_bool(g > CHECKTIME_BUDGET_SECONDS),
+            ));
+        }
+    }
+
+    push_provenance(&mut out, &rows, human);
+
+    out.push_str(&format!(
+        "\nIDENTITY-BOUND {bound_count}/{}; DIAGNOSTIC {diagnostic_count}; REFUSED {}; HUMAN ROWS {}; GENERATED ROWS {}\n",
+        rows.len(),
+        rows.len() - compared_count,
+        human.tasks.len(),
+        generated.tasks.len(),
+    ));
+    out
+}
+
+/// The legacy aggregate over every *compared* row, bound or diagnostic. Every
+/// line carries `NOT A RESULT` so it cannot be lifted into a claim.
+fn push_legacy_checktime(out: &mut String, rows: &[Pair]) {
+    let mut legacy = Group::default();
+    for (h, g) in rows.iter().filter_map(Pair::compared_proofs) {
+        legacy.add(h, g);
+    }
+    let scope = legacy_time_scope(rows);
+    out.push_str("\n### Legacy aggregate (diagnostic types included) — NOT A RESULT\n\n");
+    out.push_str("| metric | value |\n|---|---:|\n");
+    out.push_str(&format!(
+        "| legacy compared pairs (n) | {} NOT A RESULT |\n",
+        legacy.n
+    ));
+    match &scope {
+        Ok(_) => {
+            out.push_str(&format!(
+                "| legacy human total s (n={}) | {:.3} NOT A RESULT |\n",
+                legacy.seconds_n, legacy.human_seconds
+            ));
+            out.push_str(&format!(
+                "| legacy generated total s (n={}) | {:.3} NOT A RESULT |\n",
+                legacy.seconds_n, legacy.generated_seconds
+            ));
+            out.push_str(&format!(
+                "| legacy seconds ratio (n={}) | {} NOT A RESULT |\n",
+                legacy.seconds_n,
+                fmt_ratio(legacy.seconds_aggregate())
+            ));
+            out.push_str(&format!(
+                "| legacy seconds ratio median (n={}) | {} NOT A RESULT |\n",
+                legacy.seconds_n,
+                fmt_ratio(median(legacy.seconds_ratios.clone()))
+            ));
+        }
+        Err(_) => {
+            out.push_str(
+                "| legacy human total s | withheld: time scope not aggregatable; NOT A RESULT |\n",
+            );
+            out.push_str("| legacy generated total s | withheld: time scope not aggregatable; NOT A RESULT |\n");
+            out.push_str(
+                "| legacy seconds ratio | withheld: time scope not aggregatable; NOT A RESULT |\n",
+            );
+            out.push_str("| legacy seconds ratio median | withheld: time scope not aggregatable; NOT A RESULT |\n");
+        }
+    }
+    out.push_str(&format!(
+        "| legacy human inferences (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n, legacy.human_inferences
+    ));
+    out.push_str(&format!(
+        "| legacy generated inferences (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n, legacy.generated_inferences
+    ));
+    out.push_str(&format!(
+        "| legacy inference ratio (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n,
+        fmt_ratio(legacy.inference_aggregate())
+    ));
+    out.push_str(&format!(
+        "| legacy inference ratio median (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n,
+        fmt_ratio(median(legacy.inference_ratios.clone()))
+    ));
+}
+
+fn push_side_totals(out: &mut String, human: &TimedFile, generated: &TimedFile) {
     out.push_str(
         "\n### Descriptive side totals (all parsed rows; NOT an aggregate over matched pairs)\n\n",
     );
@@ -3326,40 +3750,9 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
             .count(),
         g_inf
     ));
+}
 
-    let warn = CHECKTIME_BUDGET_SECONDS * CHECKTIME_WARN_FRACTION;
-    out.push_str(&format!(
-        "\n### XII.F9.2 budget: {:.0} s (70% = {:.0} s)\n\n",
-        CHECKTIME_BUDGET_SECONDS, warn
-    ));
-    let over: Vec<&Pair> = rows
-        .iter()
-        .filter(|p| p.matched().is_some())
-        .filter(|p| p.generated_seconds().is_some_and(|g| g > warn))
-        .collect();
-    if matched_count == 0 {
-        out.push_str("No matched generated task to test (n=0).\n");
-    } else if over.is_empty() {
-        out.push_str(&format!(
-            "No matched generated task exceeds {warn:.0} s (n={matched_count}).\n"
-        ));
-    } else {
-        out.push_str("| arch | task | generated s | % of 120 s | over 70% | over 100% |\n");
-        out.push_str("|---|---|---:|---:|---|---|\n");
-        for p in over {
-            let g = p.generated_seconds().unwrap_or(0.0);
-            out.push_str(&format!(
-                "| {} | {} | {:.3} | {:.1} | {} | {} |\n",
-                p.arch,
-                p.label(),
-                g,
-                g / CHECKTIME_BUDGET_SECONDS * 100.0,
-                py_bool(g > warn),
-                py_bool(g > CHECKTIME_BUDGET_SECONDS),
-            ));
-        }
-    }
-
+fn push_provenance(out: &mut String, rows: &[Pair], human: &TimedFile) {
     out.push_str("\n### Running time provenance\n\n");
     out.push_str(
         "`seconds` is the last `Running time: <x> sec, Start unixtime: ...` line of the\n\
@@ -3369,7 +3762,7 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
     );
     out.push_str("| arch | task | human `.correct` | generated make log |\n");
     out.push_str("|---|---|---|---|\n");
-    for p in &rows {
+    for p in rows {
         let correct = match human.tree.as_deref() {
             Some(t) => format!("{t}/{}/{}/bignum_{}_{}.correct", p.arch, p.dir, p.op, p.fam),
             None => "(tree not recorded)".to_string(),
@@ -3385,24 +3778,16 @@ fn render_checktime(human: &TimedFile, generated: &TimedFile) -> String {
                 .unwrap_or("n/a"),
         ));
     }
-
-    out.push_str(&format!(
-        "\nMATCHED {matched_count}/{} PAIRS; UNMATCHED {}; HUMAN ROWS {}; GENERATED ROWS {}\n",
-        rows.len(),
-        rows.len() - matched_count,
-        human.tasks.len(),
-        generated.tasks.len(),
-    ));
-    out
 }
 
 /// `dropin checktime-table --human <json> --generated <json>
-/// [--human-kernel K] [--generated-kernel K]`.
+/// [--human-kernel K] [--generated-kernel K] [--diagnostic]`.
 pub fn checktime_table(args: &[String]) -> Result<i32, String> {
     let human_path = arg_value(args, "--human").ok_or("--human is required")?;
     let generated_path = arg_value(args, "--generated").ok_or("--generated is required")?;
     let human_kernel = arg_value(args, "--human-kernel").unwrap_or("");
     let generated_kernel = arg_value(args, "--generated-kernel").unwrap_or("");
+    let diagnostic = args.iter().any(|a| a == "--diagnostic");
     let human = read_timed_tasks(Path::new(human_path), TreeKind::Human, human_kernel)?;
     let generated = read_timed_tasks(
         Path::new(generated_path),
@@ -3416,11 +3801,11 @@ pub fn checktime_table(args: &[String]) -> Result<i32, String> {
             generated.tasks.len()
         ));
     }
-    let text = render_checktime(&human, &generated);
+    let text = render_checktime(&human, &generated, diagnostic);
     print!("{text}");
     let rows = pair_rows(&human, &generated);
-    let matched = rows.iter().filter(|p| p.matched().is_some()).count();
-    Ok(if !rows.is_empty() && matched == rows.len() {
+    let bound = rows.iter().filter(|p| p.bound().is_some()).count();
+    Ok(if !rows.is_empty() && bound == rows.len() {
         0
     } else {
         1
@@ -3437,26 +3822,29 @@ fn json_str_slice(items: &[String]) -> String {
     format!("[{}]", body.join(", "))
 }
 
-/// Render the inference table. This is the XIV.B2 artefact: only matched
-/// pairs are aggregated, and the denominator is printed on every total.
-fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
+/// Render the inference table. This is the XIV.B2 artefact, now split by
+/// comparison type (XVI.B): only identity-bound pairs are aggregated.
+fn render_matched(human: &TimedFile, generated: &TimedFile, diagnostic: bool) -> String {
     let rows = pair_rows(human, generated);
-    let matched: Vec<&MatchedComparison> = rows.iter().filter_map(|p| p.matched()).collect();
-    let matched_count = matched.len();
+    let bound_count = rows.iter().filter(|p| p.bound().is_some()).count();
+    let diagnostic_count = rows.iter().filter(|p| p.diagnostic().is_some()).count();
+    let compared_count = bound_count + diagnostic_count;
     let unmatched: Vec<&Pair> = rows.iter().filter(|p| p.refused()).collect();
     let mut all = Group::default();
-    for m in &matched {
-        all.add(m);
+    for m in rows.iter().filter_map(Pair::bound) {
+        all.add(m.human(), m.generated());
     }
 
     let mut out = String::new();
-    out.push_str("## Matched inference table (XIV.B2)\n\n");
+    out.push_str("## Matched inference table (XIV.B2, XVI.B)\n\n");
     out.push_str(
-        "A row is published only as a pair. `compare` requires the exact theorem\n\
-         identity, both judgments successful (`exit == 0`, `check_axioms`, theorem\n\
-         proved), and identical measurement scopes. `human inf` is the proof-body\n\
-         primitive-inference delta: the shared HOL Light bootstrap is excluded on\n\
-         both sides.\n\n",
+        "A row is published only as a pair. A pair is *compared* when the theorem\n\
+         name, both judgments (`exit == 0`, `check_axioms`, theorem proved), the\n\
+         tree kinds and the measurement scopes agree. It is **identity-bound**\n\
+         only when the statement digest and executable identity are present and\n\
+         equal on both sides; only those rows are aggregated. `human inf` is the\n\
+         proof-body primitive-inference delta: the shared HOL Light bootstrap is\n\
+         excluded on both sides.\n\n",
     );
     out.push_str(
         "| arch | task | human theorem | generated theorem | human inf | generated inf | human s | generated s | verdict |\n",
@@ -3491,23 +3879,25 @@ fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
         generated.tasks.len()
     ));
     out.push_str(&format!("| task rows (union of keys) | {} |\n", rows.len()));
-    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
+    out.push_str(&format!("| pairs compared (n) | {compared_count} |\n"));
+    out.push_str(&format!("| identity-bound pairs (n) | {bound_count} |\n"));
+    out.push_str(&format!("| diagnostic pairs (n) | {diagnostic_count} |\n"));
     out.push_str(&format!(
-        "| unmatched rows | {} |\n",
-        rows.len() - matched_count
+        "| refused or unpaired rows | {} |\n",
+        rows.len() - compared_count
     ));
 
-    out.push_str("\n### Matched totals (denominator: n matched pairs)\n\n");
-    let seconds_scope = aggregate_time_scope(&rows);
+    out.push_str("\n### Identity-bound totals (the only results)\n\n");
+    let seconds_scope = bound_time_scope(&rows);
     out.push_str("| metric | value |\n|---|---:|\n");
-    out.push_str(&format!("| matched pairs (n) | {matched_count} |\n"));
-    if matched_count == 0 {
-        out.push_str("| human inferences (n=0) | n/a (no matched pairs) |\n");
-        out.push_str("| generated inferences (n=0) | n/a (no matched pairs) |\n");
+    out.push_str(&format!("| identity-bound pairs (n) | {bound_count} |\n"));
+    if bound_count == 0 {
+        out.push_str("| human inferences (n=0) | n/a (no identity-bound pairs) |\n");
+        out.push_str("| generated inferences (n=0) | n/a (no identity-bound pairs) |\n");
         out.push_str("| aggregate inference ratio | n/a (n=0; not published) |\n");
         out.push_str("| per-task inference ratio median | n/a (n=0) |\n");
-        out.push_str("| human seconds (n=0) | n/a (no matched pairs) |\n");
-        out.push_str("| generated seconds (n=0) | n/a (no matched pairs) |\n");
+        out.push_str("| human seconds (n=0) | n/a (no identity-bound pairs) |\n");
+        out.push_str("| generated seconds (n=0) | n/a (no identity-bound pairs) |\n");
         out.push_str("| aggregate seconds ratio | n/a (n=0; not published) |\n");
     } else {
         out.push_str(&format!(
@@ -3564,9 +3954,13 @@ fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
         out.push_str(refusal);
     }
 
+    if diagnostic {
+        push_legacy_matched(&mut out, &rows);
+    }
+
     out.push_str("\n### Unmatched rows (excluded from every aggregate)\n\n");
     if unmatched.is_empty() {
-        out.push_str("None: every row is a matched pair.\n");
+        out.push_str("None: every row is at least compared.\n");
     } else {
         out.push_str(
             "| arch | task | human theorem | generated theorem | human inf | generated inf | reason |\n",
@@ -3632,13 +4026,72 @@ fn render_matched(human: &TimedFile, generated: &TimedFile) -> String {
     ));
 
     out.push_str(&format!(
-        "\nMATCHED {matched_count}/{} PAIRS; UNMATCHED {}; HUMAN ROWS {}; GENERATED ROWS {}\n",
+        "\nIDENTITY-BOUND {bound_count}/{}; DIAGNOSTIC {diagnostic_count}; REFUSED {}; HUMAN ROWS {}; GENERATED ROWS {}\n",
         rows.len(),
-        rows.len() - matched_count,
+        rows.len() - compared_count,
         human.tasks.len(),
         generated.tasks.len(),
     ));
     out
+}
+
+/// The legacy inference aggregate, every line labelled `NOT A RESULT`.
+fn push_legacy_matched(out: &mut String, rows: &[Pair]) {
+    let mut legacy = Group::default();
+    for (h, g) in rows.iter().filter_map(Pair::compared_proofs) {
+        legacy.add(h, g);
+    }
+    let scope = legacy_time_scope(rows);
+    out.push_str("\n### Legacy totals (diagnostic types included) — NOT A RESULT\n\n");
+    out.push_str("| metric | value |\n|---|---:|\n");
+    out.push_str(&format!(
+        "| legacy compared pairs (n) | {} NOT A RESULT |\n",
+        legacy.n
+    ));
+    out.push_str(&format!(
+        "| legacy human inferences (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n, legacy.human_inferences
+    ));
+    out.push_str(&format!(
+        "| legacy generated inferences (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n, legacy.generated_inferences
+    ));
+    out.push_str(&format!(
+        "| legacy inference ratio (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n,
+        fmt_ratio(legacy.inference_aggregate())
+    ));
+    out.push_str(&format!(
+        "| legacy inference ratio median (n={}) | {} NOT A RESULT |\n",
+        legacy.inference_n,
+        fmt_ratio(median(legacy.inference_ratios.clone()))
+    ));
+    match &scope {
+        Ok(_) => {
+            out.push_str(&format!(
+                "| legacy human seconds (n={}) | {:.3} NOT A RESULT |\n",
+                legacy.seconds_n, legacy.human_seconds
+            ));
+            out.push_str(&format!(
+                "| legacy generated seconds (n={}) | {:.3} NOT A RESULT |\n",
+                legacy.seconds_n, legacy.generated_seconds
+            ));
+            out.push_str(&format!(
+                "| legacy seconds ratio (n={}) | {} NOT A RESULT |\n",
+                legacy.seconds_n,
+                fmt_ratio(legacy.seconds_aggregate())
+            ));
+        }
+        Err(_) => {
+            out.push_str(
+                "| legacy human seconds | withheld: time scope not aggregatable; NOT A RESULT |\n",
+            );
+            out.push_str("| legacy generated seconds | withheld: time scope not aggregatable; NOT A RESULT |\n");
+            out.push_str(
+                "| legacy seconds ratio | withheld: time scope not aggregatable; NOT A RESULT |\n",
+            );
+        }
+    }
 }
 
 fn matched_json(
@@ -3646,18 +4099,24 @@ fn matched_json(
     generated: &TimedFile,
     human_path: &str,
     generated_path: &str,
+    diagnostic: bool,
 ) -> String {
     let rows = pair_rows(human, generated);
-    let matched: Vec<&MatchedComparison> = rows.iter().filter_map(|p| p.matched()).collect();
-    let matched_count = matched.len();
-    let mut all = Group::default();
-    for m in &matched {
-        all.add(m);
+    let bound_count = rows.iter().filter(|p| p.bound().is_some()).count();
+    let diagnostic_count = rows.iter().filter(|p| p.diagnostic().is_some()).count();
+    let compared_count = bound_count + diagnostic_count;
+    let mut bound = Group::default();
+    for m in rows.iter().filter_map(Pair::bound) {
+        bound.add(m.human(), m.generated());
     }
+    let seconds_scope = bound_time_scope(&rows);
     let mut out = String::new();
     out.push_str("{\n");
     out.push_str(&format!("  \"generated_at\": {},\n", now_unix()));
     out.push_str("  \"label\": \"ix60-matched-inference\",\n");
+    out.push_str(
+        "  \"comparison_types\": \"identity-bound aggregates are results; diagnostic aggregates are NOT A RESULT; only bind_identity may back a claim\",\n",
+    );
     out.push_str(&format!("  \"human_file\": {},\n", json_str(human_path)));
     out.push_str(&format!(
         "  \"generated_file\": {},\n",
@@ -3682,67 +4141,104 @@ fn matched_json(
         human.scope.force
     ));
     out.push_str(&format!(
-        "  \"counts\": {{\"human_rows\": {}, \"generated_rows\": {}, \"task_rows\": {}, \"matched_pairs\": {}, \"unmatched\": {}}},\n",
+        "  \"counts\": {{\"human_rows\": {}, \"generated_rows\": {}, \"task_rows\": {}, \"matched_pairs\": {}, \"identity_bound_pairs\": {}, \"diagnostic_pairs\": {}, \"refused\": {}}},\n",
         human.tasks.len(),
         generated.tasks.len(),
         rows.len(),
-        matched_count,
-        rows.len() - matched_count
+        compared_count,
+        bound_count,
+        diagnostic_count,
+        rows.len() - compared_count
     ));
-    let seconds_scope = aggregate_time_scope(&rows);
-    let (hi, gi, ir, hs, gs, sr) = if matched_count == 0 {
-        (None, None, None, None, None, None)
-    } else {
-        // XV.A5: the totals are data, but no ratio is published when the two
-        // sides' spans are not established.
-        let sr = if seconds_scope.is_ok() {
-            all.seconds_aggregate()
-        } else {
-            None
-        };
-        (
-            Some(all.human_inferences),
-            Some(all.generated_inferences),
-            all.inference_aggregate(),
-            Some(all.human_seconds),
-            Some(all.generated_seconds),
-            sr,
-        )
-    };
+
     let scope_token = match &seconds_scope {
         Ok(s) => json_str(s.as_str()),
         Err(_) => "null".to_string(),
     };
+    let (hi, gi, ir, hs, gs, sr) = totals_of(&bound, &seconds_scope);
     out.push_str(&format!(
-        "  \"matched_totals\": {{\"denominator\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"inference_ratio\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"seconds_ratio\": {}, \"time_scope\": {}}},\n",
-        matched_count,
-        hi.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
-        gi.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+        "  \"matched_totals\": {{\"claim\": \"identity-bound\", \"denominator\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"inference_ratio\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"seconds_ratio\": {}, \"time_scope\": {}}},\n",
+        bound_count,
+        hi,
+        gi,
         json_opt_num(ir),
         json_opt_num(hs),
         json_opt_num(gs),
         json_opt_num(sr),
         scope_token,
     ));
+
+    if diagnostic {
+        let mut legacy = Group::default();
+        for (h, g) in rows.iter().filter_map(Pair::compared_proofs) {
+            legacy.add(h, g);
+        }
+        let legacy_scope = legacy_time_scope(&rows);
+        let (hi, gi, ir, hs, gs, sr) = totals_of(&legacy, &legacy_scope);
+        let scope_token = match &legacy_scope {
+            Ok(s) => json_str(s.as_str()),
+            Err(_) => "null".to_string(),
+        };
+        out.push_str(&format!(
+            "  \"legacy_totals\": {{\"claim\": \"NOT A RESULT\", \"denominator\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"inference_ratio\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"seconds_ratio\": {}, \"time_scope\": {}}},\n",
+            legacy.n,
+            hi,
+            gi,
+            json_opt_num(ir),
+            json_opt_num(hs),
+            json_opt_num(gs),
+            json_opt_num(sr),
+            scope_token,
+        ));
+    }
+
     out.push_str("  \"tasks\": [\n");
     for (i, p) in rows.iter().enumerate() {
         let comma = if i + 1 == rows.len() { "" } else { "," };
         let reasons: Vec<String> = p.reasons.iter().map(ToString::to_string).collect();
+        let kind = p
+            .verdict
+            .as_ref()
+            .map(PairVerdict::kind)
+            .unwrap_or("unpaired");
+        let missing = p
+            .diagnostic()
+            .map(|d| d.missing_evidence())
+            .filter(|_| p.bound().is_none());
         out.push_str(&format!(
-            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"human_theorem\": {}, \"generated_theorem\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"human_inferences_whole_file\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"matched\": {}, \"verdict\": {}, \"reasons\": {}}}{}\n",
+            "    {{\"arch\": {}, \"dir\": {}, \"op\": {}, \"family\": {}, \"human_theorem\": {}, \"generated_theorem\": {}, \"human_statement_digest\": {}, \"generated_statement_digest\": {}, \"human_executable\": {}, \"generated_executable\": {}, \"human_inferences\": {}, \"generated_inferences\": {}, \"human_inferences_whole_file\": {}, \"human_seconds\": {}, \"generated_seconds\": {}, \"comparison\": {}, \"claimable\": {}, \"missing_evidence\": {}, \"matched\": {}, \"verdict\": {}, \"reasons\": {}}}{}\n",
             json_str(&p.arch),
             json_str(&p.dir),
             json_str(&p.op),
             json_str(&p.fam),
             json_opt_str(p.human_proof.as_ref().map(|m| m.theorem.as_str())),
             json_opt_str(p.generated_proof.as_ref().map(|m| m.theorem.as_str())),
+            json_opt_str(
+                p.human_proof
+                    .as_ref()
+                    .and_then(|m| m.statement_digest.as_deref())
+            ),
+            json_opt_str(
+                p.generated_proof
+                    .as_ref()
+                    .and_then(|m| m.statement_digest.as_deref())
+            ),
+            json_opt_str(p.human_proof.as_ref().and_then(|m| m.executable.as_deref())),
+            json_opt_str(
+                p.generated_proof
+                    .as_ref()
+                    .and_then(|m| m.executable.as_deref())
+            ),
             json_opt_u64(p.human_inferences()),
             json_opt_u64(p.generated_inferences()),
             json_opt_u64(p.human.as_ref().and_then(|t| t.inferences_whole_file)),
             json_opt_num(p.human_seconds()),
             json_opt_num(p.generated_seconds()),
-            p.matched().is_some(),
-            json_str(&p.refusal_reason()),
+            json_str(kind),
+            p.bound().is_some(),
+            json_opt_str(missing.as_deref()),
+            p.compared(),
+            json_str(&fmt_match_verdict(p)),
             json_str_slice(&reasons),
             comma
         ));
@@ -3750,10 +4246,49 @@ fn matched_json(
     out.push_str("  ],\n");
     out.push_str(&format!(
         "  \"ok\": {},\n  \"total\": {}\n}}\n",
-        matched_count,
+        bound_count,
         rows.len()
     ));
     out
+}
+
+/// The five totals plus two ratios for one `Group`, with the ratio withheld
+/// when the time scope is not established (XV.A5).
+#[allow(clippy::type_complexity)]
+fn totals_of(
+    all: &Group,
+    scope: &Result<TimeScope, String>,
+) -> (
+    String,
+    String,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+) {
+    if all.n == 0 {
+        return (
+            "null".to_string(),
+            "null".to_string(),
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+    let seconds_ratio = if scope.is_ok() {
+        all.seconds_aggregate()
+    } else {
+        None
+    };
+    (
+        all.human_inferences.to_string(),
+        all.generated_inferences.to_string(),
+        all.inference_aggregate(),
+        Some(all.human_seconds),
+        Some(all.generated_seconds),
+        seconds_ratio,
+    )
 }
 
 /// `dropin matched-table --human <json> --generated <json> [--json <path>]
@@ -3763,6 +4298,7 @@ pub fn matched_table(args: &[String]) -> Result<i32, String> {
     let generated_path = arg_value(args, "--generated").ok_or("--generated is required")?;
     let human_kernel = arg_value(args, "--human-kernel").unwrap_or("");
     let generated_kernel = arg_value(args, "--generated-kernel").unwrap_or("");
+    let diagnostic = args.iter().any(|a| a == "--diagnostic");
     let human = read_timed_tasks(Path::new(human_path), TreeKind::Human, human_kernel)?;
     let generated = read_timed_tasks(
         Path::new(generated_path),
@@ -3776,17 +4312,17 @@ pub fn matched_table(args: &[String]) -> Result<i32, String> {
             generated.tasks.len()
         ));
     }
-    let text = render_matched(&human, &generated);
+    let text = render_matched(&human, &generated, diagnostic);
     print!("{text}");
     if let Some(path) = arg_value(args, "--json") {
         let path = Path::new(path);
         ensure_parent(path)?;
-        let body = matched_json(&human, &generated, human_path, generated_path);
+        let body = matched_json(&human, &generated, human_path, generated_path, diagnostic);
         fs::write(path, body.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     let rows = pair_rows(&human, &generated);
-    let matched = rows.iter().filter(|p| p.matched().is_some()).count();
-    Ok(if !rows.is_empty() && matched == rows.len() {
+    let bound = rows.iter().filter(|p| p.bound().is_some()).count();
+    Ok(if !rows.is_empty() && bound == rows.len() {
         0
     } else {
         1
@@ -3918,6 +4454,22 @@ fn extract_conclusion(text: &str, name: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// The theorem's statement digest (XVI.B3).
+///
+/// Scheme, deliberately reusing the existing canonicalisation rather than
+/// inventing a second one: take the conclusion `extract_conclusion` reads from
+/// the `.correct` file and render it with `canonical_term` (the same canonical
+/// typed text the premise/axiom comparison uses), then SHA-256 those bytes.
+/// An absent or empty conclusion has no digest, never the digest of `""`.
+pub fn statement_digest(correct_text: &str, theorem: &str) -> Option<String> {
+    let conclusion = extract_conclusion(correct_text, theorem)?;
+    let canonical = canonical_term(&conclusion);
+    if canonical.trim().is_empty() {
+        return None;
+    }
+    Some(sha256::hex(canonical.as_bytes()))
 }
 
 fn first_difference(human: &str, generated: &str) -> Option<FirstDifference> {
@@ -4575,6 +5127,12 @@ mod tests {
             } else {
                 None
             },
+            statement_digest: if exit == 0 {
+                Some("a".repeat(64))
+            } else {
+                None
+            },
+            executable: Some(format!("{arch}.{dir}.{op}")),
             check_axioms: exit == 0,
             seconds: if exit == 0 { Some(46.0) } else { None },
             timeout: false,
@@ -4631,6 +5189,45 @@ mod tests {
         assert_eq!(tasks[1].get("seconds"), Some(&json::Json::Null));
         assert_eq!(j.get("ok").unwrap(), &json::Json::Num(1.0));
         assert_eq!(j.get("total").unwrap(), &json::Json::Num(2.0));
+        // XVI.B3: the producer writes the statement digest and the executable.
+        assert_eq!(
+            tasks[0].get("statement_digest").unwrap().as_str(),
+            Some("a".repeat(64).as_str())
+        );
+        assert_eq!(
+            tasks[0].get("executable").unwrap().as_str(),
+            Some("arm.curve25519.add")
+        );
+        assert_eq!(tasks[1].get("statement_digest"), Some(&json::Json::Null));
+        assert_eq!(
+            tasks[1].get("executable").unwrap().as_str(),
+            Some("x86.sm2.neg")
+        );
+        // XVI.C1: the run record carries the effective configuration.
+        let configuration = j.get("configuration").expect("configuration block");
+        let env = configuration.get("env").unwrap().as_obj().unwrap();
+        assert_eq!(env.len(), config::ALL_ENV_VARS.len());
+        for name in config::ALL_ENV_VARS {
+            assert!(env.contains_key(*name), "configuration omits {name}");
+        }
+        assert_eq!(
+            configuration
+                .get("flags")
+                .unwrap()
+                .get("stamp")
+                .unwrap()
+                .as_str(),
+            Some("off")
+        );
+        assert_eq!(
+            configuration
+                .get("flags")
+                .unwrap()
+                .get("force")
+                .unwrap()
+                .as_str(),
+            Some("on")
+        );
     }
 
     #[test]
@@ -5153,6 +5750,14 @@ mod tests {
         }
     }
 
+    /// A row with full identity evidence: a digest and an executable key.
+    fn bound_timed(arch: &str, dir: &str, op: &str, fam: &str, secs: Option<f64>) -> TimedTask {
+        let mut task = timed(arch, dir, op, fam, secs);
+        task.statement_digest = Some("0f3d".repeat(16));
+        task.executable = Some(format!("{arch}.{dir}.{op}"));
+        task
+    }
+
     fn proof(theorem: &str, kind: TreeKind) -> MeasuredProof {
         MeasuredProof {
             theorem: theorem.to_string(),
@@ -5175,21 +5780,38 @@ mod tests {
         )
     }
 
-    #[test]
-    fn compare_accepts_the_positive_case() {
-        let (h, g) = matched();
-        let m = compare(&h, &g).expect("identical theorem, success, same scope");
-        assert_eq!(m.theorem(), "BIGNUM_ADD_P521_CORRECT");
-        assert_eq!(m.inference_ratio(), Some(1.0));
-        assert!(comparison_reasons(&h, &g).is_empty());
+    /// A pair with full identity evidence on both sides.
+    fn fully_bound() -> (MeasuredProof, MeasuredProof) {
+        let (mut h, mut g) = matched();
+        for p in [&mut h, &mut g] {
+            p.statement_digest = Some("0f3d".repeat(16));
+            p.executable = Some("arm.p521.add".to_string());
+        }
+        (h, g)
     }
 
     #[test]
-    fn compare_refuses_a_different_theorem_identity() {
+    fn a_fully_bound_pair_yields_the_identity_bound_type() {
+        // XVI.B test (d).
+        let (h, g) = fully_bound();
+        let m = bind_identity(&h, &g).expect("full identity evidence, success, same scope");
+        assert_eq!(m.theorem(), "BIGNUM_ADD_P521_CORRECT");
+        assert_eq!(m.executable(), "arm.p521.add");
+        assert_eq!(m.statement_digest(), "0f3d".repeat(16));
+        assert_eq!(m.inference_ratio(), Some(1.0));
+        assert!(identity_reasons(&h, &g).is_empty());
+        // The diagnostic path also accepts it, and records nothing missing.
+        let d = diagnose(&h, &g).expect("diagnostic accepts a bound pair");
+        assert!(d.evidence().is_complete());
+        assert_eq!(d.missing_evidence(), "none");
+    }
+
+    #[test]
+    fn diagnose_refuses_a_different_theorem_identity() {
         let (h, mut g) = matched();
         g.theorem = "BIGNUM_ADD_P521_SUBROUTINE_CORRECT".to_string();
         assert_eq!(
-            compare(&h, &g),
+            diagnose(&h, &g),
             Err(ComparisonError::TheoremIdentityMismatch {
                 human: "BIGNUM_ADD_P521_CORRECT".to_string(),
                 generated: "BIGNUM_ADD_P521_SUBROUTINE_CORRECT".to_string(),
@@ -5198,50 +5820,80 @@ mod tests {
     }
 
     #[test]
-    fn compare_refuses_two_different_statements_with_the_same_name() {
-        // XV.A3: identity is the typed statement, not the name. The two rows
-        // name the same theorem but their conclusion digests differ, so they
-        // are different theorems and must not pair.
-        let (h, mut g) = matched();
-        g.statement_digest = Some("6a1c".to_string());
-        let mut h2 = h.clone();
-        h2.statement_digest = Some("0f3d".to_string());
+    fn diagnose_refuses_two_different_statements_with_the_same_name() {
+        // XVI.B test (a). Identity is the typed statement, not the name. The
+        // two rows name the same theorem but their conclusion digests differ,
+        // so they are different theorems and neither type accepts them.
+        let (mut h, mut g) = fully_bound();
+        h.statement_digest = Some("0f3d".repeat(16));
+        g.statement_digest = Some("6a1c".repeat(16));
         assert_eq!(
-            compare(&h2, &g),
+            diagnose(&h, &g),
             Err(ComparisonError::StatementIdentityMismatch {
-                human: "0f3d".to_string(),
-                generated: "6a1c".to_string(),
+                human: "0f3d".repeat(16),
+                generated: "6a1c".repeat(16),
             })
         );
-        // The same digest on both sides is accepted.
-        g.statement_digest = Some("0f3d".to_string());
-        assert!(compare(&h2, &g).is_ok());
-        assert_eq!(compare(&h2, &g).unwrap().statement_digest(), Some("0f3d"));
+        assert_eq!(
+            bind_identity(&h, &g),
+            Err(ComparisonError::StatementIdentityMismatch {
+                human: "0f3d".repeat(16),
+                generated: "6a1c".repeat(16),
+            })
+        );
     }
 
     #[test]
-    fn compare_refuses_a_statement_digest_recorded_on_one_side_only() {
-        let (h, mut g) = matched();
-        g.statement_digest = Some("6a1c".to_string());
+    fn a_missing_digest_on_one_side_is_diagnostic_and_never_identity_bound() {
+        // XVI.B test (b). The legacy path may proceed and must say what is
+        // missing; the identity-bound path refuses and names the side.
+        let (mut h, g) = matched();
+        h.statement_digest = Some("0f3d".repeat(16));
+        h.executable = Some("arm.p521.add".to_string());
+        let d = diagnose(&h, &g).expect("diagnostic comparison on weaker evidence");
+        assert_eq!(d.evidence().missing_statement_digest(), vec!["generated"]);
+        assert_eq!(d.evidence().missing_executable(), vec!["generated"]);
         assert_eq!(
-            compare(&h, &g),
-            Err(ComparisonError::StatementIdentityUnrecorded { side: "human" })
+            d.missing_evidence(),
+            "statement digest missing on generated; executable identity missing on generated"
         );
-        let mut h2 = h.clone();
-        h2.statement_digest = Some("6a1c".to_string());
+        assert!(!d.evidence().is_complete());
         assert_eq!(
-            compare(&h2, &matched().1),
+            bind_identity(&h, &g),
+            Err(ComparisonError::StatementIdentityUnrecorded { side: "generated" })
+        );
+        // The other direction, with the executable present on both sides.
+        let (h2, mut g2) = fully_bound();
+        g2.statement_digest = None;
+        assert_eq!(
+            bind_identity(&h2, &g2),
             Err(ComparisonError::StatementIdentityUnrecorded { side: "generated" })
         );
     }
 
     #[test]
-    fn compare_refuses_a_different_executable_identity() {
+    fn a_missing_executable_identity_is_diagnostic_and_never_identity_bound() {
+        let (mut h, mut g) = fully_bound();
+        h.executable = None;
+        g.executable = None;
+        let d = diagnose(&h, &g).expect("diagnostic comparison without executables");
+        assert_eq!(
+            d.evidence().missing_executable(),
+            vec!["human", "generated"]
+        );
+        assert_eq!(
+            bind_identity(&h, &g),
+            Err(ComparisonError::ExecutableIdentityUnrecorded { side: "human" })
+        );
+    }
+
+    #[test]
+    fn diagnose_refuses_a_different_executable_identity() {
         let (mut h, mut g) = matched();
         h.executable = Some("arm.p521.add".to_string());
         g.executable = Some("x86.p521.add".to_string());
         assert_eq!(
-            compare(&h, &g),
+            diagnose(&h, &g),
             Err(ComparisonError::ExecutableIdentityMismatch {
                 human: "arm.p521.add".to_string(),
                 generated: "x86.p521.add".to_string(),
@@ -5250,11 +5902,11 @@ mod tests {
     }
 
     #[test]
-    fn compare_refuses_a_time_scope_difference() {
+    fn diagnose_refuses_a_time_scope_difference() {
         let (h, mut g) = matched();
         g.time_scope = TimeScope::WholeFile;
         assert_eq!(
-            compare(&h, &g),
+            diagnose(&h, &g),
             Err(ComparisonError::TimeScopeMismatch {
                 human: TimeScope::ProveOnly,
                 generated: TimeScope::WholeFile,
@@ -5262,38 +5914,43 @@ mod tests {
         );
     }
 
-    /// XV.A2: `MatchedComparison` has no public fields and `compare` is its
-    /// only constructor, so the API cannot be used to build an unvalidated
-    /// pair. The compile-time half of this claim is the `compile_fail` doctest
-    /// on the type; this test pins the read-only shape at run time.
+    /// XVI.B: both comparison types have private fields and one constructor
+    /// each, so the API cannot be used to build an unvalidated pair. The
+    /// compile-time half of this claim is the `compile_fail` doctest on each
+    /// type; this test pins the read-only shape at run time.
     #[test]
-    fn matched_comparison_is_read_only_and_compare_is_the_only_constructor() {
-        let (h, g) = matched();
-        let m = compare(&h, &g).expect("matched");
+    fn comparison_types_are_read_only_and_their_constructors_are_the_only_way_in() {
+        let (h, g) = fully_bound();
+        let m = bind_identity(&h, &g).expect("identity-bound");
         // Accessors are borrows: the pair cannot be edited into a mismatch.
         let human: &MeasuredProof = m.human();
         let generated: &MeasuredProof = m.generated();
         assert_eq!(human.theorem, generated.theorem);
         assert_eq!(m.theorem(), human.theorem);
+        let d = diagnose(&h, &g).expect("diagnostic");
+        assert_eq!(d.human().theorem, d.generated().theorem);
         // Every precondition is still enforced on the way in.
         let mut bad = g.clone();
         bad.exit = Some(1);
-        assert!(compare(&h, &bad).is_err());
+        assert!(bind_identity(&h, &bad).is_err());
         let mut bad = g.clone();
         bad.scope.jobs = 2;
-        assert!(compare(&h, &bad).is_err());
+        assert!(bind_identity(&h, &bad).is_err());
         let mut bad = g.clone();
         bad.statement_digest = Some("beef".to_string());
-        assert!(compare(&h, &bad).is_err());
+        assert!(bind_identity(&h, &bad).is_err());
+        let mut bad = g.clone();
+        bad.executable = None;
+        assert!(bind_identity(&h, &bad).is_err());
     }
 
     #[test]
-    fn compare_refuses_each_failed_judgment() {
+    fn diagnose_refuses_each_failed_judgment() {
         let (h, g) = matched();
         let mut bad = h.clone();
         bad.exit = Some(2);
         assert_eq!(
-            compare(&bad, &g),
+            diagnose(&bad, &g),
             Err(ComparisonError::HumanExitNotZero { exit: Some(2) })
         );
 
@@ -5301,7 +5958,7 @@ mod tests {
         let mut bad = g.clone();
         bad.exit = Some(124);
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::GeneratedExitNotZero { exit: Some(124) })
         );
 
@@ -5309,7 +5966,7 @@ mod tests {
         let mut bad = h.clone();
         bad.check_axioms = false;
         assert_eq!(
-            compare(&bad, &g),
+            diagnose(&bad, &g),
             Err(ComparisonError::HumanAxiomsNotChecked)
         );
 
@@ -5317,7 +5974,7 @@ mod tests {
         let mut bad = g.clone();
         bad.check_axioms = false;
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::GeneratedAxiomsNotChecked)
         );
 
@@ -5325,7 +5982,7 @@ mod tests {
         let mut bad = h.clone();
         bad.theorem_proved = false;
         assert_eq!(
-            compare(&bad, &g),
+            diagnose(&bad, &g),
             Err(ComparisonError::HumanTheoremNotProved)
         );
 
@@ -5333,18 +5990,18 @@ mod tests {
         let mut bad = g.clone();
         bad.theorem_proved = false;
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::GeneratedTheoremNotProved)
         );
     }
 
     #[test]
-    fn compare_refuses_a_wrong_tree_kind() {
+    fn diagnose_refuses_a_wrong_tree_kind() {
         let (h, g) = matched();
         let mut bad = h.clone();
         bad.scope.tree_kind = TreeKind::Generated;
         assert_eq!(
-            compare(&bad, &g),
+            diagnose(&bad, &g),
             Err(ComparisonError::WrongTreeKind {
                 expected: TreeKind::Human,
                 found: TreeKind::Generated,
@@ -5355,7 +6012,7 @@ mod tests {
         let mut bad = g.clone();
         bad.scope.tree_kind = TreeKind::Human;
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::WrongTreeKind {
                 expected: TreeKind::Generated,
                 found: TreeKind::Human,
@@ -5364,12 +6021,12 @@ mod tests {
     }
 
     #[test]
-    fn compare_refuses_each_scope_difference() {
+    fn diagnose_refuses_each_scope_difference() {
         let (h, g) = matched();
         let mut bad = g.clone();
         bad.scope.s2n_pin = "deadbeef".to_string();
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::ScopeMismatch {
                 field: "s2n_bignum_pin",
                 human: "5e0fc782".into(),
@@ -5381,7 +6038,7 @@ mod tests {
         let mut bad = g.clone();
         bad.scope.jobs = 2;
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::ScopeMismatch {
                 field: "jobs",
                 human: "1".into(),
@@ -5393,7 +6050,7 @@ mod tests {
         let mut bad = g.clone();
         bad.scope.force = false;
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::ScopeMismatch {
                 field: "force",
                 human: "true".into(),
@@ -5405,7 +6062,7 @@ mod tests {
         let mut bad = g.clone();
         bad.scope.kernel_build = "hol-light".to_string();
         assert_eq!(
-            compare(&h, &bad),
+            diagnose(&h, &bad),
             Err(ComparisonError::ScopeMismatch {
                 field: "kernel_build",
                 human: "hol-light-stamp2".into(),
@@ -5427,20 +6084,20 @@ mod tests {
         let human = tfile(
             TreeKind::Human,
             vec![
-                timed("arm", "p521", "add", "p521", Some(3.0)),
-                timed("arm", "p521", "sub", "p521", Some(1.0)),
+                bound_timed("arm", "p521", "add", "p521", Some(3.0)),
+                bound_timed("arm", "p521", "sub", "p521", Some(1.0)),
             ],
         );
         let mut gt = vec![
-            timed("arm", "p521", "add", "p521", Some(12.0)),
-            timed("arm", "p521", "sub", "p521", Some(5.0)),
+            bound_timed("arm", "p521", "add", "p521", Some(12.0)),
+            bound_timed("arm", "p521", "sub", "p521", Some(5.0)),
         ];
         gt[1].theorem = Some("BIGNUM_SUB_P521_SUBROUTINE_CORRECT".to_string());
         let generated = tfile(TreeKind::Generated, gt);
-        let text = render_checktime(&human, &generated);
+        let text = render_checktime(&human, &generated, false);
         assert!(
             text.contains(
-                "| arm | p521/add_p521 | BIGNUM_ADD_P521_CORRECT | BIGNUM_ADD_P521_CORRECT | 3.000 | 12.000 | matched |"
+                "| arm | p521/add_p521 | BIGNUM_ADD_P521_CORRECT | BIGNUM_ADD_P521_CORRECT | 3.000 | 12.000 | identity-bound |"
             ),
             "{text}"
         );
@@ -5450,7 +6107,8 @@ mod tests {
             ),
             "{text}"
         );
-        assert!(text.contains("| matched pairs (n) | 1 |"), "{text}");
+        assert!(text.contains("| identity-bound pairs (n) | 1 |"), "{text}");
+        assert!(text.contains("| diagnostic pairs (n) | 0 |"), "{text}");
         assert!(text.contains("| human total s (n=1) | 3.000 |"), "{text}");
         assert!(
             text.contains("| generated total s (n=1) | 12.000 |"),
@@ -5460,14 +6118,64 @@ mod tests {
             text.contains("| aggregate seconds ratio (n=1) | 4.00 |"),
             "{text}"
         );
-        assert!(text.contains("| unmatched rows | 1 |"), "{text}");
+        assert!(text.contains("| refused or unpaired rows | 1 |"), "{text}");
         assert!(text.contains("theorem identity differs"), "{text}");
         assert!(
-            text.contains("MATCHED 1/2 PAIRS; UNMATCHED 1; HUMAN ROWS 2; GENERATED ROWS 2"),
+            text.contains(
+                "IDENTITY-BOUND 1/2; DIAGNOSTIC 0; REFUSED 1; HUMAN ROWS 2; GENERATED ROWS 2"
+            ),
             "{text}"
         );
         // The refused row's 1 s / 5 s must not appear in a total.
-        assert!(text.contains("| human total s (n=1) | 3.000 |"), "{text}");
+        assert!(!text.contains("human total s (n=2)"), "{text}");
+    }
+
+    #[test]
+    fn a_legacy_aggregate_is_visibly_not_a_result() {
+        // XVI.B test (c). Rows with no identity evidence are diagnostic only;
+        // without the flag no aggregate over them is printed, and with it every
+        // legacy line carries NOT A RESULT.
+        let human = tfile(
+            TreeKind::Human,
+            vec![timed("arm", "p521", "add", "p521", Some(3.0))],
+        );
+        let generated = tfile(
+            TreeKind::Generated,
+            vec![timed("arm", "p521", "add", "p521", Some(12.0))],
+        );
+
+        let default = render_checktime(&human, &generated, false);
+        assert!(
+            default.contains(
+                "| arm | p521/add_p521 | BIGNUM_ADD_P521_CORRECT | BIGNUM_ADD_P521_CORRECT | 3.000 | 12.000 | diagnostic: statement digest missing on human, generated; executable identity missing on human, generated |"
+            ),
+            "{default}"
+        );
+        assert!(
+            default.contains("| identity-bound pairs (n) | 0 |"),
+            "{default}"
+        );
+        assert!(!default.contains("NOT A RESULT"), "{default}");
+        assert!(
+            !default.contains("aggregate seconds ratio (n=1)"),
+            "{default}"
+        );
+
+        let legacy = render_checktime(&human, &generated, true);
+        assert!(legacy.contains("NOT A RESULT"), "{legacy}");
+        assert!(
+            legacy.contains("| legacy seconds ratio (n=1) | 4.00 NOT A RESULT |"),
+            "{legacy}"
+        );
+        assert!(
+            legacy.contains("| legacy inference ratio (n=1) | 4.00 NOT A RESULT |"),
+            "{legacy}"
+        );
+        // The default (identity-bound) aggregate is still empty.
+        assert!(
+            legacy.contains("| identity-bound pairs (n) | 0 |"),
+            "{legacy}"
+        );
     }
 
     #[test]
@@ -5476,18 +6184,18 @@ mod tests {
         // the same span), but the two rows' spans differ. The inference counts
         // may be summed; the seconds may not, and the refusal names the rows.
         let mut ht = vec![
-            timed("arm", "p521", "add", "p521", Some(3.0)),
-            timed("arm", "p521", "sub", "p521", Some(4.0)),
+            bound_timed("arm", "p521", "add", "p521", Some(3.0)),
+            bound_timed("arm", "p521", "sub", "p521", Some(4.0)),
         ];
         ht[1].time_scope = TimeScope::WholeFile;
         let human = tfile(TreeKind::Human, ht);
         let mut gt = vec![
-            timed("arm", "p521", "add", "p521", Some(12.0)),
-            timed("arm", "p521", "sub", "p521", Some(5.0)),
+            bound_timed("arm", "p521", "add", "p521", Some(12.0)),
+            bound_timed("arm", "p521", "sub", "p521", Some(5.0)),
         ];
         gt[1].time_scope = TimeScope::WholeFile;
         let generated = tfile(TreeKind::Generated, gt);
-        let text = render_checktime(&human, &generated);
+        let text = render_checktime(&human, &generated, false);
         assert!(text.contains("SECONDS AGGREGATE REFUSED"), "{text}");
         assert!(
             text.contains("Matched rows carry differing time scopes"),
@@ -5512,7 +6220,7 @@ mod tests {
             text.contains("| aggregate inference ratio (n=2) |"),
             "{text}"
         );
-        assert!(text.contains("MATCHED 2/2 PAIRS"), "{text}");
+        assert!(text.contains("IDENTITY-BOUND 2/2"), "{text}");
     }
 
     #[test]
@@ -5520,18 +6228,18 @@ mod tests {
         let human = tfile(
             TreeKind::Human,
             vec![
-                timed("arm", "p521", "add", "p521", Some(3.0)),
-                timed("arm", "p521", "sub", "p521", Some(4.0)),
+                bound_timed("arm", "p521", "add", "p521", Some(3.0)),
+                bound_timed("arm", "p521", "sub", "p521", Some(4.0)),
             ],
         );
         let generated = tfile(
             TreeKind::Generated,
             vec![
-                timed("arm", "p521", "add", "p521", Some(12.0)),
-                timed("arm", "p521", "sub", "p521", Some(5.0)),
+                bound_timed("arm", "p521", "add", "p521", Some(12.0)),
+                bound_timed("arm", "p521", "sub", "p521", Some(5.0)),
             ],
         );
-        let text = render_checktime(&human, &generated);
+        let text = render_checktime(&human, &generated, false);
         assert!(!text.contains("SECONDS AGGREGATE REFUSED"), "{text}");
         assert!(text.contains("| time scope (n=2) | prove_only |"), "{text}");
         assert!(
@@ -5544,16 +6252,16 @@ mod tests {
     fn checktime_table_withholds_seconds_when_the_scope_is_unrecorded() {
         let human = tfile(
             TreeKind::Human,
-            vec![timed("arm", "p521", "add", "p521", Some(3.0))],
+            vec![bound_timed("arm", "p521", "add", "p521", Some(3.0))],
         );
-        let mut gt = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        let mut gt = vec![bound_timed("arm", "p521", "add", "p521", Some(12.0))];
         gt[0].time_scope = TimeScope::Unrecorded;
         let generated = tfile(TreeKind::Generated, gt);
-        let text = render_checktime(&human, &generated);
-        // The pair itself is refused first: two unrecorded spans are not the
+        let text = render_checktime(&human, &generated, false);
+        // The pair itself is refused first: two different spans are not the
         // same span either.
         assert!(text.contains("refused: time scope"), "{text}");
-        assert!(text.contains("| matched pairs (n) | 0 |"), "{text}");
+        assert!(text.contains("| identity-bound pairs (n) | 0 |"), "{text}");
         assert!(text.contains("not published"), "{text}");
     }
 
@@ -5562,42 +6270,42 @@ mod tests {
         let human = tfile(
             TreeKind::Human,
             vec![
-                timed("x86", "sm2", "add", "sm2", Some(2.0)),
-                timed("x86", "sm2", "neg", "sm2", Some(3.0)),
+                bound_timed("x86", "sm2", "add", "sm2", Some(2.0)),
+                bound_timed("x86", "sm2", "neg", "sm2", Some(3.0)),
             ],
         );
         let generated = tfile(
             TreeKind::Generated,
-            vec![timed("x86", "sm2", "add", "sm2", Some(4.0))],
+            vec![bound_timed("x86", "sm2", "add", "sm2", Some(4.0))],
         );
-        let text = render_checktime(&human, &generated);
+        let text = render_checktime(&human, &generated, false);
         assert!(text.contains("| human rows parsed | 2 |"), "{text}");
         assert!(text.contains("| generated rows parsed | 1 |"), "{text}");
         assert!(text.contains("| task rows (union of keys) | 2 |"), "{text}");
-        assert!(text.contains("| matched pairs (n) | 1 |"), "{text}");
-        assert!(text.contains("| unmatched rows | 1 |"), "{text}");
+        assert!(text.contains("| identity-bound pairs (n) | 1 |"), "{text}");
+        assert!(text.contains("| refused or unpaired rows | 1 |"), "{text}");
         assert!(text.contains("no generated row"), "{text}");
         assert!(text.contains("| human total s (n=1) | 2.000 |"), "{text}");
-        assert!(text.contains("MATCHED 1/2 PAIRS"), "{text}");
+        assert!(text.contains("IDENTITY-BOUND 1/2"), "{text}");
         assert!(!text.contains("human total s (n=2)"), "{text}");
     }
 
     #[test]
-    fn checktime_budget_only_uses_matched_pairs() {
+    fn checktime_budget_only_uses_identity_bound_pairs() {
         let human = tfile(
             TreeKind::Human,
-            vec![timed("x86", "sm2", "add", "sm2", Some(2.0))],
+            vec![bound_timed("x86", "sm2", "add", "sm2", Some(2.0))],
         );
         let generated = tfile(
             TreeKind::Generated,
-            vec![timed("x86", "sm2", "add", "sm2", Some(100.0))],
+            vec![bound_timed("x86", "sm2", "add", "sm2", Some(100.0))],
         );
-        let text = render_checktime(&human, &generated);
+        let text = render_checktime(&human, &generated, false);
         assert!(
             text.contains("| x86 | sm2/add_sm2 | 100.000 | 83.3 | True | False |"),
             "{text}"
         );
-        assert!(text.contains("MATCHED 1/1 PAIRS"), "{text}");
+        assert!(text.contains("IDENTITY-BOUND 1/1"), "{text}");
         assert!(
             text.contains("`/h/x86/sm2/bignum_add_sm2.correct`"),
             "{text}"
@@ -5608,20 +6316,20 @@ mod tests {
     fn zero_matched_pairs_publishes_no_ratio() {
         let human = tfile(
             TreeKind::Human,
-            vec![timed("arm", "p256", "add", "p256", Some(3.0))],
+            vec![bound_timed("arm", "p256", "add", "p256", Some(3.0))],
         );
-        let mut gt = timed("arm", "p256", "add", "p256", Some(9.0));
+        let mut gt = bound_timed("arm", "p256", "add", "p256", Some(9.0));
         gt.theorem = Some("BIGNUM_ADD_P256_SUBROUTINE_CORRECT".to_string());
         let generated = tfile(TreeKind::Generated, vec![gt]);
-        let text = render_matched(&human, &generated);
-        assert!(text.contains("| matched pairs (n) | 0 |"), "{text}");
+        let text = render_matched(&human, &generated, false);
+        assert!(text.contains("| identity-bound pairs (n) | 0 |"), "{text}");
         assert!(
             text.contains("aggregate inference ratio | n/a (n=0; not published)"),
             "{text}"
         );
-        assert!(text.contains("MATCHED 0/1 PAIRS"), "{text}");
+        assert!(text.contains("IDENTITY-BOUND 0/1"), "{text}");
 
-        let j = matched_json(&human, &generated, "h.json", "g.json");
+        let j = matched_json(&human, &generated, "h.json", "g.json", false);
         let v = json::parse(j.as_bytes()).expect("matched JSON must parse");
         assert_eq!(
             v.get("counts").unwrap().get("matched_pairs").unwrap(),
@@ -5641,33 +6349,37 @@ mod tests {
             Some("BIGNUM_ADD_P256_SUBROUTINE_CORRECT")
         );
         assert_eq!(task.get("matched").unwrap(), &json::Json::Bool(false));
+        assert_eq!(task.get("comparison").unwrap().as_str(), Some("refused"));
+        assert_eq!(task.get("claimable").unwrap(), &json::Json::Bool(false));
     }
 
     #[test]
     fn matched_json_withholds_the_seconds_ratio_when_the_scope_is_unrecorded() {
+        // A bound pair whose two sides were measured over different spans is
+        // refused, so nothing is aggregated.
         let human = tfile(
             TreeKind::Human,
-            vec![timed("arm", "p521", "add", "p521", Some(3.0))],
+            vec![bound_timed("arm", "p521", "add", "p521", Some(3.0))],
         );
-        let mut gt = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        let mut gt = vec![bound_timed("arm", "p521", "add", "p521", Some(12.0))];
         gt[0].time_scope = TimeScope::Unrecorded;
         let generated = tfile(TreeKind::Generated, gt);
-        let j = matched_json(&human, &generated, "h.json", "g.json");
+        let j = matched_json(&human, &generated, "h.json", "g.json", false);
         let v = json::parse(j.as_bytes()).expect("matched JSON must parse");
         let totals = v.get("matched_totals").unwrap();
-        // The pair is refused (scopes disagree), so nothing is aggregated.
+        assert_eq!(totals.get("denominator"), Some(&json::Json::Num(0.0)));
         assert_eq!(totals.get("seconds_ratio"), Some(&json::Json::Null));
         assert_eq!(totals.get("time_scope"), Some(&json::Json::Null));
 
-        // Both unrecorded is the legacy-receipt shape: the pair still matches
-        // on everything else, and the seconds ratio is withheld by the gate.
-        let mut hu = vec![timed("arm", "p521", "add", "p521", Some(3.0))];
+        // Both unrecorded is the legacy-receipt shape: the pair is still bound
+        // on identity, and the seconds ratio is withheld by the span gate.
+        let mut hu = vec![bound_timed("arm", "p521", "add", "p521", Some(3.0))];
         hu[0].time_scope = TimeScope::Unrecorded;
         let human = tfile(TreeKind::Human, hu);
-        let mut gu = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
+        let mut gu = vec![bound_timed("arm", "p521", "add", "p521", Some(12.0))];
         gu[0].time_scope = TimeScope::Unrecorded;
         let generated = tfile(TreeKind::Generated, gu);
-        let j = matched_json(&human, &generated, "h.json", "g.json");
+        let j = matched_json(&human, &generated, "h.json", "g.json", false);
         let v = json::parse(j.as_bytes()).expect("matched JSON must parse");
         let totals = v.get("matched_totals").unwrap();
         assert_eq!(totals.get("denominator"), Some(&json::Json::Num(1.0)));
@@ -5678,23 +6390,26 @@ mod tests {
 
     #[test]
     fn a_same_named_theorem_with_a_different_statement_is_refused_in_the_table() {
-        // XV.A3: the received-rows case. Same task key, same theorem name,
-        // different conclusion digest: the table must show a refusal, not a
-        // match.
-        let mut ht = vec![timed("arm", "p521", "add", "p521", Some(3.0))];
-        ht[0].statement_digest = Some("0f3d".to_string());
-        ht[0].executable = Some("arm.p521.add".to_string());
+        // XVI.B test (a), received-rows form. Same task key, same theorem
+        // name, different conclusion digest: the table must show a refusal and
+        // no aggregate, not a match.
+        let mut ht = vec![bound_timed("arm", "p521", "add", "p521", Some(3.0))];
+        ht[0].statement_digest = Some("0f3d".repeat(16));
         let human = tfile(TreeKind::Human, ht);
-        let mut gt = vec![timed("arm", "p521", "add", "p521", Some(12.0))];
-        gt[0].statement_digest = Some("6a1c".to_string());
-        gt[0].executable = Some("arm.p521.add".to_string());
+        let mut gt = vec![bound_timed("arm", "p521", "add", "p521", Some(12.0))];
+        gt[0].statement_digest = Some("6a1c".repeat(16));
         let generated = tfile(TreeKind::Generated, gt);
-        let text = render_checktime(&human, &generated);
+        let text = render_checktime(&human, &generated, true);
         assert!(text.contains("refused: statement identity"), "{text}");
-        assert!(text.contains("| matched pairs (n) | 0 |"), "{text}");
+        assert!(text.contains("| identity-bound pairs (n) | 0 |"), "{text}");
         assert!(
             text.contains("theorem statement differs although the names match"),
             "{text}"
+        );
+        // Even the legacy aggregate may not use a refused pair.
+        assert!(
+            text.contains("| legacy compared pairs (n) | 0 NOT A RESULT |"),
+            "legacy rows must not include a refused pair: {text}"
         );
     }
 
@@ -5721,6 +6436,59 @@ mod tests {
             extract_conclusion(text, "BIGNUM_ADD_P256_SUBROUTINE_CORRECT"),
             None
         );
+    }
+
+    #[test]
+    fn statement_digest_uses_the_canonical_typed_conclusion() {
+        let a = "val T : thm = |- forall z. read PC s = word (pc + 0x4c)\n";
+        let b = "val T : thm = |- forall z. read PC s = word(pc+76)\n";
+        assert_eq!(statement_digest(a, "T"), statement_digest(b, "T"));
+        let c = "val T : thm = |- forall z. read PC s = word (pc + 0x4d)\n";
+        assert_ne!(statement_digest(a, "T"), statement_digest(c, "T"));
+        // A marker with no `|- ` conclusion has no digest, not the digest of "".
+        assert_eq!(statement_digest("val T : thm =\n", "T"), None);
+    }
+
+    #[test]
+    fn a_producer_digest_is_stable_on_real_correct_files() {
+        // XVI.B3: exercise the producer's digest scheme, and then the
+        // identity-bound path, on real measured `.correct` files. `.bench` is
+        // machine-specific measurement data; if it is absent, say so rather
+        // than pretend the check ran.
+        let root = repo_root();
+        let baseline = root.join(".bench/ix69/baseline/arm_add_p25519.correct");
+        let sliced = root.join(".bench/ix69/sliced/arm_add_p25519.correct");
+        if !baseline.is_file() || !sliced.is_file() {
+            eprintln!(
+                "skip: {} or {} is absent; .bench is machine-specific measurement data",
+                baseline.display(),
+                sliced.display()
+            );
+            return;
+        }
+        let name = "BIGNUM_ADD_P25519_CORRECT";
+        let a = fs::read_to_string(&baseline).expect("baseline .correct");
+        let b = fs::read_to_string(&sliced).expect("sliced .correct");
+        let da = statement_digest(&a, name).expect("baseline conclusion");
+        let db = statement_digest(&b, name).expect("sliced conclusion");
+        assert_eq!(da.len(), 64, "a sha-256 hex digest has 64 characters");
+        assert_eq!(
+            da, db,
+            "the same theorem proved two different ways has one statement digest"
+        );
+
+        // Both artifacts are emitter products; here they are the two comparison
+        // *sides*, so this exercises identity binding on real data. It is not
+        // a human/generated provenance claim.
+        let mut human = proof(name, TreeKind::Human);
+        human.statement_digest = Some(da.clone());
+        human.executable = Some("arm.curve25519.add".to_string());
+        let mut generated = proof(name, TreeKind::Generated);
+        generated.statement_digest = Some(db);
+        generated.executable = Some("arm.curve25519.add".to_string());
+        let bound = bind_identity(&human, &generated).expect("real equal statements bind");
+        assert_eq!(bound.statement_digest(), da);
+        assert_eq!(bound.executable(), "arm.curve25519.add");
     }
 
     #[test]

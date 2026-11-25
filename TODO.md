@@ -3011,31 +3011,43 @@ variable list (none exists yet).
 
 ## XVI.B — Identity-bound comparison must be distinguishable from a diagnostic one
 
-- [ ] **XVI.B1.** `comparison_reasons()` still permits a comparison when **both** statement
-  digests are absent, and executable identity is permissive when missing on either side.
-- [ ] **XVI.B2.** Introduce two types: `DiagnosticComparison` (legacy, may proceed on names and
-  prints what identity evidence is missing) and `IdentityBoundComparison` (requires statement
-  digest **and** executable identity on both sides, plus successful judgments and identical
-  scopes). Only the second may back a frontier performance claim; the tables must print which
-  type they produced.
-- [ ] **XVI.B3.** Make a producer write `statement_digest` and the executable identity, so the
-  identity-bound path is exercised on real data (even if only for the six measured tasks).
-- [ ] **XVI.B4.** Tests: two different statements with the same name refuse; missing digests force
-  the diagnostic type and the claim is visibly downgraded; a row cannot silently upgrade.
+- [x] **XVI.B1.** `comparison_reasons()` is split into `diagnostic_reasons()` (identity evidence that
+  is present must agree; missing evidence is recorded) and `identity_reasons()` (missing evidence
+  on either side refuses). A pair can no longer be matched on names alone and remain a result.
+- [x] **XVI.B2.** `DiagnosticComparison` (legacy, carries `IdentityEvidence` naming exactly what is
+  missing) and `IdentityBoundComparison` (statement digest and executable identity present and
+  equal on both sides, plus successful judgments and identical scopes). Only the second backs an
+  aggregate; tables print the type of every row and the missing evidence; `--diagnostic` prints
+  the legacy aggregate with `NOT A RESULT` on every line.
+- [x] **XVI.B3.** The `sweep`/`measure` producer now writes `statement_digest` (SHA-256 of
+  `canonical_term(extract_conclusion(..))`, the existing canonical typed text) and the executable
+  identity (`arch.dir.op`), so the identity-bound path runs on real rows. Exercised against real
+  `.bench/ix69` `.correct` files in `a_producer_digest_is_stable_on_real_correct_files`.
+- [x] **XVI.B4.** Tests: same name/different statement refused; one-side-missing digest yields a
+  diagnostic with the missing evidence while `bind_identity` refuses; a legacy aggregate prints
+  `NOT A RESULT`; a fully bound pair yields the identity-bound type.
+
+**Receipt:** `research/receipts/ix74-identity-and-config.md`.
 
 ## XVI.C — The freeze must bind the effective execution configuration
 
 `TEKMERION_ALG_CLOSE` and `TEKMERION_SLICE_CONTROL` change the reasoning path without changing any
 source file or executable hash.
 
-- [ ] **XVI.C1.** Record the effective configuration in the run record and freeze it with the
-  source/runtime closure: every `TEKMERION_*` variable that is read, with its value, plus the
-  flags that change behaviour (`--mode`, `--stamp`, `--force`, slice on/off).
-- [ ] **XVI.C2.** Enumerate the variables the binary reads (grep the source; do not guess) and
-  assert the list in a test, so a new variable cannot appear unnoticed.
-- [ ] **XVI.C3.** `freeze verify` refuses when the recorded configuration differs from the live
-  environment, naming the variable.
-- [ ] **XVI.C4.** Firing control: flip one recorded variable and show the refusal.
+- [x] **XVI.C1.** The effective configuration is recorded in the `sweep`/`measure` run records and
+  in the freeze closure (`configuration.env` for every declared variable, `configuration.flags` for
+  `mode`/`stamp`/`force`/`slice`).
+- [x] **XVI.C2.** `src/tools/config.rs` declares every `TEKMERION_*` variable read by the binary,
+  the OCaml bridge and the fixture recorder; three tests grep those sources and fail if the
+  declaration and the source disagree.
+- [x] **XVI.C3.** `freeze verify` refuses when the recorded configuration differs from the live
+  environment, naming the variable. Old manifests without the field still verify under their own
+  scope with a printed warning.
+- [x] **XVI.C4.** Firing controls: setting a recorded-unset variable and unsetting a recorded-set
+  one both refuse, naming the variable.
+
+**Receipt:** `research/receipts/ix74-identity-and-config.md`; manifest
+`research/receipts/freeze-closure-v6.json` (no tag created).
 
 ## XVI.D — Resource failure must not trigger a more expensive retry
 

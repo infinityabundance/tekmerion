@@ -4,11 +4,13 @@
 //! real tree's tag or `.bench/`. The runtime layer is exercised against fake
 //! binaries under the fixture, so no solver or HOL Light build is required.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use tekmerion::tools::config::{self, EffectiveConfig, RunFlags};
 use tekmerion::tools::freeze::{self, Closure, Entry, RuntimePaths};
 use tekmerion::tools::guard::Refused;
 
@@ -642,6 +644,90 @@ fn parse_round_trip_and_refusals() {
     with_runtime = with_runtime.replace("../hol", "hol");
     let parsed = freeze::parse(with_runtime.as_bytes(), Path::new("m.json")).expect("runtime");
     assert_eq!(parsed.runtime_entries(), 4);
+}
+
+// ---------------------------------------------------------------------------
+// 3b. The effective configuration (XVI.C)
+// ---------------------------------------------------------------------------
+
+fn sample_config() -> EffectiveConfig {
+    let env: BTreeMap<String, Option<String>> = config::ALL_ENV_VARS
+        .iter()
+        .map(|name| ((*name).to_string(), None))
+        .collect();
+    EffectiveConfig::from_entries(
+        env,
+        RunFlags {
+            mode: Some("answer".to_string()),
+            stamp: Some(false),
+            force: Some(true),
+            slice: false,
+        },
+    )
+    .expect("sample configuration")
+}
+
+#[test]
+fn configuration_is_recorded_parsed_and_verified() {
+    let fixture = Fixture::new(TAG);
+    let recorded = sample_config();
+    let closure = freeze::build_with_config(&fixture.repo, TAG, None, Some(recorded.clone()))
+        .expect("closure with configuration");
+    assert_eq!(closure.configuration.as_ref(), Some(&recorded));
+    assert!(freeze::configuration_warning(&closure).is_none());
+
+    let text = freeze::render(&closure);
+    assert!(text.contains("\"configuration\""), "{text}");
+    assert!(text.contains("\"TEKMERION_PROBLEMS\": \"unset\""), "{text}");
+    let parsed = freeze::parse(text.as_bytes(), Path::new("m.json")).expect("parse");
+    assert_eq!(parsed, closure);
+    assert_eq!(freeze::render(&parsed), text);
+
+    // The live comparison is pure here, so the test never mutates the process
+    // environment that other tests share.
+    config::verify_against(&recorded, |_| None).expect("all unset matches");
+    let err = config::verify_against(&recorded, |name| {
+        if name == "TEKMERION_ALG_CLOSE" {
+            Some("arm.bignum_add_p25519".to_string())
+        } else {
+            None
+        }
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("TEKMERION_ALG_CLOSE"), "{err}");
+    assert!(err.contains("recorded unset"), "{err}");
+}
+
+#[test]
+fn a_manifest_without_configuration_still_parses_and_warns() {
+    let parsed = freeze::parse(base_doc().as_bytes(), Path::new("m.json"))
+        .expect("a configuration-less manifest must still parse");
+    assert!(parsed.configuration.is_none());
+    assert!(!freeze::render(&parsed).contains("\"configuration\""));
+    let warning = freeze::configuration_warning(&parsed).expect("a warning for the legacy scope");
+    assert!(warning.contains("not bound"), "{warning}");
+    assert!(warning.contains("legacy scope"), "{warning}");
+}
+
+#[test]
+fn a_configuration_that_omits_a_variable_is_refused() {
+    let extra = "\"configuration\":{\"env\":{\"TEKMERION_ALG_CLOSE\":\"unset\"},\"flags\":{\"mode\":\"unspecified\",\"stamp\":\"unspecified\",\"force\":\"unspecified\",\"slice\":\"off\"}}";
+    let doc = base_doc().replace("\"runtime\":null", &format!("{extra},\"runtime\":null"));
+    expect_refused(
+        freeze::parse(doc.as_bytes(), Path::new("m.json")),
+        "missing TEKMERION_FAULT",
+    );
+}
+
+#[test]
+fn a_malformed_behaviour_flag_is_refused() {
+    let extra = "\"configuration\":{\"env\":{\"TEKMERION_ALG_CLOSE\":\"unset\",\"TEKMERION_FAULT\":\"unset\",\"TEKMERION_PROBLEMS\":\"unset\",\"TEKMERION_RECORD_ANSWERS\":\"unset\",\"TEKMERION_SLICE_CONTROL\":\"unset\",\"TEKMERION_SLICE_DEBUG\":\"unset\"},\"flags\":{\"mode\":\"answer\",\"stamp\":\"yes\",\"force\":\"unspecified\",\"slice\":\"off\"}}";
+    let doc = base_doc().replace("\"runtime\":null", &format!("{extra},\"runtime\":null"));
+    expect_refused(
+        freeze::parse(doc.as_bytes(), Path::new("m.json")),
+        "must be on, off or unspecified",
+    );
 }
 
 // ---------------------------------------------------------------------------

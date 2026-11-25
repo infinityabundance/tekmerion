@@ -7,6 +7,7 @@
 pub mod attempt_id;
 pub mod attempt_lifecycle;
 pub mod challenge;
+pub mod config;
 pub mod corpus;
 pub mod curve_check;
 pub mod derive;

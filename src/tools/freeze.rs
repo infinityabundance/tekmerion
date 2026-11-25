@@ -20,6 +20,7 @@
 //!
 //! **Not on the verdict path.**
 
+use crate::tools::config::{self, EffectiveConfig, RunFlags};
 use crate::tools::guard::{self, is_hex40, valid_tag, Refused, Result};
 use crate::tools::json::{self, Json};
 use crate::tools::sha256;
@@ -50,6 +51,7 @@ const CLOSURE_KEYS: &[&str] = &[
     "created_at",
     "source",
     "source_digest",
+    "configuration",
     "runtime",
 ];
 const RUNTIME_KEYS: &[&str] = &[
@@ -65,6 +67,8 @@ const ENTRY_KEYS: &[&str] = &["path", "sha256"];
 const HOL_KEYS: &[&str] = &["path", "pin", "hol_lib_cmxa_sha256"];
 const CADICAL_KEYS: &[&str] = &["path", "sha256", "version"];
 const BENCH_KEYS: &[&str] = &["path", "problems_json_sha256"];
+const CONFIG_KEYS: &[&str] = &["env", "flags"];
+const FLAG_KEYS: &[&str] = &["mode", "stamp", "force", "slice"];
 
 // ---------------------------------------------------------------------------
 // Shape
@@ -115,6 +119,10 @@ pub struct Closure {
     pub created_at: u64,
     pub source: Vec<Entry>,
     pub source_digest: String,
+    /// The effective execution configuration, when the manifest was produced
+    /// by a build that records it (XVI.C). A manifest from before this field
+    /// has `None`, verifies under its own scope, and says so loudly.
+    pub configuration: Option<EffectiveConfig>,
     pub runtime: Option<RuntimeBlock>,
 }
 
@@ -212,6 +220,12 @@ pub fn render(closure: &Closure) -> String {
         "  \"source_digest\": {},\n",
         quote(&closure.source_digest)
     ));
+    if let Some(config) = &closure.configuration {
+        out.push_str(&format!(
+            "  \"configuration\": {},\n",
+            config::render_json(config)
+        ));
+    }
     match &closure.runtime {
         None => out.push_str("  \"runtime\": null\n"),
         Some(rt) => {
@@ -667,7 +681,21 @@ fn now() -> u64 {
 }
 
 /// Build a closure manifest from the working tree, and optionally the runtime.
+///
+/// The configuration is not captured here: `build` is the source/runtime seal
+/// used by the tests and by any caller that has no run to bind. The CLI uses
+/// [`build_with_config`], which records the effective configuration (XVI.C).
 pub fn build(root: &Path, tag: &str, runtime: Option<&RuntimePaths>) -> Result<Closure> {
+    build_with_config(root, tag, runtime, None)
+}
+
+/// As [`build`], additionally recording the effective execution configuration.
+pub fn build_with_config(
+    root: &Path,
+    tag: &str,
+    runtime: Option<&RuntimePaths>,
+    configuration: Option<EffectiveConfig>,
+) -> Result<Closure> {
     if !valid_tag(tag) {
         return Err(Refused::new(format!(
             "freeze tag is not a valid tag name: {tag:?}"
@@ -687,6 +715,7 @@ pub fn build(root: &Path, tag: &str, runtime: Option<&RuntimePaths>) -> Result<C
         created_at: now(),
         source,
         source_digest,
+        configuration,
         runtime,
     })
 }
@@ -839,6 +868,69 @@ fn parse_benchmark(obj: &BTreeMap<String, Json>) -> Result<BenchmarkBlock> {
     })
 }
 
+fn parse_configuration(raw: &Json, where_: &str) -> Result<EffectiveConfig> {
+    let obj = as_obj(raw, where_)?;
+    allow_only(obj, CONFIG_KEYS, where_)?;
+
+    let env_where = format!("{where_} env");
+    let env_obj = as_obj(require(obj, "env", where_)?, &env_where)?;
+    let mut env = BTreeMap::new();
+    for (key, value) in env_obj {
+        let text = match value {
+            Json::Str(text) => text.clone(),
+            // `null` is accepted as a second spelling of unset so a hand-edited
+            // manifest cannot miss a variable by writing the natural sentinel.
+            Json::Null => config::UNSET.to_string(),
+            _ => {
+                return Err(Refused::new(format!(
+                    "{env_where}: {key} must be a string or null"
+                )))
+            }
+        };
+        let recorded = if text == config::UNSET {
+            None
+        } else {
+            Some(text)
+        };
+        env.insert(key.clone(), recorded);
+    }
+
+    let flags_where = format!("{where_} flags");
+    let flags_obj = as_obj(require(obj, "flags", where_)?, &flags_where)?;
+    allow_only(flags_obj, FLAG_KEYS, &flags_where)?;
+    let mode = match string_field(flags_obj, "mode", &flags_where)? {
+        "unspecified" => None,
+        other => Some(other.to_string()),
+    };
+    let stamp = config::parse_tri(
+        string_field(flags_obj, "stamp", &flags_where)?,
+        &format!("{flags_where} stamp"),
+    )?;
+    let force = config::parse_tri(
+        string_field(flags_obj, "force", &flags_where)?,
+        &format!("{flags_where} force"),
+    )?;
+    let slice = match string_field(flags_obj, "slice", &flags_where)? {
+        "on" => true,
+        "off" => false,
+        other => {
+            return Err(Refused::new(format!(
+                "{flags_where} slice must be on or off: {other:?}"
+            )))
+        }
+    };
+
+    EffectiveConfig::from_entries(
+        env,
+        RunFlags {
+            mode,
+            stamp,
+            force,
+            slice,
+        },
+    )
+}
+
 fn parse_runtime(obj: &BTreeMap<String, Json>) -> Result<RuntimeBlock> {
     allow_only(obj, RUNTIME_KEYS, "freeze runtime")?;
 
@@ -949,12 +1041,18 @@ pub fn parse(bytes: &[u8], path: &Path) -> Result<Closure> {
         Some(value) => Some(parse_runtime(as_obj(value, "freeze runtime")?)?),
     };
 
+    let configuration = match obj.get("configuration") {
+        None | Some(Json::Null) => None,
+        Some(value) => Some(parse_configuration(value, "freeze configuration")?),
+    };
+
     Ok(Closure {
         tag: tag.to_string(),
         repo_commit: repo_commit.to_string(),
         created_at,
         source,
         source_digest: recorded.to_string(),
+        configuration,
         runtime,
     })
 }
@@ -963,6 +1061,18 @@ pub fn load(path: &Path) -> Result<Closure> {
     let bytes =
         fs::read(path).map_err(|e| Refused::new(format!("cannot read {}: {e}", path.display())))?;
     parse(&bytes, path)
+}
+
+/// The warning for a manifest that predates configuration binding (XVI.C).
+/// `None` means the effective configuration is bound and must verify.
+pub fn configuration_warning(closure: &Closure) -> Option<&'static str> {
+    match &closure.configuration {
+        Some(_) => None,
+        None => Some(
+            "WARNING: manifest records no effective configuration; the TEKMERION_* \
+             variables that change the reasoning path are not bound (legacy scope).",
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1068,6 +1178,7 @@ fn usage() {
     eprintln!(
         "usage:\n  freeze manifest --out PATH [--runtime] [--tag NAME] [--repo PATH]\n\
          \x20                [--executable P] [--hol P] [--cadical P] [--benchmark P]\n\
+         \x20                [--mode M] [--stamp|--no-stamp] [--force|--no-force]\n\
          \x20 freeze verify --manifest PATH [--runtime] [--repo PATH]\n\
          \x20 freeze check-tag --manifest PATH [--repo PATH]\n\
          Exit 0 allowed, 2 refused."
@@ -1108,6 +1219,9 @@ pub fn run(argv: &[String]) -> i32 {
     let mut runtime = false;
     let mut paths = RuntimePaths::default();
     let mut command: Option<String> = None;
+    let mut mode: Option<String> = None;
+    let mut stamp: Option<bool> = None;
+    let mut force: Option<bool> = None;
 
     let mut i = 0;
     while i < argv.len() {
@@ -1128,9 +1242,15 @@ pub fn run(argv: &[String]) -> i32 {
             paths.cadical = PathBuf::from(v);
         } else if let Some(v) = guard::take_value(argv, &mut i, "--benchmark") {
             paths.benchmark_inputs = PathBuf::from(v);
+        } else if let Some(v) = guard::take_value(argv, &mut i, "--mode") {
+            mode = Some(v);
         } else {
             match arg.as_str() {
                 "--runtime" => runtime = true,
+                "--stamp" => stamp = Some(true),
+                "--no-stamp" => stamp = Some(false),
+                "--force" => force = Some(true),
+                "--no-force" => force = Some(false),
                 "--help" | "-h" => {
                     usage();
                     return guard::EXIT_ALLOWED;
@@ -1163,7 +1283,13 @@ pub fn run(argv: &[String]) -> i32 {
             };
             let tag = tag.unwrap_or_else(|| DEFAULT_TAG.to_string());
             let runtime_paths = if runtime { Some(&paths) } else { None };
-            let closure = match build(&root, &tag, runtime_paths) {
+            let effective = EffectiveConfig::capture(RunFlags {
+                mode,
+                stamp,
+                force,
+                slice: config::slice_on(),
+            });
+            let closure = match build_with_config(&root, &tag, runtime_paths, Some(effective)) {
                 Ok(closure) => closure,
                 Err(e) => {
                     eprintln!("REFUSED: {e}");
@@ -1217,6 +1343,23 @@ pub fn run(argv: &[String]) -> i32 {
                 closure.source.len(),
                 closure.source_digest
             );
+            match &closure.configuration {
+                Some(config) => match config::verify_live(config) {
+                    Ok(()) => println!(
+                        "OK: effective configuration verified: {} TEKMERION_* variables",
+                        config.env().len()
+                    ),
+                    Err(e) => {
+                        eprintln!("REFUSED: {e}");
+                        return guard::EXIT_REFUSED;
+                    }
+                },
+                None => println!(
+                    "{}",
+                    configuration_warning(&closure)
+                        .expect("a configuration-less closure has a warning")
+                ),
+            }
             if runtime {
                 report(
                     verify_runtime(&root, &closure),

@@ -1152,6 +1152,7 @@ fn freeze_closure_tag_must_match_the_freeze_tag() {
             sha256: digest,
         }],
         source_digest: String::new(),
+        configuration: None,
         runtime: None,
     };
     closure.source_digest = freeze::digest_of(&closure.source);
