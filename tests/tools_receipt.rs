@@ -16,9 +16,16 @@ use tekmerion::tools::json;
 use tekmerion::tools::sealed_court;
 use tekmerion::tools::{curve_check, dropin};
 
-/// sha256 of `tools/bridge.ml` when the recorded goldens were captured. The
-/// differential tests skip if the file has since moved.
-const BRIDGE_DIGEST: &str = "ca300bd2e35ca84893021d47249fd5cd892fef6eb0aa13d5565439850e24fa2e";
+/// sha256 of `tools/bridge.ml` when the recorded goldens were captured.
+///
+/// A mismatch is a **failure**, not a skip: the goldens below were measured
+/// against this exact text, and silently passing while comparing nothing is the
+/// defect XVI.A2 removed. Re-record deliberately and update both the digest and
+/// the goldens in the same commit, stating why the library moved.
+///
+/// Boundaries so far: `ca300bd2…` (recorded with the Python-era goldens),
+/// `0a135381…` (after IX.69 slicing and IX.70's opt-in algebraic route).
+const BRIDGE_DIGEST: &str = "0a13538155c7f4850e828d894029842bacbb6148de7dcd421ddc2f069a240961";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -38,10 +45,13 @@ fn sha256(bytes: &[u8]) -> String {
 fn bridge_source() -> Option<String> {
     let path = manifest_dir().join("tools/bridge.ml");
     let src = fs::read_to_string(&path).ok()?;
-    if sha256(src.as_bytes()) != BRIDGE_DIGEST {
-        eprintln!("skipping: tools/bridge.ml is not at the recorded digest");
-        return None;
-    }
+    let got = sha256(src.as_bytes());
+    assert_eq!(
+        got, BRIDGE_DIGEST,
+        "tools/bridge.ml moved away from the digest the goldens were recorded at.\n\
+         Re-record the goldens deliberately and update BRIDGE_DIGEST in the same commit,\n\
+         stating in the receipt why the library changed (see TODO.md XVI.A2)."
+    );
     Some(src)
 }
 
@@ -108,7 +118,9 @@ fn curve_check_reproduces_the_recorded_report() {
         return;
     };
     let (text, statements, hits) = curve_check::check_text(&src);
-    assert_eq!(statements, 71);
+    // IX.69 slicing + IX.70's opt-in algebraic route add five `prove`
+    // statements to `tools/bridge.ml`: 71 -> 76.
+    assert_eq!(statements, 76);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -139,11 +151,12 @@ fn instrument_reproduces_the_recorded_output() {
         return;
     };
     let (out, phrases) = instrument::instrument_text(&src, "tools/bridge.ml");
-    // IX.69 adds eight slice phrases to `tools/bridge.ml` (119 -> 127).
-    assert_eq!(phrases, 127);
+    // Boundaries: 119 (Python-era) -> 127 (IX.69 slicing) -> 154 (IX.70 adds
+    // the opt-in algebraic close, BRIDGE_ALGEBRA_TAC and its helpers).
+    assert_eq!(phrases, 154);
     assert_eq!(
         sha256(out.as_bytes()),
-        "205c432b739d94a1f5e00df2386c9ba14fd837a0316a115215c70ca1d107d43b"
+        "6037ca7fb8fddb9519f2cec853653b79d514cfa633689e3946d8dba6135b7e6c"
     );
 }
 

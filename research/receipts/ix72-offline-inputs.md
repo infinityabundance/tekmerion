@@ -386,3 +386,28 @@ both are part of the same commit.)
 | `tests/fixtures/problems.json` | 27 entries, 40,104 B, sha256 `2cded7f1…b4909` |
 | `tests/fixtures/bench/**` | 27 objects + 3 Cadical sources, 51,985 B |
 | `TODO.md` | `XVI.A1`–`XVI.A3` ticked |
+
+---
+
+## Addendum (orchestrator, same day): the stale digest was itself a silent skip
+
+The receipt above flagged `BRIDGE_DIGEST` (`ca300bd2…`) as stale against
+`tools/bridge.ml` (`0a135381…`) "pre-existing, not fixed". That was the same defect
+`XVI.A2` removes: `bridge_source()` returned `None` on a digest mismatch, so the two
+golden tests compared nothing and passed.
+
+Fixed properly:
+
+- `BRIDGE_DIGEST` re-pinned to `0a13538155c7f4850e828d894029842bacbb6148de7dcd421ddc2f069a240961`,
+  with the boundaries recorded in the source (`ca300bd2…` Python-era, `0a135381…` after
+  IX.69/IX.70).
+- A mismatch now **fails** with an instruction to re-record deliberately, instead of skipping.
+- Running the tests honestly exposed that the goldens themselves were stale, so they were
+  re-recorded from the current library, in this commit:
+  - `curve_check` report: `statements=76 hits=0` (was 71; IX.69/IX.70 add five `prove` calls).
+  - `instrument`: `phrases=154` (was 127), output sha256
+    `6037ca7fb8fddb9519f2cec853653b79d514cfa633689e3946d8dba6135b7e6c` (was `205c432b…`).
+
+Verified both directions, not just green: with `tests/fixtures/problems.json` removed the three
+parity tests fail naming the fixture and the recorder command; with `.bench/problems.json` hidden
+(and restored, 43,805,343 bytes) they pass. `cargo test --offline`: 41 suites ok, 0 failed.
