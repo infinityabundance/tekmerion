@@ -1,14 +1,14 @@
 [package]
 name = "tekmerion"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.70"
-description = "Typed, content-addressed revocation for kernel-checked proof evidence"
+description = "Machine-code verification: generated HOL Light proofs, a solver-free arithmetic close, and an independent Rust proof-object checker"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/infinityabundance/tekmerion"
 homepage = "https://github.com/infinityabundance/tekmerion"
 readme = "README.md"
-keywords = ["formal-verification", "proof-assistant", "hol-light", "provenance", "revocation"]
+keywords = ["formal-verification", "hol-light", "machine-code", "proof-checking", "arithmetic"]
 categories = ["development-tools", "science"]
 exclude = ["/target", "/.github"]
 
