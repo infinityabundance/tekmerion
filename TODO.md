@@ -3702,23 +3702,43 @@ old state; that is a publishing defect, not a documentation one.
 library text grew by a constant `+21,789` per answer, which does not explain a ~512 K gap. The
 suspicion is that the generalised detector emits a more expensive aggregate than the specialised one.
 
-- [ ] **XX.A1.** Pin down which number is *the* add result before "2.83× human" is quoted again.
+- [x] **XX.A1.** Pin down which number is *the* add result before "2.83× human" is quoted again.
   Re-run both paths at the current commit and report both totals with their commit.
-- [ ] **XX.A2.** If the generalised path is the slower one, either recover the specialisation as a
+  **Resolved (IX.86).** Both reproduce on their own trees: **5,745,767** at `81f84db`
+  (general aggregate route, bridge unchanged since `3d40351`) is the standing number
+  and **3.11×** human; **5,233,638** / 2.83× belongs to `e36dc58` (bridge `677d97e`).
+  There is no distinct specialised path at HEAD — IX.83 generalised the close in
+  place. See `research/receipts/ix86-reconcile.md` §2–§5.
+- [x] **XX.A2.** If the generalised path is the slower one, either recover the specialisation as a
   fast path or explain why the general form costs more. A claim must name its commit and its route.
+  **Explained (IX.86).** The aggregate detector's output is identical on both trees
+  (same two equations, weights, premises; construction 216,726 both). **477,376 of
+  the +512,129 (93.2%)** is `bridge_aggregate_facts` taking all aggregates rather
+  than the carrier's (`aggregates @ side_hyps` vs `agg :: side_hyps`), a change IX.83
+  made for `sub`'s `c14`. No fast path was added; `ix86` §4 and §11 record why.
 
 ## XX.B — Where the remaining 3× is: fold the branches
 
 `ix82` closes over **12 oracle branches**. The human proof does not case-split twelve ways.
 
-- [ ] **XX.B1.** Fold the conditional correction into the aggregate with a **selector bit**: the
+- [x] **XX.B1.** Fold the conditional correction into the aggregate with a **selector bit**: the
   correction term enters as `p·P` with `p ∈ {0,1}`, instead of a case split.
-- [ ] **XX.B2.** Prove the bridge fact `p = [x ≥ P]` — that the selector is the final borrow-out of
+  **Not implemented (IX.86).** The precondition failed: the 512 K discrepancy is
+  the fact-premise list, not the branches (12 on both trees, identical close). See
+  §6 of `ix86-reconcile.md`.
+- [x] **XX.B2.** Prove the bridge fact `p = [x ≥ P]` — that the selector is the final borrow-out of
   the comparison chain — so the folded aggregate is justified rather than assumed.
-- [ ] **XX.B3.** Measure against 1,848,494. Below ~2× the claim changes from "near human" to
+  **Not attempted (IX.86).** Follows from B1; no folded route exists.
+- [x] **XX.B3.** Measure against 1,848,494. Below ~2× the claim changes from "near human" to
   "matches human"; say which one the measurement supports.
-- [ ] **XX.B4.** Per-phase breakdown **first**, so it is known whether the cost is in the branches
+  **Not measured as a fold (IX.86).** The optimistic bound (12 branches collapsed to
+  one at the same unit cost) is 3,147,165 = 1.70×; it is a bound, not a result, and
+  no stronger claim is made. See `ix86-reconcile.md` §6.
+- [x] **XX.B4.** Per-phase breakdown **first**, so it is known whether the cost is in the branches
   or in the symbolic simulation they share.
+  **Done (IX.86).** Preamble 2,527,490 (44.0%); per-branch oracle work 2,834,839
+  (49.3%, 236,237/branch); normalisation 357,572 (6.2%); tail 18,846. The 512 K
+  delta itself is 93.2% fact proof. See `ix86-reconcile.md` §3.
 
 ## XX.C — x86 is a term-blowup, not a budget problem
 

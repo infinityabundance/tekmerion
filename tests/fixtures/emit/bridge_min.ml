@@ -49,3 +49,23 @@ let BRIDGE_ALGEBRA_TAC : tactic =
      at "oracle" BRIDGE_ORACLE_TAC) g;;
 
 let bridge_anchor_count = 6;;
+
+(* IX.86: the oracle-close anchors added to the measurement table.  Synthetic,
+ * like the rest of this file: only the exact anchor lines matter. *)
+let bridge_aggregate_facts aggregates all_hyps =
+  let is_int_eq th = false and conjunctive th = true in
+  let side_hyps =
+    List.filter
+      (fun th -> conjunctive th &&
+                 (not (is_int_eq th) || not (bridge_int_eq_has_carry th)))
+      all_hyps in
+  aggregates;;
+
+let BRIDGE_ORACLE_TAC : tactic =
+  fun (asl,w) ->
+      let aggregates = bridge_aggregates eqs in
+      let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in
+      let agg_facts = bridge_aggregate_facts aggregates all_hyps in
+      let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in
+      bridge_slice_note "ORACLE close ok";
+      ACCEPT_TAC th (asl,w);;

@@ -1,0 +1,159 @@
+{
+  "receipt": "ix86-reconcile",
+  "date": "2026-11-26",
+  "branch": "staging",
+  "head_commit": "81f84dbb86184205cd398db7b7efbe1c5fadb6eb",
+  "main_commit": "81f84dbb86184205cd398db7b7efbe1c5fadb6eb",
+  "tags_untouched": ["freeze-rust-closure-v6", "v0.2.0"],
+  "gate": "TEKMERION_ALG_CLOSE=<task id>",
+  "task": "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+  "question": "ix82 5233638 vs ix83 5745767 for the same theorem; +21789 library growth does not explain +512129",
+  "verdict": "one aggregate route; both numbers reproduce on their own trees; the aggregates are identical; 93.2% of the delta is the IX.83 fact-premise change from the carrier's aggregate to all aggregates",
+  "routes": [
+    {
+      "name": "specialised-era aggregate (pre-IX.83)",
+      "tree_commit": "e36dc58",
+      "bridge_tree": "677d97e",
+      "bridge_last_change": "677d97e",
+      "distinct_path_at_head": false,
+      "primitive_inferences": 5233638,
+      "sat_closes": 0,
+      "oracle_branches": 12,
+      "wall_seconds": 28,
+      "default_sat_inferences": 111501987,
+      "ratio_vs_human": 2.83,
+      "human_correct": 1848494
+    },
+    {
+      "name": "general aggregate",
+      "tree_commit": "81f84db",
+      "bridge_tree": "3d40351",
+      "bridge_last_change": "3d40351",
+      "distinct_path_at_head": true,
+      "primitive_inferences": 5745767,
+      "sat_closes": 0,
+      "oracle_branches": 12,
+      "wall_seconds": 30,
+      "default_sat_inferences": 111523776,
+      "ratio_vs_default": 19.41,
+      "ratio_vs_human": 3.11,
+      "human_correct": 1848494,
+      "standing": true
+    }
+  ],
+  "phase_split": {
+    "units": "primitive inferences",
+    "segments": [
+      {"segment": "preamble (before first bridge:algebra)", "specialised": 2504581, "general": 2527490, "delta": 22909},
+      {"segment": "normalisation + split (algebra -> algebra-arith, 4 invocations)", "specialised": 346004, "general": 357572, "delta": 11568},
+      {"segment": "oracle entry (algebra-arith -> pre-agg)", "specialised": 0, "general": 0, "delta": 0},
+      {"segment": "aggregate construction (pre-agg -> post-agg)", "specialised": 216726, "general": 216726, "delta": 0},
+      {"segment": "flatten integer hypotheses (post-agg -> post-flat)", "specialised": 234904, "general": 234904, "delta": 0},
+      {"segment": "aggregate fact proof (post-flat -> post-facts)", "specialised": 701306, "general": 1178682, "delta": 477376},
+      {"segment": "close assembly (post-facts -> pre-close)", "specialised": 75910, "general": 75910, "delta": 0},
+      {"segment": "linear close (pre-close -> post-close)", "specialised": 1128617, "general": 1128617, "delta": 0},
+      {"segment": "branch return (post-close -> next algebra)", "specialised": 6976, "general": 7020, "delta": 44},
+      {"segment": "tail (last post-close -> STAMP_INF_AFTER)", "specialised": 18614, "general": 18846, "delta": 232}
+    ],
+    "sum_specialised": 5233638,
+    "sum_general": 5745767,
+    "delta": 512129,
+    "bitblast": {"specialised": 0, "general": 0},
+    "defn_clausify": {"specialised": 0, "general": 0},
+    "replay": {"specialised": 0, "general": 0},
+    "antecedents_per_close": [53, 54, 53, 54, 53, 53, 53, 54, 53, 54, 53, 53],
+    "antecedent_sizes": [15005, 17494, 15531, 18544, 17497, 18547, 15005, 17494, 15531, 18544, 17497, 18547],
+    "aggregates_per_branch": 2,
+    "aggregate_lines_total": 24,
+    "aggregate_weights": [
+      "1",
+      "18446744073709551616",
+      "340282366920938463463374607431768211456",
+      "6277101735386680763835789423207666416102355444464034512896"
+    ]
+  },
+  "delta_attribution": [
+    {"cause": "fact proof takes all aggregates instead of the carrier's aggregate", "inferences": 477376, "share": 0.9321},
+    {"cause": "preamble (shared-library / close-set growth)", "inferences": 22909, "share": 0.0447},
+    {"cause": "normalisation", "inferences": 11568, "share": 0.0226},
+    {"cause": "branch return + tail", "inferences": 276, "share": 0.0005}
+  ],
+  "cause": {
+    "function": "bridge_aggregate_facts",
+    "ix82_code": "let premises = agg :: side_hyps in",
+    "ix83_code": "let premises = aggregates @ side_hyps in",
+    "change_commit": "3d40351",
+    "why_ix83_changed_it": "sub's correction borrow c14 is decided by both aggregates",
+    "fact_premise_sets_identical": true,
+    "fact_premise_print": [
+      {"hyps": 50, "size": 9736, "aggs": 2},
+      {"hyps": 51, "size": 12225, "aggs": 2},
+      {"hyps": 50, "size": 10262, "aggs": 2},
+      {"hyps": 51, "size": 13275, "aggs": 2},
+      {"hyps": 50, "size": 12228, "aggs": 2},
+      {"hyps": 50, "size": 13278, "aggs": 2}
+    ],
+    "note": "FACT_PREM prints exactly these six patterns in the same order on both trees; only the aggregate list in front of side_hyps differs (1 vs 2 entries)"
+  },
+  "reconciliation": {
+    "standing_number": 5745767,
+    "standing_commit": "81f84db",
+    "standing_route": "general aggregate close, opt-in gate",
+    "standing_ratio_vs_human": 3.11,
+    "standing_ratio_vs_default": 19.41,
+    "historical_number": 5233638,
+    "historical_commit": "e36dc58",
+    "historical_ratio_vs_human": 2.83,
+    "both_reproduced": true,
+    "changelog_corrected": true,
+    "corrections_appended": ["research/receipts/ix82-aggregate.md", "research/receipts/ix83-generality.md"]
+  },
+  "part_b": {
+    "status": "stopped",
+    "precondition": "Part A answer must be 'branches are the cost'",
+    "part_a_answer": "fact-premise list; branch count 12 on both trees; linear close identical",
+    "fold_implemented": false,
+    "folded_number_claimed": false,
+    "once_only_inferences": 2910928,
+    "per_branch_oracle_total": 2834839,
+    "per_branch_oracle_per_branch": 236237,
+    "optimistic_fold_floor": 3147165,
+    "optimistic_fold_ratio_vs_human": 1.70,
+    "bound_is_measurement": false,
+    "note": "1.70x is an optimistic bound (12 branches collapsed to one at the same unit cost), not a folded proof; not used as a 'matches human' result"
+  },
+  "controls": {
+    "C1_equals_thm": "inherited from ix82 for e36dc58; not re-run; statement unchanged",
+    "C2_axioms": {"stamp": ["ETA_AX", "SELECT_AX", "INFINITY_AX"], "measured_this_run": true},
+    "C3_remove_aggregate": "inherited from ix82/ix83; not re-run; no folded route",
+    "C4_solver": {"cadical_invocations": 0, "pre_bitblast_marks": 0, "sat_done_marks": 0, "pre_replay_marks": 0, "oracle_close_ok": 12, "oracle_close_failed": 0},
+    "C5_cheating": {"new_axiom": false, "mk_thm": false, "CHEAT_TAC": false, "Obj_magic": false, "hypothesis_added": false},
+    "C6_default_path": {"inferences": 111523776, "matches_ix83": true, "arm_answers_byte_identical": true, "x86_answers_byte_identical": true}
+  },
+  "instrumentation": {
+    "bridge_unchanged": true,
+    "emit_markers_added": ["bridge:pre-agg", "bridge:post-agg", "bridge:post-flat", "bridge:post-facts", "bridge:pre-close", "bridge:post-close", "FACT_PREM"],
+    "phase_only": true,
+    "totals_unchanged_with_markers": true,
+    "fixture_updated": "tests/fixtures/emit/bridge_min.ml",
+    "answers_rerecorded": false
+  },
+  "environment": {
+    "free_g_head_2": "Mem: 125 total, 18 used, 26 free, 80 buff/cache, 107 available",
+    "df": "/dev/nvme1n1p1 1.3T 916G 346G 73% /mnt/1tb_kingston",
+    "caps": "12G per proof build, -j1 -B, one at a time; 20G cargo",
+    "kernel": ".bench/hol-light-stamp2"
+  },
+  "freeze_closure_v7": {
+    "files": 75,
+    "source_digest": "8990dbe33910f5d394267d473ae20bcbabfd29fca520f1fc607c3bc2033ef9da",
+    "runtime_digests": 10,
+    "repo_commit": "81f84db",
+    "prior_repo_commit": "c276f62",
+    "regeneration_also_records": [
+      "Cargo.toml / Cargo.lock: 0.2.0 release bump, already in HEAD",
+      "src/tools/proof_object.rs: IX.84 (cfa9322), already in HEAD; file not edited by IX.86"
+    ],
+    "v6_tag_untouched": true
+  }
+}

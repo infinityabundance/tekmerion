@@ -389,3 +389,29 @@ $ git ls-files '*.py'                                # empty
 - **The `XIX.D` certificate is still not serialised.** The weights and premises are in the proof and
   in `ix83-generality.json`; no checker consumes them yet.
 - All numbers are from this host, this kernel (`.bench/hol-light-stamp2`) and this commit.
+
+---
+
+## 11. Correction log — IX.86 reconciliation (2026-11-26)
+
+Appended, not substituted.
+
+- **The add total is confirmed.** `5,745,767` was re-run today at `81f84db` (bridge
+  unchanged since `3d40351`): **5,745,767**, **30 s**, **12** branches, **0** SAT
+  closes. It is the standing figure and the one `CHANGELOG.md` now carries, with
+  **3.11×** human (not 2.83×).
+- **§2.3's explanation of the +512,129 is corrected.** It attributed the move from
+  5,233,638 to the shared close set generally ("the zero-fold/mask machinery runs
+  (inert here but it is still inferences)"). Measured by phase (`ix86`), that is
+  not the dominant term: aggregate construction is identical (**216,726** both), as
+  are hypothesis flattening (**234,904**), close assembly (**75,910**) and the final
+  linear close (**1,128,617**). **477,376 of the 512,129 (93.2%)** is
+  `bridge_aggregate_facts` proving the top carry from `aggregates @ side_hyps`
+  instead of the carrier's `agg :: side_hyps`. The change was necessary for `sub`
+  (its `c14` is decided by both aggregates); for `add` the corrected aggregate is
+  logically inert but still an antecedent of the fact `INT_ARITH` call.
+- **The `add` row's 19.41× and 3.11× stand**; the 5,233,638 / 2.83× pair belongs to
+  the pre-IX.83 tree (`e36dc58`, bridge `677d97e`), reproduced today at its own
+  commit.
+- See `research/receipts/ix86-reconcile.md` (+ `.json`). Original text above is the
+  record of `3d40351`/`e36dc58`.

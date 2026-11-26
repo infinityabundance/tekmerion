@@ -386,3 +386,32 @@ $ git ls-files '*.py'                                 # empty
   depends on it (it comes from the aggregate), but the discovery engine is still a filter, not a
   certificate.
 - All numbers are from this host, this kernel (`.bench/hol-light-stamp2`) and this commit.
+
+---
+
+## 10. Correction log — IX.86 reconciliation (2026-11-26)
+
+Appended, not substituted: the text above is the record of the tree it measured.
+
+- **The number above is right for its tree.** `5,233,638` was reproduced today at the
+  IX.82 tree (`e36dc58`; `tools/bridge.ml` identical to `677d97e`), rebuilt from
+  `git archive` in `.bench/ix86/old-src` and run with the same harness: **5,233,638**,
+  **28 s**, **12** oracle branches, **0** SAT closes. So this receipt's measurement
+  is not withdrawn.
+- **It is not the current commit's number.** At `81f84db` (bridge unchanged since
+  `3d40351`) the same route measures **5,745,767**, **30 s**, **12** branches, **0**
+  SAT closes. `ix83`'s figure is therefore the standing one; the 2.83× in §4 and in
+  the verdict is **scoped to `e36dc58`**, and the current figure is **3.11×**.
+- **Why the 512,129 difference.** `ix86` splits it by phase: **477,376 (93.2%)** is
+  the aggregate **fact proof**, **22,909** the preamble, **11,568** the
+  normalisation, **276** the branch-return/tail. The aggregate construction is
+  identical on both trees (**216,726**), the two `AGGREGATE` equations and weights
+  are identical, and the final linear close is identical (**1,128,617**). The fact
+  proof changed from `agg :: side_hyps` (the carrier's aggregate) to
+  `aggregates @ side_hyps` (all aggregates) in `3d40351`, because `sub`'s correction
+  borrow needs both; for `add` the second aggregate is extra weight. The suspicion
+  that the generalised detector emits a more expensive aggregate is **not** borne
+  out: the detector's output is the same.
+- See `research/receipts/ix86-reconcile.md` (+ `.json`) for both runs, both phase
+  splits and the verbatim commands. `CHANGELOG.md` was corrected to the current
+  route's 5,745,767 / 3.11×.

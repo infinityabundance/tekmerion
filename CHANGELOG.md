@@ -11,11 +11,14 @@ The first release in which the arithmetic reasoning is Tekmerion's own.
 
 ### Solver-free machine-code proofs
 
-- **ARM Curve25519 add, sub and neg close with no SAT solver** (`ix82`, `ix83`).
-  `add`: 5,233,638 primitive inferences against 111,501,987 on the sliced SAT route
-  (21.3× fewer) and 1,848,494 for the human proof body (2.83×). `sub`: 9,029,510 vs
-  87,971,295 (9.7×). `neg`: 5,683,733 vs 33,910,447 (6.0×). Zero solver invocations,
-  verified with a failing `cadical` shim on `PATH` and an absent marker file.
+- **ARM Curve25519 add, sub and neg close with no SAT solver** (`ix82`, `ix83`;
+  reconciled and re-measured in `ix86`). `add`: 5,745,767 primitive inferences
+  against 111,523,776 on the sliced SAT route (19.41× fewer) and 1,848,494 for the
+  human proof body (3.11×). `sub`: 9,029,510 vs 87,971,295 (9.7×). `neg`:
+  5,683,733 vs 33,910,447 (6.0×). Zero solver invocations, verified with a failing
+  `cadical` shim on `PATH` and an absent marker file. (The pre-IX.83 tree measured
+  5,233,638 / 2.83× for `add`; `ix86` reconciles the two figures and the reason for
+  the difference.)
 - The mechanism constructs the **chain aggregate as a weighted sum**
   (`Σ 2^(64i)·eqᵢ`) instead of recovering it after variable elimination, with the
   weights read from the proof rather than hard-coded.

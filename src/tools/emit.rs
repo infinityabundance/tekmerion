@@ -1098,6 +1098,35 @@ const BRIDGE_EDITS: &[MarkerEdit] = &[
         plain: "    ACCEPT_TAC th' (asl,w);;\n\n(* everything that precedes the SAT call, on the goal *)",
         marked: "    csat_mark_at \"bridge:sat-done\";\n    ACCEPT_TAC th' (asl,w);;\n\n(* everything that precedes the SAT call, on the goal *)",
     },
+    // IX.86: measurement-only boundaries inside the oracle close, so the
+    // aggregate route can be split into gauss-jordan, aggregate construction,
+    // hypothesis flattening, the aggregate fact proof, close assembly, the
+    // linear close itself, and the return to the next branch.  Inert in the
+    // normal answer; removed again by the reverse table.
+    MarkerEdit {
+        plain: "      let aggregates = bridge_aggregates eqs in",
+        marked: "      csat_mark_at \"bridge:pre-agg\";\n      let aggregates = bridge_aggregates eqs in\n      csat_mark_at \"bridge:post-agg\";",
+    },
+    MarkerEdit {
+        plain: "      let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in",
+        marked: "      let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in\n      csat_mark_at \"bridge:post-flat\";",
+    },
+    MarkerEdit {
+        plain: "      let agg_facts = bridge_aggregate_facts aggregates all_hyps in",
+        marked: "      let agg_facts = bridge_aggregate_facts aggregates all_hyps in\n      csat_mark_at \"bridge:post-facts\";",
+    },
+    MarkerEdit {
+        plain: "  let side_hyps =\n    List.filter\n      (fun th -> conjunctive th &&\n                 (not (is_int_eq th) || not (bridge_int_eq_has_carry th)))\n      all_hyps in",
+        marked: "  let side_hyps =\n    List.filter\n      (fun th -> conjunctive th &&\n                 (not (is_int_eq th) || not (bridge_int_eq_has_carry th)))\n      all_hyps in\n  (if !csat_mark_enabled then\n     Printf.printf \"FACT_PREM hyps=%d size=%d aggs=%d\\n%!\"\n       (List.length side_hyps)\n       (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 side_hyps)\n       (List.length aggregates));",
+    },
+    MarkerEdit {
+        plain: "      let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in",
+        marked: "      csat_mark_at \"bridge:pre-close\";\n      let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in",
+    },
+    MarkerEdit {
+        plain: "      bridge_slice_note \"ORACLE close ok\";",
+        marked: "      csat_mark_at \"bridge:post-close\";\n      bridge_slice_note \"ORACLE close ok\";",
+    },
 ];
 
 fn apply_marker_edits(
