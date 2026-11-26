@@ -366,6 +366,11 @@ pub struct Summary {
     pub imports: u64,
     pub axioms: Vec<String>,
     pub import_digests: Vec<String>,
+    /// Statement digests of the reachable `new_basic_definition` nodes.  The
+    /// exported theory authorises exactly these (`G1.3`).
+    pub definitions: Vec<String>,
+    /// Reachable `new_basic_type_definition` registries (`G1.4`).
+    pub type_definitions: Vec<String>,
     /// Largest single payload buffer held while streaming finalisation.  A
     /// frontier-bounded finaliser keeps this proportional to one record, not
     /// to the object (`G1.6`).
@@ -395,6 +400,12 @@ pub struct Validation {
     pub inference_begin: u64,
     pub imports: u64,
     pub axioms: Vec<String>,
+    /// Peak number of theorems held at once during replay.
+    pub peak_live_nodes: u64,
+    /// The node ceiling supplied to replay (the second guard, after the
+    /// frontier bound, on wall time and memory).
+    pub budget: u64,
+    pub replay_mode: &'static str,
 }
 
 // ---------------------------------------------------------------------------
@@ -827,6 +838,16 @@ impl<'a> Cursor<'a> {
         self.p += 8;
         Ok(u64::from_be_bytes(a))
     }
+    /// Borrow `n` bytes.  The slice points into the buffer the digest was
+    /// computed over, so a payload is never copied to be checked.
+    fn take(&mut self, n: usize) -> Result<&'a [u8], Error> {
+        if self.remaining() < n {
+            return Err(Error::CountMismatch { what: "payload" });
+        }
+        let s = &self.b[self.p..self.p + n];
+        self.p += n;
+        Ok(s)
+    }
     fn str(&mut self) -> Result<String, Error> {
         let n = self.u32()? as usize;
         if self.remaining() < n {
@@ -835,14 +856,6 @@ impl<'a> Cursor<'a> {
         let s = std::str::from_utf8(&self.b[self.p..self.p + n])
             .map_err(|_| Error::Malformed("invalid UTF-8".into()))?
             .to_string();
-        self.p += n;
-        Ok(s)
-    }
-    fn take(&mut self, n: usize) -> Result<&'a [u8], Error> {
-        if self.remaining() < n {
-            return Err(Error::CountMismatch { what: "payload" });
-        }
-        let s = &self.b[self.p..self.p + n];
         self.p += n;
         Ok(s)
     }
@@ -942,7 +955,13 @@ fn teq(a: &TermRef, b: &TermRef) -> bool {
 /// Alpha-equality, matching HOL Light's `alphaorder ... = 0`.
 fn alpha_eq(a: &TermRef, b: &TermRef) -> bool {
     fn ordav(env: &[(TermRef, TermRef)], x1: &TermRef, x2: &TermRef) -> bool {
-        for (t1, t2) in env {
+        // `env` is a stack of (left, right) binder pairs with the innermost
+        // binder last.  HOL Light's `ordav` walks its list head-first, which is
+        // innermost-first, so the most recent binding must shadow an older
+        // binder with the same name (`\q. ... \q. ...`).  Walking forward here
+        // would match the outer binder and report alpha-inequality for an
+        // alpha-equal pair (`XXI.B7`).
+        for (t1, t2) in env.iter().rev() {
             if teq(x1, t1) {
                 return teq(x2, t2);
             } else if teq(x2, t2) {
@@ -2021,6 +2040,7 @@ pub fn finalize(
     store_path: Option<&Path>,
     theory_in: Option<&ValidatedTheory>,
     expected_out: Option<&Path>,
+    theory_out: Option<&Path>,
 ) -> Result<Summary, Error> {
     let scan = scan_raw(raw_path)?;
     let reach = mark_reachable(&scan)?;
@@ -2034,6 +2054,8 @@ pub fn finalize(
     let mut import_seqs: Vec<Thm> = Vec::new();
     let mut import_set: BTreeSet<[u8; 32]> = BTreeSet::new();
     let mut axiom_digests: BTreeSet<[u8; 32]> = BTreeSet::new();
+    let mut definition_digests: BTreeSet<[u8; 32]> = BTreeSet::new();
+    let mut type_definitions: BTreeSet<(String, String, String)> = BTreeSet::new();
     for (id, m) in scan.nodes.iter().enumerate() {
         if !reach[id] {
             continue;
@@ -2051,9 +2073,33 @@ pub fn finalize(
                 }
             }
             Rule::Axiom => {
-                let mut c = Cursor::new(&compact);
-                let concl = c.u32()?;
-                axiom_digests.insert(it.digest_term(concl));
+                // Computed exactly as the checker computes it: on the term the
+                // rule produces, not on a table id.
+                let t = decode_raw_term(&mut Cursor::new(&raw))?;
+                axiom_digests.insert(statement_digest(&t));
+            }
+            Rule::Definition => {
+                // The rule turns `Var(c,ty) = r` into `Const(c,ty) = r`; the
+                // authorised digest is that of the latter (`G1.3`).
+                let t = decode_raw_term(&mut Cursor::new(&raw))?;
+                let (l, r) = dest_eq(&t)
+                    .ok_or_else(|| Error::Malformed("definition is not an equation".into()))?;
+                let (cname, cty) = match &*l {
+                    Term::Var(n, ty) => (n.clone(), ty.clone()),
+                    _ => {
+                        return Err(Error::Malformed(
+                            "definition left side is not a variable".into(),
+                        ))
+                    }
+                };
+                let c2 = Rc::new(Term::Const(cname, cty));
+                let concl = mk_eq(c2, r)?;
+                definition_digests.insert(statement_digest(&concl));
+            }
+            Rule::TypeDefAbs | Rule::TypeDefRep => {
+                let mut c = Cursor::new(&raw);
+                let _which = c.u8()?;
+                type_definitions.insert((c.str()?, c.str()?, c.str()?));
             }
             _ => {}
         }
@@ -2076,10 +2122,23 @@ pub fn finalize(
             t
         }
         None => {
-            owned_theory = ValidatedTheory::with_store(&store);
+            // The environment is the one this derivation establishes: the
+            // reachable axioms/definitions/type extensions it introduces, and
+            // the store of pre-recording sequents it imports.
+            owned_theory = ValidatedTheory::new(
+                axiom_digests.clone(),
+                definition_digests.clone(),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                type_definitions.clone(),
+                store.digest(),
+            );
             &owned_theory
         }
     };
+    if let Some(p) = theory_out {
+        std::fs::write(p, theory.render())?;
+    }
     let theory_digest = theory.digest();
 
     // The kernel's own footer statement, bound to the theory environment.
@@ -2208,6 +2267,11 @@ pub fn finalize(
             .map(|(_, d, _)| d.clone())
             .collect(),
         import_digests: import_set.iter().map(hex32).collect(),
+        definitions: definition_digests.iter().map(hex32).collect(),
+        type_definitions: type_definitions
+            .iter()
+            .map(|(t, a, r)| format!("{t}/{a}/{r}"))
+            .collect(),
         peak_buffered_payload_bytes: peak_buf,
     })
 }
@@ -2328,22 +2392,51 @@ struct ParsedObject {
     axiom_digests: BTreeSet<[u8; 32]>,
     import_digests: BTreeSet<[u8; 32]>,
     axioms: Vec<(u32, String, String)>,
-    nodes: Vec<ObjNode>,
     types: Vec<Type>,
     terms: Vec<TermRef>,
     file_digest: [u8; 32],
 }
 
-struct ObjNode {
+/// One decoded node-table record, borrowed from the checked object bytes.
+/// Keeping the payload as a slice means replay reads exactly the bytes the
+/// digest covered and never reopens the path (`XXI.B1`).
+struct NodeView<'a> {
     rule: Rule,
     p0: u32,
     p1: u32,
-    payload: Vec<u8>,
+    payload: &'a [u8],
 }
 
-fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
+/// Everything replay needs that is not a theorem: the verified bytes, the
+/// tables, the header, the node count and, per node, the number of consumers
+/// not yet validated.
+///
+/// `bytes` is the single immutable copy of the object over which the digest was
+/// computed.  Both the metadata scan and the replay read their node records
+/// from it, so a later change to the path cannot enter the replay (`XXI.B1`).
+struct ObjectScan {
+    obj: ParsedObject,
+    bytes: Vec<u8>,
+    /// End of the hashed body; `bytes[body_end..]` is digest and trailer.
+    body_end: usize,
+    /// Offset of the first node record.
+    nodes_offset: usize,
+    node_count: u32,
+    /// `remaining[i]` is the number of consumers of node `i` not yet validated.
+    remaining: Vec<u32>,
+}
+
+/// Read the file **once**, verify the digest over its body, then parse the
+/// header and the type/term tables from those same bytes.
+///
+/// Resource limits are enforced while parsing, before any container is sized
+/// from a declared count: a hostile object cannot make the checker allocate
+/// memory it has not first proved is present in the file or permitted by the
+/// node budget (`XXI.B4`).
+fn scan_object(path: &Path, budget: u64) -> Result<ObjectScan, Error> {
     let bytes = std::fs::read(path)?;
-    if bytes.len() < OBJ_MAGIC.len() + 1 + 32 + OBJ_END.len() {
+    let trailer = 32usize + OBJ_END.len();
+    if bytes.len() < OBJ_MAGIC.len() + 1 + trailer {
         return Err(Error::CountMismatch {
             what: "file length",
         });
@@ -2351,21 +2444,21 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
     if &bytes[..OBJ_MAGIC.len()] != OBJ_MAGIC {
         return Err(Error::BadMagic);
     }
-    let body_end = bytes.len() - 32 - OBJ_END.len();
+    let body_end = bytes.len() - trailer;
     if &bytes[body_end + 32..] != OBJ_END {
         return Err(Error::BadMagic);
     }
     let stored = &bytes[body_end..body_end + 32];
-    let computed = sha256(&bytes[..body_end]);
-    if stored != computed {
+    if stored != sha256(&bytes[..body_end]) {
         return Err(Error::DigestMismatch);
     }
     let mut file_digest = [0u8; 32];
     file_digest.copy_from_slice(stored);
 
-    let body = &bytes[..body_end];
-    let mut c = Cursor::new(body);
-    c.take(OBJ_MAGIC.len())?;
+    let mut c = Cursor::new(&bytes[..body_end]);
+    if c.take(OBJ_MAGIC.len())? != OBJ_MAGIC {
+        return Err(Error::BadMagic);
+    }
     let version = c.u8()?;
     if version != OBJ_VERSION {
         return Err(Error::BadVersion(version));
@@ -2380,12 +2473,23 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
     let mut statement_id = [0u8; 32];
     statement_id.copy_from_slice(c.take(32)?);
     let stmt_id = c.u32()?;
+
     let nh = c.u32()? as usize;
+    if nh as u64 > (c.remaining() / 4) as u64 {
+        return Err(Error::CountMismatch {
+            what: "hypothesis count",
+        });
+    }
     let mut hyp_ids = Vec::with_capacity(nh);
     for _ in 0..nh {
         hyp_ids.push(c.u32()?);
     }
     let na = c.u32()? as usize;
+    if na as u64 > (c.remaining() / 32) as u64 {
+        return Err(Error::CountMismatch {
+            what: "axiom count",
+        });
+    }
     let mut axiom_digests = BTreeSet::new();
     for _ in 0..na {
         let mut d = [0u8; 32];
@@ -2393,6 +2497,11 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
         axiom_digests.insert(d);
     }
     let ni = c.u32()? as usize;
+    if ni as u64 > (c.remaining() / 32) as u64 {
+        return Err(Error::CountMismatch {
+            what: "import count",
+        });
+    }
     let mut import_digests = BTreeSet::new();
     for _ in 0..ni {
         let mut d = [0u8; 32];
@@ -2400,6 +2509,11 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
         import_digests.insert(d);
     }
     let nreg = c.u32()? as usize;
+    if nreg as u64 > (c.remaining() / 12) as u64 {
+        return Err(Error::CountMismatch {
+            what: "axiom registry count",
+        });
+    }
     let mut axioms = Vec::with_capacity(nreg);
     for _ in 0..nreg {
         let id = c.u32()?;
@@ -2410,6 +2524,11 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
 
     // Type table.
     let nt = c.u32()? as usize;
+    if nt as u64 > c.remaining() as u64 {
+        return Err(Error::CountMismatch {
+            what: "type table count",
+        });
+    }
     let mut types_raw: Vec<TypeKey> = Vec::with_capacity(nt);
     for _ in 0..nt {
         match c.u8()? {
@@ -2417,6 +2536,11 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
             1 => {
                 let f = c.str()?;
                 let n = c.u32()? as usize;
+                if n as u64 > (c.remaining() / 4) as u64 {
+                    return Err(Error::CountMismatch {
+                        what: "type argument count",
+                    });
+                }
                 let mut args = Vec::with_capacity(n);
                 for _ in 0..n {
                     let id = c.u32()?;
@@ -2447,10 +2571,16 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
 
     // Term table.
     let nterm = c.u32()? as usize;
+    if nterm as u64 > c.remaining() as u64 {
+        return Err(Error::CountMismatch {
+            what: "term table count",
+        });
+    }
     let mut term_keys: Vec<TermKey> = Vec::with_capacity(nterm);
     for _ in 0..nterm {
-        match c.u8()? {
-            0 => {
+        let tag = c.u8()?;
+        match tag {
+            0 | 1 => {
                 let n = c.str()?;
                 let ty = c.u32()?;
                 if ty as usize >= types.len() {
@@ -2459,21 +2589,13 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
                         id: ty as u64,
                     });
                 }
-                term_keys.push(TermKey::Var(n, ty));
-            }
-            1 => {
-                let n = c.str()?;
-                let ty = c.u32()?;
-                if ty as usize >= types.len() {
-                    return Err(Error::TableReference {
-                        what: "term type",
-                        id: ty as u64,
-                    });
+                if tag == 0 {
+                    term_keys.push(TermKey::Var(n, ty));
+                } else {
+                    term_keys.push(TermKey::Const(n, ty));
                 }
-                term_keys.push(TermKey::Const(n, ty));
             }
             2 | 3 => {
-                let op = body[c.p - 1];
                 let a = c.u32()?;
                 let b = c.u32()?;
                 if a as usize >= term_keys.len() || b as usize >= term_keys.len() {
@@ -2482,7 +2604,7 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
                         id: a.max(b) as u64,
                     });
                 }
-                if op == 2 {
+                if tag == 2 {
                     term_keys.push(TermKey::Comb(a, b));
                 } else {
                     term_keys.push(TermKey::Abs(a, b));
@@ -2517,6 +2639,7 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
             id: stmt_id as u64,
         });
     }
+    let statement = terms[stmt_id as usize].clone();
     let mut hyps = Vec::with_capacity(hyp_ids.len());
     for h in hyp_ids {
         if h as usize >= terms.len() {
@@ -2528,17 +2651,31 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
         hyps.push(terms[h as usize].clone());
     }
 
-    // Node table.
+    // Node table: one metadata pass over the verified bytes.  A node record is
+    // at least 13 bytes, so the declared count is bounded by the bytes actually
+    // present *before* the consumer array is allocated, and the caller's node
+    // budget is checked here rather than only during replay.
     let nn = c.u32()? as usize;
-    let mut nodes = Vec::with_capacity(nn);
+    let nodes_offset = c.p;
+    let node_bytes = body_end - nodes_offset;
+    if nn as u64 > node_bytes as u64 / 13 {
+        return Err(Error::CountMismatch {
+            what: "node count against file size",
+        });
+    }
+    if nn as u64 > budget {
+        return Err(Error::BudgetExceeded {
+            budget,
+            reached: nn as u64,
+        });
+    }
+    let mut remaining = vec![0u32; nn];
     for i in 0..nn {
         let rule = Rule::from_u8(c.u8()?)?;
         let p0 = c.u32()?;
         let p1 = c.u32()?;
         let plen = c.u32()? as usize;
-        let payload = c.take(plen)?.to_vec();
-        // Parents must be earlier nodes (or absent).
-        let mut declared = 0;
+        let mut declared = 0usize;
         for p in [p0, p1] {
             if p == ABSENT {
                 continue;
@@ -2550,6 +2687,9 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
                     parent: p as u64,
                 });
             }
+            remaining[p as usize] = remaining[p as usize]
+                .checked_add(1)
+                .ok_or_else(|| Error::Malformed("consumer count overflow".into()))?;
         }
         if declared != rule.parents_needed() {
             return Err(Error::RuleFailure {
@@ -2558,43 +2698,69 @@ fn parse_object(path: &Path) -> Result<ParsedObject, Error> {
                 why: format!("{declared} parents, expected {}", rule.parents_needed()),
             });
         }
-        nodes.push(ObjNode {
-            rule,
-            p0,
-            p1,
-            payload,
-        });
+        // Bounds-checked against the body: a hostile `plen` cannot read or
+        // allocate past the verified bytes.
+        c.take(plen)?;
     }
     if c.remaining() != 0 {
         return Err(Error::CountMismatch { what: "node table" });
     }
-    if root as usize >= nodes.len() {
+    if root as usize >= nn {
         return Err(Error::ParentOutOfRange {
             node: root as u64,
             parent: root as u64,
         });
     }
 
-    Ok(ParsedObject {
-        name,
-        raw_nodes,
-        inference_total,
-        inference_begin,
-        root,
-        statement: terms[stmt_id as usize].clone(),
-        theory_digest,
-        statement_id,
-        hyps,
-        axiom_digests,
-        import_digests,
-        axioms,
-        nodes,
-        types,
-        terms,
-        file_digest,
+    Ok(ObjectScan {
+        obj: ParsedObject {
+            name,
+            raw_nodes,
+            inference_total,
+            inference_begin,
+            root,
+            statement,
+            theory_digest,
+            statement_id,
+            hyps,
+            axiom_digests,
+            import_digests,
+            axioms,
+            types,
+            terms,
+            file_digest,
+        },
+        bytes,
+        body_end,
+        nodes_offset,
+        node_count: nn as u32,
+        remaining,
     })
 }
 
+/// The cursor reads the node table out of the very buffer whose digest was
+/// checked; it never touches the path again.
+fn node_reader<'a>(scan: &'a ObjectScan) -> Cursor<'a> {
+    Cursor {
+        b: &scan.bytes[scan.nodes_offset..scan.body_end],
+        p: 0,
+    }
+}
+
+/// Decode the next node record.  The payload borrows the checked buffer.
+fn next_node<'a>(c: &mut Cursor<'a>) -> Result<NodeView<'a>, Error> {
+    let rule = Rule::from_u8(c.u8()?)?;
+    let p0 = c.u32()?;
+    let p1 = c.u32()?;
+    let plen = c.u32()? as usize;
+    let payload = c.take(plen)?;
+    Ok(NodeView {
+        rule,
+        p0,
+        p1,
+        payload,
+    })
+}
 fn decode_term_id(c: &mut Cursor<'_>, terms: &[TermRef]) -> Result<TermRef, Error> {
     let id = c.u32()?;
     terms
@@ -2617,6 +2783,49 @@ fn decode_type_id(c: &mut Cursor<'_>, types: &[Type]) -> Result<Ty, Error> {
         })
 }
 
+/// How the replayer holds theorems while it walks the node table.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ReplayMode {
+    /// Keep a theorem only while it has an unvalidated consumer.  A node's
+    /// theorem is dropped as soon as the last node that names it as a parent
+    /// has been validated, so retained theorems are O(frontier), not O(nodes).
+    Frontier,
+    /// Keep one theorem per node (the pre-IX.85 scheme).  Retained so the
+    /// frontier bound can be measured against it; not used by `validate`.
+    Retained,
+}
+
+impl ReplayMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            ReplayMode::Frontier => "frontier",
+            ReplayMode::Retained => "retained",
+        }
+    }
+}
+
+/// Work state that outlives individual rule applications.
+struct ReplayContext {
+    axiom_seen: BTreeSet<[u8; 32]>,
+    import_seen: BTreeSet<[u8; 32]>,
+    constants: BTreeSet<String>,
+    types: BTreeSet<String>,
+    type_halves: BTreeMap<(String, String, String), (bool, bool)>,
+}
+
+/// Record the foundational dependencies a rule contributes.
+fn record_assumptions(rule: Rule, th: &Thm, ctx: &mut ReplayContext) {
+    match rule {
+        Rule::Axiom => {
+            ctx.axiom_seen.insert(statement_digest(&th.concl));
+        }
+        Rule::Import => {
+            ctx.import_seen.insert(sequent_digest(&th.hyps, &th.concl));
+        }
+        _ => {}
+    }
+}
+
 /// Validate an object by independently replaying it.
 ///
 /// The environment is supplied from outside the certificate:
@@ -2625,6 +2834,8 @@ fn decode_type_id(c: &mut Cursor<'_>, types: &[Type]) -> Result<Ty, Error> {
 /// * `imports` decides which pre-recording sequents may be imported (`G1.1`);
 /// * `expected` names the statement, bound to the theory (`G1.5`);
 /// * `budget` is a hard node ceiling, so replay is resource-bounded.
+///
+/// Replay is frontier-bounded (see [`ReplayMode::Frontier`]).
 ///
 /// Refusals:
 /// * truncation / corruption — trailer digest or declared counts disagree;
@@ -2641,8 +2852,42 @@ pub fn validate(
     imports: &CheckedTheoremStore,
     budget: u64,
 ) -> Result<Validation, Error> {
-    let p = parse_object(path)?;
+    validate_with(
+        path,
+        expected,
+        theory,
+        imports,
+        budget,
+        ReplayMode::Frontier,
+    )
+}
 
+/// [`validate`] with an explicit retention strategy.
+#[allow(clippy::too_many_arguments)]
+pub fn validate_with(
+    path: &Path,
+    expected: &Expected,
+    theory: &ValidatedTheory,
+    imports: &CheckedTheoremStore,
+    budget: u64,
+    mode: ReplayMode,
+) -> Result<Validation, Error> {
+    let scan = scan_object(path, budget)?;
+    validate_scan(&scan, expected, theory, imports, budget, mode)
+}
+
+/// Replay a scan that has already been taken.  Split from `validate_with` so the
+/// replay is provably independent of the path: it consumes only `scan`, whose
+/// bytes are the ones the digest covered (`XXI.B1`).
+#[allow(clippy::too_many_arguments)]
+fn validate_scan(
+    scan: &ObjectScan,
+    expected: &Expected,
+    theory: &ValidatedTheory,
+    imports: &CheckedTheoremStore,
+    budget: u64,
+    mode: ReplayMode,
+) -> Result<Validation, Error> {
     // The environment must be self-consistent before it is used.
     if theory.store_digest != imports.digest() {
         return Err(Error::StoreDigestMismatch {
@@ -2651,60 +2896,181 @@ pub fn validate(
         });
     }
 
-    let mut thms: Vec<Thm> = Vec::with_capacity(p.nodes.len());
-    let mut axiom_seen: BTreeSet<[u8; 32]> = BTreeSet::new();
-    let mut import_seen: BTreeSet<[u8; 32]> = BTreeSet::new();
-    let mut constants = theory.constants.clone();
-    let mut types = theory.types.clone();
-    let mut type_halves: BTreeMap<(String, String, String), (bool, bool)> = BTreeMap::new();
+    let mut ctx = ReplayContext {
+        axiom_seen: BTreeSet::new(),
+        import_seen: BTreeSet::new(),
+        constants: theory.constants.clone(),
+        types: theory.types.clone(),
+        type_halves: BTreeMap::new(),
+    };
+    let (root, peak_live) = match mode {
+        ReplayMode::Frontier => replay_frontier(scan, theory, imports, budget, &mut ctx)?,
+        ReplayMode::Retained => replay_retained(scan, theory, imports, budget, &mut ctx)?,
+    };
+    finish_validation(
+        scan, &root, &ctx, theory, imports, expected, budget, peak_live, mode,
+    )
+}
 
-    for (i, n) in p.nodes.iter().enumerate() {
+/// The frontier replay: validate in ascending id order, hold a theorem only
+/// while it still has a consumer, and release it on the consumer's validation.
+fn replay_frontier(
+    scan: &ObjectScan,
+    theory: &ValidatedTheory,
+    imports: &CheckedTheoremStore,
+    budget: u64,
+    ctx: &mut ReplayContext,
+) -> Result<(Thm, u64), Error> {
+    let p = &scan.obj;
+    let mut reader = node_reader(scan);
+    let mut remaining = scan.remaining.clone();
+    let mut frontier: HashMap<u32, Thm> = HashMap::new();
+    let mut root_thm: Option<Thm> = None;
+    let mut peak_live: u64 = 0;
+
+    for i in 0..scan.node_count {
         if i as u64 >= budget {
             return Err(Error::BudgetExceeded {
                 budget,
                 reached: i as u64,
             });
         }
+        let n = next_node(&mut reader)?;
+        let mut parents: Vec<Thm> = Vec::with_capacity(2);
+        for pid in [n.p0, n.p1] {
+            if pid == ABSENT {
+                continue;
+            }
+            let th = frontier.get(&pid).ok_or(Error::ParentOutOfRange {
+                node: i as u64,
+                parent: pid as u64,
+            })?;
+            parents.push(th.clone());
+        }
+        let th = apply_rule_checked(
+            i as u64,
+            n.rule,
+            n.payload,
+            p,
+            &parents,
+            theory,
+            imports,
+            &mut ctx.constants,
+            &mut ctx.types,
+            &mut ctx.type_halves,
+        )?;
+        drop(parents);
+        record_assumptions(n.rule, &th, ctx);
+
+        for pid in [n.p0, n.p1] {
+            if pid == ABSENT {
+                continue;
+            }
+            let left = remaining[pid as usize];
+            if left == 0 {
+                return Err(Error::Malformed(format!(
+                    "node {i}: parent {pid} has no unvalidated consumer to release"
+                )));
+            }
+            remaining[pid as usize] = left - 1;
+            if left == 1 {
+                frontier.remove(&pid);
+            }
+        }
+
+        if i == p.root {
+            // The root is checked against the recorded statement below, so its
+            // theorem is kept aside rather than in the frontier.
+            root_thm = Some(th.clone());
+        }
+        // A node with no consumers that is not the root is unreachable from
+        // the conclusion: it was validated for well-formedness and can be
+        // dropped at once.
+        if i != p.root && remaining[i as usize] == 0 {
+            continue;
+        }
+        frontier.insert(i, th);
+        peak_live = peak_live.max(frontier.len() as u64);
+    }
+
+    let root = root_thm.ok_or_else(|| Error::Malformed("root node was not validated".into()))?;
+    Ok((root, peak_live))
+}
+
+/// The pre-IX.85 replay: one theorem per node.  Present so the bound can be
+/// measured on the same object with the same rules.
+fn replay_retained(
+    scan: &ObjectScan,
+    theory: &ValidatedTheory,
+    imports: &CheckedTheoremStore,
+    budget: u64,
+    ctx: &mut ReplayContext,
+) -> Result<(Thm, u64), Error> {
+    let p = &scan.obj;
+    let mut reader = node_reader(scan);
+    let mut thms: Vec<Thm> = Vec::new();
+
+    for i in 0..scan.node_count {
+        if i as u64 >= budget {
+            return Err(Error::BudgetExceeded {
+                budget,
+                reached: i as u64,
+            });
+        }
+        let n = next_node(&mut reader)?;
         let mut parents: Vec<Thm> = Vec::new();
         for pid in [n.p0, n.p1] {
             if pid == ABSENT {
                 continue;
             }
-            let th = thms
-                .get(pid as usize)
-                .ok_or(Error::ParentOutOfRange {
-                    node: i as u64,
-                    parent: pid as u64,
-                })?
-                .clone();
-            parents.push(th);
+            let th = thms.get(pid as usize).ok_or(Error::ParentOutOfRange {
+                node: i as u64,
+                parent: pid as u64,
+            })?;
+            parents.push(th.clone());
         }
         let th = apply_rule_checked(
             i as u64,
-            n,
-            &p,
+            n.rule,
+            n.payload,
+            p,
             &parents,
             theory,
             imports,
-            &mut constants,
-            &mut types,
-            &mut type_halves,
+            &mut ctx.constants,
+            &mut ctx.types,
+            &mut ctx.type_halves,
         )?;
-        match n.rule {
-            Rule::Axiom => {
-                axiom_seen.insert(statement_digest(&th.concl));
-            }
-            Rule::Import => {
-                import_seen.insert(sequent_digest(&th.hyps, &th.concl));
-            }
-            _ => {}
-        }
+        record_assumptions(n.rule, &th, ctx);
         thms.push(th);
     }
 
+    let root = thms
+        .get(p.root as usize)
+        .cloned()
+        .ok_or_else(|| Error::Malformed("root node was not validated".into()))?;
+    Ok((root, thms.len() as u64))
+}
+/// Checks that need the complete replay: complete type extensions, the
+/// claimed axiom/import sets, a closed root, the object's environment, and the
+/// statement identity.
+#[allow(clippy::too_many_arguments)]
+fn finish_validation(
+    scan: &ObjectScan,
+    root: &Thm,
+    ctx: &ReplayContext,
+    theory: &ValidatedTheory,
+    imports: &CheckedTheoremStore,
+    expected: &Expected,
+    budget: u64,
+    peak_live: u64,
+    mode: ReplayMode,
+) -> Result<Validation, Error> {
+    let p = &scan.obj;
+
     // Every type extension must be complete: both the abs/rep and rep/abs
     // halves, under the same triple (`G1.4`).
-    for (k, (abs, rep)) in &type_halves {
+    for (k, (abs, rep)) in &ctx.type_halves {
         if !*abs || !*rep {
             return Err(Error::RuleFailure {
                 node: p.root as u64,
@@ -2717,14 +3083,13 @@ pub fn validate(
         }
     }
 
-    if axiom_seen != p.axiom_digests {
+    if ctx.axiom_seen != p.axiom_digests {
         return Err(Error::AssumptionSetMismatch { what: "axiom" });
     }
-    if import_seen != p.import_digests {
+    if ctx.import_seen != p.import_digests {
         return Err(Error::AssumptionSetMismatch { what: "import" });
     }
 
-    let root = &thms[p.root as usize];
     if !root.hyps.is_empty() {
         return Err(Error::RootNotClosed(root.hyps.len()));
     }
@@ -2766,19 +3131,22 @@ pub fn validate(
     }
 
     Ok(Validation {
-        theorem: p.name,
+        theorem: p.name.clone(),
         statement_digest: hex32(&statement_digest(&root.concl)),
         statement_id: hex32(&got_id),
         theory_digest: theory.digest_hex(),
         store_digest: imports.digest_hex(),
         derivation_digest: hex32(&p.file_digest),
-        node_count: p.nodes.len() as u64,
-        reachable: p.nodes.len() as u64,
+        node_count: scan.node_count as u64,
+        reachable: scan.node_count as u64,
         raw_nodes: p.raw_nodes,
         inference_total: p.inference_total,
         inference_begin: p.inference_begin,
         imports: p.import_digests.len() as u64,
         axioms: p.axioms.iter().map(|(_, d, _)| d.clone()).collect(),
+        peak_live_nodes: peak_live,
+        budget,
+        replay_mode: mode.name(),
     })
 }
 
@@ -2786,7 +3154,8 @@ pub fn validate(
 #[allow(clippy::too_many_arguments)]
 fn apply_rule_checked(
     node: u64,
-    n: &ObjNode,
+    rule: Rule,
+    payload: &[u8],
     p: &ParsedObject,
     parents: &[Thm],
     theory: &ValidatedTheory,
@@ -2795,13 +3164,12 @@ fn apply_rule_checked(
     types: &mut BTreeSet<String>,
     type_halves: &mut BTreeMap<(String, String, String), (bool, bool)>,
 ) -> Result<Thm, Error> {
-    let rule = n.rule;
     let fail = |why: String| Error::RuleFailure {
         node,
         rule: rule.name(),
         why,
     };
-    let mut c = Cursor::new(&n.payload);
+    let mut c = Cursor::new(payload);
     let mut hyps = Vec::new();
     let concl: TermRef;
     match rule {
@@ -3110,31 +3478,23 @@ mod tests {
             axiom_digests: BTreeSet::new(),
             import_digests: BTreeSet::new(),
             axioms: vec![],
-            nodes: vec![],
             types: vec![Type::App("bool".into(), vec![])],
             terms,
             file_digest: [0; 32],
         }
     }
 
-    fn leaf(rule: Rule, payload: Vec<u8>) -> ObjNode {
-        ObjNode {
-            rule,
-            p0: ABSENT,
-            p1: ABSENT,
-            payload,
-        }
-    }
-
     fn run_leaf(
         obj: &ParsedObject,
-        n: &ObjNode,
+        rule: Rule,
+        payload: &[u8],
         theory: &ValidatedTheory,
         store: &CheckedTheoremStore,
     ) -> Result<Thm, Error> {
         apply_rule_checked(
             0,
-            n,
+            rule,
+            payload,
             obj,
             &[],
             theory,
@@ -3212,7 +3572,15 @@ mod tests {
         let store = d.join("store.hlst");
         let expected = d.join("expected.txt");
         std::fs::write(&raw_path, raw).unwrap();
-        let summary = finalize(&raw_path, &object, Some(&store), None, Some(&expected)).unwrap();
+        let summary = finalize(
+            &raw_path,
+            &object,
+            Some(&store),
+            None,
+            Some(&expected),
+            None,
+        )
+        .unwrap();
         Fixture {
             summary,
             object,
@@ -3222,10 +3590,29 @@ mod tests {
     }
 
     fn check(f: &Fixture) -> Result<Validation, Error> {
+        check_mode(f, ReplayMode::Frontier)
+    }
+
+    fn check_mode(f: &Fixture, mode: ReplayMode) -> Result<Validation, Error> {
         let store = CheckedTheoremStore::load(&f.store)?;
         let theory = ValidatedTheory::with_store(&store);
         let expected = Expected::load(&f.expected)?;
-        validate(&f.object, &expected, &theory, &store, 1_000_000)
+        validate_with(&f.object, &expected, &theory, &store, 1_000_000, mode)
+    }
+
+    /// `n`-node chain: node 0 is `REFL x`; node `i` is `TRANS(i - 1, 0)`.
+    /// Node 0 therefore has `n - 1` consumers and stays live for the whole
+    /// replay, while every other node is consumed exactly once.
+    fn chain_raw(n: u32, x: &TermRef) -> Vec<u8> {
+        let mut raw = Vec::new();
+        raw.extend_from_slice(RAW_MAGIC);
+        raw.extend_from_slice(&raw_node(Rule::Refl, ABSENT, ABSENT, &term_payload(x)));
+        for i in 1..n {
+            raw.extend_from_slice(&raw_node(Rule::Trans, i - 1, 0, &[]));
+        }
+        let concl = mk_eq(x.clone(), x.clone()).unwrap();
+        raw.extend_from_slice(&raw_footer("CHAIN", n - 1, &[], &concl, n, 0, n, &[]));
+        raw
     }
 
     fn simple_raw(name: &str, term: &TermRef) -> Vec<u8> {
@@ -3247,18 +3634,17 @@ mod tests {
         put_u32(&mut payload, 1); // one hypothesis
         put_u32(&mut payload, 0); // hypothesis = term 0
         put_u32(&mut payload, 0); // conclusion = term 0
-        let node = leaf(Rule::Import, payload);
         let theory = ValidatedTheory::default();
 
         let empty = CheckedTheoremStore::empty();
-        let err = run_leaf(&obj, &node, &theory, &empty).unwrap_err();
+        let err = run_leaf(&obj, Rule::Import, &payload, &theory, &empty).unwrap_err();
         assert!(matches!(err, Error::ImportNotJustified { .. }), "{err}");
 
         let good = CheckedTheoremStore::from_theorems(&[Thm {
             hyps: vec![x.clone()],
             concl: x,
         }]);
-        assert!(run_leaf(&obj, &node, &theory, &good).is_ok());
+        assert!(run_leaf(&obj, Rule::Import, &payload, &theory, &good).is_ok());
     }
 
     #[test]
@@ -3267,11 +3653,10 @@ mod tests {
         let obj = obj_with_terms(vec![p.clone()]);
         let mut payload = Vec::new();
         put_u32(&mut payload, 0);
-        let node = leaf(Rule::Axiom, payload);
         let store = CheckedTheoremStore::empty();
 
         let empty = ValidatedTheory::default();
-        let err = run_leaf(&obj, &node, &empty, &store).unwrap_err();
+        let err = run_leaf(&obj, Rule::Axiom, &payload, &empty, &store).unwrap_err();
         assert!(matches!(err, Error::AxiomNotAuthorised { .. }), "{err}");
 
         let mut axioms = BTreeSet::new();
@@ -3284,7 +3669,7 @@ mod tests {
             BTreeSet::new(),
             store.digest(),
         );
-        assert!(run_leaf(&obj, &node, &theory, &store).is_ok());
+        assert!(run_leaf(&obj, Rule::Axiom, &payload, &theory, &store).is_ok());
     }
 
     #[test]
@@ -3292,11 +3677,11 @@ mod tests {
         let lhs = Rc::new(Term::Var("foo".into(), bool_ty()));
         let definition = mk_eq(lhs, bc("base")).unwrap();
         let obj = obj_with_terms(vec![definition]);
-        let node = leaf(Rule::Definition, {
+        let payload = {
             let mut v = Vec::new();
             put_u32(&mut v, 0);
             v
-        });
+        };
         let store = CheckedTheoremStore::empty();
         let result = mk_eq(bc("foo"), bc("base")).unwrap();
         let mut defs = BTreeSet::new();
@@ -3311,7 +3696,7 @@ mod tests {
             BTreeSet::new(),
             store.digest(),
         );
-        assert!(run_leaf(&obj, &node, &theory, &store).is_ok());
+        assert!(run_leaf(&obj, Rule::Definition, &payload, &theory, &store).is_ok());
 
         // Authorised but the name already exists: refused.
         let mut constants = BTreeSet::new();
@@ -3324,7 +3709,7 @@ mod tests {
             BTreeSet::new(),
             store.digest(),
         );
-        let err = run_leaf(&obj, &node, &rebinding, &store).unwrap_err();
+        let err = run_leaf(&obj, Rule::Definition, &payload, &rebinding, &store).unwrap_err();
         assert!(matches!(err, Error::DefinitionNotFresh { .. }), "{err}");
     }
 
@@ -3341,13 +3726,13 @@ mod tests {
         put_str(&mut payload, "ty");
         put_str(&mut payload, "abs");
         put_str(&mut payload, "rep");
-        let node = leaf(Rule::TypeDefAbs, payload);
         let store = CheckedTheoremStore::empty();
 
         let empty = ValidatedTheory::default();
         let err = apply_rule_checked(
             0,
-            &node,
+            Rule::TypeDefAbs,
+            &payload,
             &obj,
             std::slice::from_ref(&parent),
             &empty,
@@ -3374,7 +3759,8 @@ mod tests {
         );
         let ok = apply_rule_checked(
             0,
-            &node,
+            Rule::TypeDefAbs,
+            &payload,
             &obj,
             &[parent],
             &theory,
@@ -3384,6 +3770,59 @@ mod tests {
             &mut BTreeMap::new(),
         );
         assert!(ok.is_ok(), "{:?}", ok.err());
+    }
+
+    #[test]
+    fn g1_7_finalize_authorises_the_definitions_it_reaches() {
+        // The checker authorises a definition through the theory (`G1.3`).  A
+        // derivation that introduces a constant therefore exports a theory
+        // that lists exactly that definition, and a theory without it refuses
+        // the replay.
+        let cty = bool_ty();
+        let lhs = Rc::new(Term::Var("foo".into(), cty.clone()));
+        let body = bc("base");
+        let definition = mk_eq(lhs, body.clone()).unwrap();
+        let mut raw = Vec::new();
+        raw.extend_from_slice(RAW_MAGIC);
+        raw.extend_from_slice(&raw_node(
+            Rule::Definition,
+            ABSENT,
+            ABSENT,
+            &term_payload(&definition),
+        ));
+        let concl = mk_eq(Rc::new(Term::Const("foo".into(), cty)), body).unwrap();
+        raw.extend_from_slice(&raw_footer("DEF", 0, &[], &concl, 1, 0, 1, &[]));
+
+        let d = tmpdir();
+        let raw_path = d.join("def.raw");
+        let object = d.join("def.hlpo");
+        let store_path = d.join("def.hlst");
+        let expected_path = d.join("def.expected");
+        let theory_path = d.join("def.theory");
+        std::fs::write(&raw_path, &raw).unwrap();
+        let summary = finalize(
+            &raw_path,
+            &object,
+            Some(&store_path),
+            None,
+            Some(&expected_path),
+            Some(&theory_path),
+        )
+        .unwrap();
+        assert_eq!(summary.definitions.len(), 1);
+
+        let store = CheckedTheoremStore::load(&store_path).unwrap();
+        let expected = Expected::load(&expected_path).unwrap();
+        let exported = ValidatedTheory::parse(&std::fs::read(&theory_path).unwrap()).unwrap();
+        assert!(validate(&object, &expected, &exported, &store, 1_000_000).is_ok());
+
+        let bare = ValidatedTheory::with_store(&store);
+        let err = validate(&object, &expected, &bare, &store, 1_000_000).unwrap_err();
+        assert!(
+            matches!(err, Error::DefinitionNotAuthorised { .. }),
+            "{err}"
+        );
+        eprintln!("UNAUTHORISED DEFINITION REFUSED: {err}");
     }
 
     #[test]
@@ -3433,6 +3872,152 @@ mod tests {
             f.summary.peak_buffered_payload_bytes < 4096,
             "peak payload buffer {}",
             f.summary.peak_buffered_payload_bytes
+        );
+    }
+
+    // ---- frontier-bounded replay ------------------------------------------
+
+    #[test]
+    fn frontier_releases_theorems_on_their_last_consumer() {
+        // 20,000 nodes, but at most two theorems are ever retained: node 0
+        // (consumed by every link) and the current link.
+        let n = 20_000u32;
+        let x = bv("x");
+        let f = finalize_stream(&chain_raw(n, &x));
+        assert_eq!(f.summary.node_count, n as u64);
+
+        let frontier = check_mode(&f, ReplayMode::Frontier).unwrap();
+        let retained = check_mode(&f, ReplayMode::Retained).unwrap();
+        assert_eq!(frontier.statement_id, retained.statement_id);
+        assert_eq!(frontier.node_count, n as u64);
+        assert_eq!(frontier.replay_mode, "frontier");
+        assert_eq!(frontier.budget, 1_000_000);
+        assert!(
+            frontier.peak_live_nodes <= 3,
+            "frontier peak live {}",
+            frontier.peak_live_nodes
+        );
+        // The same object under the old scheme retains every node.
+        assert_eq!(retained.peak_live_nodes, n as u64);
+        eprintln!(
+            "FRONTIER PEAK {} of {} nodes (retained: {})",
+            frontier.peak_live_nodes, frontier.node_count, retained.peak_live_nodes
+        );
+    }
+
+    #[test]
+    fn frontier_and_retained_agree_on_a_shared_parent() {
+        // Two rewrites of the same leaf feed one TRANS: the leaf is named
+        // twice by the same node, so its consumer count is two and it is only
+        // released after the second decrement.
+        let x = bv("x");
+        let mut raw = Vec::new();
+        raw.extend_from_slice(RAW_MAGIC);
+        raw.extend_from_slice(&raw_node(Rule::Refl, ABSENT, ABSENT, &term_payload(&x)));
+        raw.extend_from_slice(&raw_node(Rule::Trans, 0, 0, &[]));
+        let concl = mk_eq(x.clone(), x).unwrap();
+        raw.extend_from_slice(&raw_footer("SELF", 1, &[], &concl, 2, 0, 2, &[]));
+        let f = finalize_stream(&raw);
+        let frontier = check_mode(&f, ReplayMode::Frontier).unwrap();
+        let retained = check_mode(&f, ReplayMode::Retained).unwrap();
+        assert_eq!(frontier.statement_id, retained.statement_id);
+        assert_eq!(frontier.node_count, 2);
+    }
+
+    #[test]
+    fn budget_is_enforced_before_parse() {
+        // `XXI.B4`: the node ceiling is checked against the *declared* node
+        // count while the object is scanned, before the consumer array is
+        // allocated, so a hostile object cannot make the checker allocate it
+        // has not first been permitted by the budget.
+        let x = bv("x");
+        let f = finalize_stream(&chain_raw(1_000, &x));
+        let err = match scan_object(&f.object, 10) {
+            Err(e) => e,
+            Ok(_) => panic!("scan must refuse a node count above the budget"),
+        };
+        assert!(
+            matches!(
+                err,
+                Error::BudgetExceeded {
+                    budget: 10,
+                    reached: 1_000
+                }
+            ),
+            "{err}"
+        );
+        // The same object scans (and can then be replayed) at its own size.
+        let scan = scan_object(&f.object, 1_000).unwrap();
+        assert_eq!(scan.node_count, 1_000);
+        eprintln!("BUDGET BEFORE PARSE: {err}");
+    }
+
+    #[test]
+    fn replay_is_bound_to_the_checked_bytes() {
+        // `XXI.B1`: scan object A, replace the path with a different valid
+        // object B, then replay from the scan.  Replay must consume A's bytes,
+        // never reopen the path: the derivation identity must still be A's.
+        let fa = finalize_stream(&simple_raw("A", &bv("x")));
+        let fb = finalize_stream(&simple_raw("B", &bv("y")));
+        let store = CheckedTheoremStore::load(&fa.store).unwrap();
+        let theory = ValidatedTheory::with_store(&store);
+        let expected = Expected::load(&fa.expected).unwrap();
+
+        let scan = scan_object(&fa.object, 1_000_000).unwrap();
+        std::fs::copy(&fb.object, &fa.object).unwrap();
+
+        // From the scan: still A, with A's derivation digest.
+        let v = validate_scan(
+            &scan,
+            &expected,
+            &theory,
+            &store,
+            1_000_000,
+            ReplayMode::Frontier,
+        )
+        .unwrap();
+        assert_eq!(v.theorem, "A");
+        assert_eq!(v.derivation_digest, hex32(&scan.obj.file_digest));
+        assert_eq!(v.statement_id, fa.summary.statement_id);
+
+        // From the path (now B): the swap is visible and is refused.
+        assert!(validate_with(
+            &fa.object,
+            &expected,
+            &theory,
+            &store,
+            1_000_000,
+            ReplayMode::Frontier,
+        )
+        .is_err());
+        eprintln!("TOCTOU BOUND: replay used the scanned bytes, not the replaced path");
+    }
+
+    #[test]
+    fn alpha_eq_follows_innermost_shadowing() {
+        // HOL Light's `ordav` walks its binder environment innermost-first;
+        // a shadowed binder (`\q. ... \q. ...`) must therefore be resolved to
+        // the inner binding, exactly as the kernel does.  Getting this wrong
+        // keeps hypotheses that `term_remove` should have dropped, which makes
+        // the ABS side condition fail on real objects.
+        let num = || Rc::new(Type::App("num".into(), vec![]));
+        let v = |n: &str| -> TermRef { Rc::new(Term::Var(n.into(), num())) };
+        let inner: TermRef = Rc::new(Term::Abs(v("q"), v("q")));
+        let a = Rc::new(Term::Abs(
+            v("q"),
+            Rc::new(Term::Comb(inner.clone(), v("q"))),
+        ));
+        let b = Rc::new(Term::Abs(
+            v("x"),
+            Rc::new(Term::Comb(inner.clone(), v("x"))),
+        ));
+        assert!(alpha_eq(&a, &b), "shadowed binders must be alpha-equal");
+
+        // A free variable in place of the bound one is still a difference.
+        let c = Rc::new(Term::Abs(v("x"), Rc::new(Term::Comb(inner, v("y")))));
+        assert!(
+            !alpha_eq(&a, &c),
+            "a different free variable must not match"
         );
     }
 
@@ -3538,7 +4123,7 @@ mod tests {
         let d = tmpdir();
         let p = d.join("t.raw");
         std::fs::write(&p, &raw[..raw.len() / 2]).unwrap();
-        let err = finalize(&p, &d.join("o"), None, None, None).unwrap_err();
+        let err = finalize(&p, &d.join("o"), None, None, None, None).unwrap_err();
         assert!(
             matches!(err, Error::RawTruncated | Error::RawShortRecord),
             "{err}"

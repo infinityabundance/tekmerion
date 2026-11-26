@@ -1,0 +1,70 @@
+{
+  "schema": "tekmerion-ix87-fixes/1",
+  "receipt": "ix87",
+  "status": "PROVISIONAL — integrity fixes to a checker that is not proved sound (XVII.B5, G1-G3 open)",
+  "date": "2026-11-26",
+  "branch": "staging",
+  "base_commit": "64f06e1fb09ecaf34b8fa7f97554df03c66f0705",
+  "files": [
+    "src/tools/proof_object.rs",
+    "src/bin/proof_object.rs",
+    "tools/export_proof_objects.sh",
+    "tools/compare_checkers.sh"
+  ],
+  "fixes": [
+    {
+      "id": "XXI.B1",
+      "name": "time-of-check/time-of-use on the object file",
+      "defect": "scan_object(path) verified the digest, then replay_frontier() reopened the path with NodeReader::open(path, offset). A file changed between the two opens would be replayed while the reported derivation digest described different bytes.",
+      "fix": "scan_object now reads the file once into an immutable Vec<u8>, verifies the digest over that buffer, and parses the header, tables and node records from it. ObjectScan owns the buffer; both replay modes read node records from scan.bytes (node_reader/next_node) and payloads are borrowed slices. The path is never reopened.",
+      "test": "replay_is_bound_to_the_checked_bytes",
+      "test_evidence": "TOCTOU BOUND: replay used the scanned bytes, not the replaced path",
+      "test_detail": "Scans object A, copies a different valid object B over A's path, then replays from the scan: it validates A with A's derivation digest, while validate_with on the now-B path is refused."
+    },
+    {
+      "id": "XXI.B4",
+      "name": "node budget enforced only after the scan",
+      "defect": "The node budget was checked inside the replay loop, after the scan had already sized per-node arrays from the object's declared node count. A hostile object could request a large allocation before any limit applied.",
+      "fix": "scan_object(path, budget) now receives the budget. It refuses with BudgetExceeded when the declared node count exceeds the budget, and does so before allocating the consumer array. Every other declared count (hypotheses, axioms, imports, registry, types, type arguments, terms) is bounded by the bytes actually remaining in the verified body before Vec::with_capacity, and every payload length is a bounds-checked slice (Cursor::take).",
+      "test": "budget_is_enforced_before_parse",
+      "test_evidence": "BUDGET BEFORE PARSE: refused: replay reached node 1000, over its budget of 10",
+      "test_detail": "A 1000-node chain object is refused by scan_object with budget 10 (reached = 1000, the declared count) and scans at budget 1000."
+    },
+    {
+      "id": "XXI.B7",
+      "name": "alpha_eq resolved shadowed binders outermost-first (found while replaying the bignum object)",
+      "defect": "alpha_eq's ordav walked its binder environment front-to-back, i.e. outermost-first, while HOL Light's ordav walks its list head-first (innermost-first). With a shadowed binder (`\\q. ... \\q. ...`) it reported alpha-inequality for an alpha-equal pair, so term_remove kept a hypothesis HOL Light had removed. The retained hypothesis contained a free variable, and a later ABS was refused: the real arm/add object failed at node 363 with `ABS: variable free in hypotheses` in both frontier and retained modes, and with the pre-IX.85 checker too.",
+      "fix": "ordav now iterates the binder environment in reverse (innermost binding first), matching HOL Light.",
+      "test": "alpha_eq_follows_innermost_shadowing",
+      "test_evidence": "test tools::proof_object::tests::alpha_eq_follows_innermost_shadowing ... ok; and the real arm/add object, which was refused at node 363 before, now VALIDATED.",
+      "test_detail": "Compares `\\q. (\\q. q) q` with `\\x. (\\q. q) x` (alpha-equal, shadowed) and `\\x. (\\q. q) y` (not alpha-equal)."
+    }
+  ],
+  "tests": {
+    "proof_object_lib": "20 passed; 0 failed; 0 ignored; 129 filtered out",
+    "workspace": "all test binaries ok (cargo test --offline); doc-tests 3 passed",
+    "clippy": "cargo clippy --offline --all-targets -- -D warnings: clean",
+    "fmt": "cargo fmt --check: clean",
+    "python": "git ls-files '*.py': empty"
+  },
+  "controls_still_fire": {
+    "truncated": "TRUNCATED REFUSED: object: bad magic",
+    "spliced": "SPLICED REFUSED: refused: node 2 (TRANS) does not follow from its parents: middle terms differ",
+    "wrong_conclusion": "WRONG CONCLUSION REFUSED: refused: replayed statement identity 01efd6d0f08065a453e715d86da87fbf8d480a928e01184eb69ea163d1f8855e differs from expected 104a8e411f02c70462efb852951bf4bc45db0823f5df3a4ba5e129ead304f569",
+    "unjustified_import": "UNJUSTIFIED IMPORT REFUSED: refused: IMPORT sequent 20d053e45f1574d4e616031532dedb190cba4e45445cad68ba46096ed8429029 is not justified by the checked-theorem store",
+    "unauthorised_axiom": "UNAUTHORISED AXIOM REFUSED: refused: axiom a6f5e0281b602f265f700a371ffc3c703b692d1d4b1a6313b8c89ab31c5dbd55 is not authorised by the validated theory",
+    "frontier_bound": "FRONTIER PEAK 2 of 20000 nodes (retained: 20000)"
+  },
+  "still_open": [
+    "The checker is well-formed, not proved sound. XVII.B5 and G1-G3 remain open.",
+    "XXI.B2: all type and term tables remain resident; only theorem retention is frontier-bounded.",
+    "XXI.B3: the consumer-count array (one u32 per node) is still retained; it is a metadata array, not theorems.",
+    "XXI.B5/B6 (immutable theory, atomic type extension) are untouched by this change."
+  ],
+  "commands": [
+    "tools/cap.sh 20G -- cargo test --offline",
+    "cargo clippy --offline --all-targets -- -D warnings",
+    "cargo fmt --check",
+    "git ls-files '*.py'"
+  ]
+}

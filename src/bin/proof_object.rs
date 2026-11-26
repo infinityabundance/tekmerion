@@ -20,14 +20,16 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use tekmerion::tools::proof_object::{self, CheckedTheoremStore, Error, Expected, ValidatedTheory};
+use tekmerion::tools::proof_object::{
+    self, CheckedTheoremStore, Error, Expected, ReplayMode, ValidatedTheory,
+};
 
 fn usage() -> ! {
     eprintln!(
         "usage:\n  \
-         proof_object finalize --raw S --object O [--store T] [--theory H] [--expected E] [--json J]\n  \
+         proof_object finalize --raw S --object O [--store T] [--theory H] [--theory-out H2] [--expected E] [--json J]\n  \
          proof_object theory --store T --out H [--axiom HEX]... [--definition HEX]... [--constant NAME]... [--type NAME]... [--typedef TY ABS REP]...\n  \
-         proof_object validate --object O --theory H --store T --expected E [--budget N] [--json J]\n  \
+         proof_object validate --object O --theory H --store T --expected E [--budget N] [--replay frontier|retained] [--json J]\n  \
          proof_object scan --raw S"
     );
     std::process::exit(2)
@@ -111,6 +113,7 @@ fn main() -> ExitCode {
             let mut object = None;
             let mut store = None;
             let mut theory = None;
+            let mut theory_out = None;
             let mut expected = None;
             let mut json = None;
             let mut i = 2;
@@ -123,6 +126,9 @@ fn main() -> ExitCode {
                     "--store" => store = Some(PathBuf::from(arg_value(&args, &mut i, "--store"))),
                     "--theory" => {
                         theory = Some(PathBuf::from(arg_value(&args, &mut i, "--theory")))
+                    }
+                    "--theory-out" => {
+                        theory_out = Some(PathBuf::from(arg_value(&args, &mut i, "--theory-out")))
                     }
                     "--expected" => {
                         expected = Some(PathBuf::from(arg_value(&args, &mut i, "--expected")))
@@ -151,16 +157,19 @@ fn main() -> ExitCode {
                 },
                 None => None,
             };
+            let t0 = std::time::Instant::now();
             match proof_object::finalize(
                 &raw,
                 &object,
                 store.as_deref(),
                 theory.as_ref(),
                 expected.as_deref(),
+                theory_out.as_deref(),
             ) {
                 Ok(s) => {
+                    let wall_ms = t0.elapsed().as_millis();
                     let out = format!(
-                        "{{\"theorem\":\"{}\",\"statement_digest\":\"{}\",\"statement_id\":\"{}\",\"theory_digest\":\"{}\",\"store_digest\":\"{}\",\"derivation_digest\":\"{}\",\"node_count\":{},\"raw_nodes\":{},\"bytes\":{},\"root_id\":{},\"imports\":{},\"inference_total\":{},\"inference_begin\":{},\"inference_delta\":{},\"peak_buffered_payload_bytes\":{},\"peak_rss_kb\":{},\"axioms\":{}}}",
+                        "{{\"theorem\":\"{}\",\"statement_digest\":\"{}\",\"statement_id\":\"{}\",\"theory_digest\":\"{}\",\"store_digest\":\"{}\",\"derivation_digest\":\"{}\",\"node_count\":{},\"raw_nodes\":{},\"bytes\":{},\"root_id\":{},\"imports\":{},\"inference_total\":{},\"inference_begin\":{},\"inference_delta\":{},\"peak_buffered_payload_bytes\":{},\"wall_ms\":{},\"peak_rss_kb\":{},\"axioms\":{},\"definitions\":{},\"type_definitions\":{}}}",
                         json_escape(&s.theorem),
                         s.statement_digest,
                         s.statement_id,
@@ -176,8 +185,11 @@ fn main() -> ExitCode {
                         s.inference_begin,
                         s.inference_delta(),
                         s.peak_buffered_payload_bytes,
+                        wall_ms,
                         self_peak_rss_kb(),
                         json_array(&s.axioms),
+                        json_array(&s.definitions),
+                        json_array(&s.type_definitions),
                     );
                     if let Some(p) = json {
                         if let Err(e) = std::fs::write(&p, format!("{out}\n")) {
@@ -298,6 +310,7 @@ fn main() -> ExitCode {
             let mut expected = None;
             let mut json = None;
             let mut budget = 2_000_000u64;
+            let mut replay = ReplayMode::Frontier;
             let mut i = 2;
             while i < args.len() {
                 match args[i].as_str() {
@@ -314,6 +327,16 @@ fn main() -> ExitCode {
                     "--budget" => {
                         let v = arg_value(&args, &mut i, "--budget");
                         budget = v.parse().unwrap_or_else(|_| usage());
+                    }
+                    "--replay" => {
+                        replay = match arg_value(&args, &mut i, "--replay").as_str() {
+                            "frontier" => ReplayMode::Frontier,
+                            "retained" => ReplayMode::Retained,
+                            other => {
+                                eprintln!("unknown replay mode {other}");
+                                usage();
+                            }
+                        };
                     }
                     "--json" => json = Some(PathBuf::from(arg_value(&args, &mut i, "--json"))),
                     other => {
@@ -352,10 +375,12 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            match proof_object::validate(&object, &expected, &theory, &store, budget) {
+            let t0 = std::time::Instant::now();
+            match proof_object::validate_with(&object, &expected, &theory, &store, budget, replay) {
                 Ok(v) => {
+                    let wall_ms = t0.elapsed().as_millis();
                     let out = format!(
-                        "{{\"theorem\":\"{}\",\"statement_digest\":\"{}\",\"statement_id\":\"{}\",\"theory_digest\":\"{}\",\"store_digest\":\"{}\",\"derivation_digest\":\"{}\",\"node_count\":{},\"reachable\":{},\"raw_nodes\":{},\"imports\":{},\"inference_total\":{},\"inference_begin\":{},\"peak_rss_kb\":{},\"axioms\":{}}}",
+                        "{{\"theorem\":\"{}\",\"statement_digest\":\"{}\",\"statement_id\":\"{}\",\"theory_digest\":\"{}\",\"store_digest\":\"{}\",\"derivation_digest\":\"{}\",\"node_count\":{},\"reachable\":{},\"raw_nodes\":{},\"imports\":{},\"inference_total\":{},\"inference_begin\":{},\"replay\":\"{}\",\"budget\":{},\"peak_live_nodes\":{},\"wall_ms\":{},\"peak_rss_kb\":{},\"axioms\":{}}}",
                         json_escape(&v.theorem),
                         v.statement_digest,
                         v.statement_id,
@@ -368,6 +393,10 @@ fn main() -> ExitCode {
                         v.imports,
                         v.inference_total,
                         v.inference_begin,
+                        v.replay_mode,
+                        v.budget,
+                        v.peak_live_nodes,
+                        wall_ms,
                         self_peak_rss_kb(),
                         json_array(&v.axioms),
                     );

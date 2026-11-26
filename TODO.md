@@ -3839,40 +3839,61 @@ Nothing omitted. `XXI.F` supersedes `XX.F`.
 
 ## XXI.B — The WIP checker's remaining defects (`wip/xix-i-frontier-bounded`, `9beb6ee`)
 
-The reviewer's source inspection, plus the distinction that matters most.
+The reviewer's source inspection, plus the distinction that matters most. `B1`, `B4` and the
+newly found `B7` are fixed in `ix87`.
 
-- [ ] **XXI.B1. Time-of-check/time-of-use on the object file.** `scan_object(path)` checks the
-  digest; `replay_frontier()` then reopens the path via `NodeReader::open()`. If the file changes in
-  between, the replay consumes bytes the digest never described, and the reported derivation
-  identity no longer describes the evidence. Bind replay to the **same immutable bytes** (read once,
-  or hold an open descriptor plus re-verify on close).
+- [x] **XXI.B1. Time-of-check/time-of-use on the object file.** Fixed in `ix87`
+  (`src/tools/proof_object.rs`): `scan_object` reads the file **once** into an immutable buffer,
+  hashes it, and both replay modes read node records and payload slices from that same buffer; the
+  path is never reopened. Test `replay_is_bound_to_the_checked_bytes` scans A, replaces the path
+  with a different valid object B, and shows replay still uses A's bytes and A's derivation digest
+  while `validate_with` on the path is refused. Cost: the object file is resident (see `B2`).
 - [ ] **XXI.B2. All term and type tables remain resident.** Frontier-bounded *theorem* retention is
-  not frontier-bounded *total memory*. Say which one a number measures, and implement term-level
-  liveness or bounded storage before claiming scalability.
-- [ ] **XXI.B3.** Two consumer-count arrays retained — reduce or externalise.
-- [ ] **XXI.B4.** Node budget is enforced **after** the scan — enforce resource budgets throughout
-  parsing, so a hostile object cannot allocate before any limit applies.
+  not frontier-bounded *total memory*. `ix87` publishes `peak_live_nodes` (theorem retention) and
+  `peak_rss_kb` (whole process, including the object bytes and tables) as separate numbers and
+  says which is which. Term-level liveness or bounded storage is still open.
+- [ ] **XXI.B3.** The consumer-count array (one `u32` per node) is still retained. It is metadata,
+  not theorems; reducing or externalising it is still open.
+- [x] **XXI.B4. Node budget enforced after the scan.** Fixed in `ix87`: `scan_object(path, budget)`
+  refuses a declared node count above the budget **before** the consumer array is allocated, bounds
+  every other declared count by the verified body's remaining bytes, and bounds-check every
+  payload slice. Test `budget_is_enforced_before_parse` (1000-node object, budget 10).
 - [ ] **XXI.B5.** `ValidatedTheory` fields are publicly mutable while the digest is cached: make
   authority-bearing fields private; every extension yields a new validated value with a new
-  identity.
+  identity. **Still open.**
 - [ ] **XXI.B6.** Type-definition halves still conflict on freshness — make theory extension one
-  atomic justified operation producing both theorems.
+  atomic justified operation producing both theorems. **Still open.**
+- [x] **XXI.B7 (new, found while replaying the bignum object).** `alpha_eq`'s `ordav` walked the
+  binder environment outermost-first, while HOL Light walks it innermost-first. Under a shadowed
+  binder it reported alpha-inequality, so `term_remove` kept a hypothesis HOL Light had removed and
+  a later `ABS` failed: the real `arm/add_p25519` object was refused at node 363. Fixed by
+  iterating the environment innermost-first; test `alpha_eq_follows_innermost_shadowing`; the same
+  object now replays. This was a prerequisite for every `C` number.
 
 ## XXI.C — The measurement that would let the checker claim something new
 
 Export the three solver-free proof objects (add/sub/neg) in the format the Rust checker already
-consumes, then time anybody's checker on the same objects on the same machine:
+consumes, then time anybody's checker on the same objects on the same machine. `ix87` did the
+export and the timing; the independent side is blocked.
 
-- [ ] **XXI.C1.** Export the three objects; publish bytes, node count, replayable-vs-recorded node
-  ratio.
-- [ ] **XXI.C2.** Time the Rust checker: wall clock, peak RSS, inferences/second, deterministic
-  across two runs.
-- [ ] **XXI.C3.** Run the **same objects** through an independent checker (HOLTrace's C checker, or
-  Candle's kernel replay) on the same machine, and report the three numbers side by side.
-- [ ] **XXI.C4.** If the Rust checker is faster or smaller while accepting the same objects, that is
-  a measurable checking result — the first one this project can make about checking rather than
-  producing. If it is not, **the baseline is the result** and it is published as such. Report
-  checker-versus-checker, never checker-versus-nothing.
+- [x] **XXI.C1.** Exported (`ix87`): `arm/add` 64,895,202 B / 4,335,020 recorded / 3,205,212
+  reachable / 612 imports; `arm/neg` 62,436,134 B / 5,119,107 / 3,075,686 / 545; `arm/sub`
+  90,698,353 B / 6,258,132 / 4,215,004 / 587. The exported derivation deltas match the published
+  totals exactly (5,745,767 / 5,683,733 / 9,029,510). Objects in `.bench/ix87/objects`, numbers
+  in `research/receipts/ix87-*`.
+- [x] **XXI.C2.** Timed twice per object (`ix87`): checker 2.753/2.863 s (add), 4.445/4.452 s
+  (neg), 4.364/4.326 s (sub); peak RSS 108,704/108,540, 102,776/102,780, 139,304/139,092 KB;
+  peak live theorems 4,400 / 2,496 / 3,946. `statement_id`, `derivation_digest` and reachable count
+  are identical across the two runs. Both `replayed nodes/s` and the recorded proof's
+  `reported inferences/s` are published, separately labelled; they divide by different counts.
+- [ ] **XXI.C3. BLOCKED in `ix87`.** No HOLTrace or Candle binary/source is present offline; the
+  correct host `holtrace.cr.yp.to` is reachable but HOLTrace verifies its own `.50` trace format
+  inside HOL Light (`holtrace_restore`), not our `.hlpo`, so a converter or a re-recording is
+  required. No independent number was invented. The ready-to-run harness is
+  `tools/compare_checkers.sh <objects> [budget]`; it emits the blocked column unless
+  `INDEP_RUNNER`/`TRACE_DIR` are supplied. `holtrace.cr.cyp.to` (brief spelling) does not resolve.
+- [ ] **XXI.C4. Not claimable yet.** With `C3` blocked there is no checker-versus-checker result;
+  `ix87` publishes a baseline only and does not dress it up as a win. `C4` waits on `C3`.
 
 ## XXI.D — Charter refinements (make the claims no stronger than the mathematics)
 

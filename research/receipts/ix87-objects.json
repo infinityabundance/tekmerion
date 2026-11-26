@@ -1,0 +1,133 @@
+{
+  "schema": "tekmerion-ix87-objects/1",
+  "receipt": "ix87",
+  "status": "PROVISIONAL — three objects exported and replayed; the checker is NOT proved sound (XVII.B5, G1-G3 open)",
+  "date": "2026-11-26",
+  "branch": "staging",
+  "base_commit": "64f06e1fb09ecaf34b8fa7f97554df03c66f0705",
+  "environment": {
+    "free_g_head2_at_final_report": "               total        used        free      shared  buff/cache   available\nMem:             125          18           9           1          97         107",
+    "df_h_at_final_report": "/dev/nvme1n1p1  1.3T 1011G  251G  81% /mnt/1tb_kingston",
+    "note": "Every proof build ran through tools/cap.sh 12G; every finalize and replay through tools/cap.sh 20G. One heavy process at a time."
+  },
+  "source_csv": "research/receipts/ix87-objects.csv",
+  "source_md": "research/receipts/ix87-objects.md",
+  "provenance": {
+    "exporter": "tools/export_proof_objects.sh",
+    "recording_kernel": ".bench/hol-light-objects (untracked build; patch in tools/hol-light/proof-object.diff)",
+    "route": "aggregate algebraic close (TEKMERION_ALG_CLOSE route); answers from .bench/ix83/c1/*_alg.answer",
+    "objects_dir": ".bench/ix87/objects",
+    "note": "The objects were produced by re-recording the aggregate route; the recording kernel build itself is not tracked, only its patch is."
+  },
+  "objects": [
+    {
+      "tag": "arm_add_p25519",
+      "theorem": "BIGNUM_ADD_P25519_CORRECT",
+      "object_path": ".bench/ix87/objects/arm_add_p25519.hlpo",
+      "raw_path": ".bench/ix87/objects/arm_add_p25519.raw",
+      "answer_path": ".bench/ix83/c1/add_alg.answer",
+      "bytes": 64895202,
+      "recorded_nodes": 4335020,
+      "reachable_nodes": 3205212,
+      "imports": 612,
+      "inference_begin": 67646907,
+      "inference_total": 73392674,
+      "reported_inference_delta": 5745767,
+      "published_total": 5745767,
+      "published_source": "TODO XXI.A1 / ix86 (add = 5,745,767)",
+      "peak_live_nodes": 4400,
+      "runs": [
+        {"run": 1, "external_wall_ms": 2766, "checker_wall_ms": 2753, "peak_rss_kb": 108704, "replayed_nodes_per_s": 1164262, "reported_inferences_per_s": 2087093},
+        {"run": 2, "external_wall_ms": 2875, "checker_wall_ms": 2863, "peak_rss_kb": 108540, "replayed_nodes_per_s": 1119529, "reported_inferences_per_s": 2006904}
+      ],
+      "statement_id": "3c0740143cd4b5798701e093d5a4c8e82b6dbdf20567fec88fce01302d3ae61a",
+      "derivation_digest": "49d712214ca680ab95f40efa20e40abfbad9bd8b7ed623eaba42acf30ff87354",
+      "theory_digest": "527fb0bbf1052e2733d71a431ddb7408864536695d8916f0004f8306be80750a",
+      "store_digest": "2f8e1feebc7ac993c1b29399efd18e0dde6b56620c461d9012ef5353b05a3330"
+    },
+    {
+      "tag": "arm_neg_p25519",
+      "theorem": "BIGNUM_NEG_P25519_CORRECT",
+      "object_path": ".bench/ix87/objects/arm_neg_p25519.hlpo",
+      "raw_path": ".bench/ix87/objects/arm_neg_p25519.raw",
+      "answer_path": ".bench/ix83/c1/neg_alg.answer",
+      "bytes": 62436134,
+      "recorded_nodes": 5119107,
+      "reachable_nodes": 3075686,
+      "imports": 545,
+      "inference_begin": 67649313,
+      "inference_total": 73333046,
+      "reported_inference_delta": 5683733,
+      "published_total": 5683733,
+      "published_source": "TODO XXI.A1 / ix83,ix86 (neg = 5,683,733)",
+      "peak_live_nodes": 2496,
+      "runs": [
+        {"run": 1, "external_wall_ms": 4457, "checker_wall_ms": 4445, "peak_rss_kb": 102776, "replayed_nodes_per_s": 691943, "reported_inferences_per_s": 1278680},
+        {"run": 2, "external_wall_ms": 4464, "checker_wall_ms": 4452, "peak_rss_kb": 102780, "replayed_nodes_per_s": 690855, "reported_inferences_per_s": 1276670}
+      ],
+      "statement_id": "655acaead74d00345199d61d6a2d623d8c258ec53ea3a79dc2297393ea5b1369",
+      "derivation_digest": "dba9f73bfc31f24811dd40aba262f5746dd8c7b292933208acc5554cd6732f05",
+      "theory_digest": "1a02f930a43e4222a96913329830a3dece6e301b95b8f8b86b78c7eba1f0c10e",
+      "store_digest": "b82f49f52313e52c7aa59a41e1f9f5341f23f9b53c3c7924ace7ec2c0a74d3d6"
+    },
+    {
+      "tag": "arm_sub_p25519",
+      "theorem": "BIGNUM_SUB_P25519_CORRECT",
+      "object_path": ".bench/ix87/objects/arm_sub_p25519.hlpo",
+      "raw_path": ".bench/ix87/objects/arm_sub_p25519.raw",
+      "answer_path": ".bench/ix83/c1/sub_alg.answer",
+      "bytes": 90698353,
+      "recorded_nodes": 6258132,
+      "reachable_nodes": 4215004,
+      "imports": 587,
+      "inference_begin": 67670291,
+      "inference_total": 76699801,
+      "reported_inference_delta": 9029510,
+      "published_total": 9029510,
+      "published_source": "TODO XXI.A1 / ix83,ix86 (sub = 9,029,510)",
+      "peak_live_nodes": 3946,
+      "runs": [
+        {"run": 1, "external_wall_ms": 4376, "checker_wall_ms": 4364, "peak_rss_kb": 139304, "replayed_nodes_per_s": 965858, "reported_inferences_per_s": 2069090},
+        {"run": 2, "external_wall_ms": 4339, "checker_wall_ms": 4326, "peak_rss_kb": 139092, "replayed_nodes_per_s": 974342, "reported_inferences_per_s": 2087265}
+      ],
+      "statement_id": "3dfddffb6f4fd28032ef7828bf005ec5fb25835ea164198bae62a6d21cb0ac6a",
+      "derivation_digest": "f0ce19dcba405d658067a852995940817bf5598d53c858fdb06489295de44111",
+      "theory_digest": "decbdaa6b6bd8b2a91df98e7de51db5b8d0b529b61ffcb82940fe592e8bb7b04",
+      "store_digest": "4239cd9c42f73edfb5e52581c06629164a314b5cb0741806b32dbe45cb5970f2"
+    }
+  ],
+  "determinism": {
+    "result": "yes",
+    "checked": "statement_id, derivation_digest and reachable node count are identical in run 1 and run 2 for every object",
+    "note": "Two runs per object, sequential, same binary, same machine."
+  },
+  "measurement_definitions": {
+    "checker_wall_ms": "proof_object's own timer around validate_with: scan (read once, digest, parse tables) plus replay. Excludes process start and JSON write.",
+    "external_wall_ms": "whole process observed by the comparator (date before/after tools/cap.sh), includes cap.sh and process start.",
+    "peak_rss_kb": "VmHWM reported by proof_object (peak_rss_kb). Includes the whole object file (read once for XXI.B1), the type and term tables, the frontier, and the rule engine.",
+    "peak_live_nodes": "peak number of theorems retained at once (frontier bound). This is theorem retention, NOT total memory.",
+    "replayed_nodes_per_s": "reachable_nodes / (checker_wall_ms / 1000). The number of rule applications the checker performed per second.",
+    "reported_inferences_per_s": "(inference_total - inference_begin) / (checker_wall_ms / 1000). The recorded proof session's primitive-inference counter delta per second; it counts inferences the proof searched through, not the nodes checked. Do not conflate it with replayed_nodes_per_s."
+  },
+  "independent_checker": {
+    "result": "BLOCKED — no independent checker was available offline; no independent number is claimed",
+    "looked_for": [
+      "holtrace, holtrace_restore, holtrace-verify, candle, candle-checker on PATH",
+      "HOLTrace or Candle source/binary in the project tree, /home/one, /usr, /usr/local, /opt",
+      "HOLTrace or Candle in the opam switches hol-light, hol-light-objects, hol-light-stamp2, dsfb, creusot-zic"
+    ],
+    "network_note": "holtrace.cr.cyp.to (the spelling in the brief) does not resolve. The real host holtrace.cr.yp.to resolves and serves HTTP 200 from this machine, but nothing was downloaded or built in this run.",
+    "why_same_objects_cannot_be_run": "HOLTrace verifies its own .50 trace format inside a HOL Light session (holtrace_restore) and checks axioms/definitions/type definitions against that session's registries. The Tekmerion .hlpo format is different. Running the same objects needs a .hlpo -> .50 converter or a re-recording with HOLTrace's tracer; neither exists here.",
+    "comparator": "tools/compare_checkers.sh .bench/ix87/objects 8000000",
+    "comparator_opt_in": "INDEP_RUNNER=<runner> TRACE_DIR=<dir-with-.50> tools/compare_checkers.sh <object-dir> <budget>",
+    "never_faked": true
+  },
+  "limits": [
+    "The checker is not proved sound: XVII.B5 and G1-G3 remain open. Every timing is a timing of a checker whose soundness is not established.",
+    "Frontier-bounded theorem retention is not frontier-bounded total memory: the type and term tables and the whole object byte buffer remain resident. peak_live_nodes measures retention; peak_rss_kb measures the process.",
+    "The reading is from one host, one binary, one object per theorem, and the aggregate route only.",
+    "The recording kernel build is untracked; only its patch (tools/hol-light/proof-object.diff) is in the repository.",
+    "There is no independent-checker comparison. The numbers above are a baseline, not a win, and must not be cited as a checker-versus-checker result.",
+    "The object byte count is the HLPROOF1 object, not the raw recording stream (the streams are 12.5-40 GB and are not shipped)."
+  ]
+}
