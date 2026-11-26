@@ -7,6 +7,30 @@ externally adjudicated criteria — without overstating what has been establishe
 
 ---
 
+## Release 0.2.0 (2026-11-26)
+
+Published on crates.io as `tekmerion 0.2.0`. What is actually demonstrated, and
+what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
+
+- **Solver-free machine-code proofs** for ARM Curve25519 add, sub and neg: 5.23M,
+  9.03M and 5.68M primitive inferences, against 111.5M on the sliced SAT route and
+  1.85M for the human `add` proof. Zero solver invocations, checked with a failing
+  `cadical` shim on `PATH`.
+- **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
+  upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,
+  whole-tree `make` green).
+- **First proof-object export and independent Rust replay**: `ADD_SYM`, 227
+  reachable nodes, 7,039 bytes. Provisional — the checker is well-formed, not proved
+  sound.
+- **Freeze `v6` sealed** (`freeze-rust-closure-v6`): source and runtime closure plus
+  the bound `TEKMERION_*` configuration.
+
+Not demonstrated, and stated as such: no native machine-code theorem yet, G1–G3
+soundness obligations open, `x86/add` exhausts memory, `arm/add_p256` emits no
+aggregate, and coverage is still the same 27 routines.
+
+---
+
 ## The short version
 
 The brief's target — beat 6.35% on `s2n-bignum-bench` — is not the frontier. The same
@@ -155,8 +179,9 @@ update. Rendering emits the node table, then the head map.
 
 ```
 README.md              this file
-Cargo.toml             crate `tekmerion`, published as 0.1.0
-src/                   typed revocation engine
+Cargo.toml             crate `tekmerion`, published as 0.2.0
+src/                   Rust tooling: emitters, guard, freeze, proof objects; `src/native/` is the
+                       independent certificate checker
 src/tools/mutate.rs    refusal-site mutation harness (`--bin mutate`)
 src/tools/mutate_lifecycle.rs  lifecycle fault-injection harness (`--bin mutate_lifecycle`)
 tests/                 46 tests, including one per refusal site and lifecycle status tests
