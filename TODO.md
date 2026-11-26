@@ -3677,3 +3677,124 @@ decision, and it is made here once, explicitly:
 across all tasks. That is the shared library text (bigger after the new entry points) inlined into
 every answer, not a changed proof: the tactic line is byte-identical. Totals from different commits
 are therefore **not** comparable at the last digit — always quote the commit.
+
+---
+
+# XX — Intake 2026-11-26: release, ASC compiler design, proof engineering
+
+Nothing omitted. `XX.F` supersedes `XIX.F` as the order of execution.
+
+## XX.0 — The release decision (this turn's priority)
+
+**Merge `staging` to `main` and publish to crates.io.** `main` has been at the 22 November
+`0.1.0` state while everything that matters — the aggregate close, the proof-object replay, the
+kernel charter — lives only on `staging`. An outside reviewer reading the default branch sees the
+old state; that is a publishing defect, not a documentation one.
+
+- [ ] **XX.0.1.** Verify the tree, then `git checkout main && git merge --ff-only staging`, bump the
+  version, update the changelog, tag, `cargo publish`, push `main` and the tag (AGENTS.md §5).
+- [ ] **XX.0.2.** If `cargo publish` cannot proceed (credentials, network), report exactly what is
+  missing and leave the repo in a state where one command finishes it. Do not fake a publish.
+
+## XX.A — Two records disagree about the same theorem
+
+`ix82` gives `arm/add_p25519` as **5,233,638** inferences; `ix83` gives **5,745,767**. The shared
+library text grew by a constant `+21,789` per answer, which does not explain a ~512 K gap. The
+suspicion is that the generalised detector emits a more expensive aggregate than the specialised one.
+
+- [ ] **XX.A1.** Pin down which number is *the* add result before "2.83× human" is quoted again.
+  Re-run both paths at the current commit and report both totals with their commit.
+- [ ] **XX.A2.** If the generalised path is the slower one, either recover the specialisation as a
+  fast path or explain why the general form costs more. A claim must name its commit and its route.
+
+## XX.B — Where the remaining 3× is: fold the branches
+
+`ix82` closes over **12 oracle branches**. The human proof does not case-split twelve ways.
+
+- [ ] **XX.B1.** Fold the conditional correction into the aggregate with a **selector bit**: the
+  correction term enters as `p·P` with `p ∈ {0,1}`, instead of a case split.
+- [ ] **XX.B2.** Prove the bridge fact `p = [x ≥ P]` — that the selector is the final borrow-out of
+  the comparison chain — so the folded aggregate is justified rather than assumed.
+- [ ] **XX.B3.** Measure against 1,848,494. Below ~2× the claim changes from "near human" to
+  "matches human"; say which one the measurement supports.
+- [ ] **XX.B4.** Per-phase breakdown **first**, so it is known whether the cost is in the branches
+  or in the symbolic simulation they share.
+
+## XX.C — x86 is a term-blowup, not a budget problem
+
+Doubling the cap doubled the peak (12.31 → 24.90 GB) and did not close. Something grows without
+bound.
+
+- [ ] **XX.C1.** Log term size (DAG nodes vs tree nodes) per phase in the correction-plus-bit-63
+  branch. Lost sharing or re-expansion is the hypothesis; test it.
+- [ ] **XX.C2.** Selector folding (`XX.B1`) may remove the branch entirely — retry x86 **after**
+  that, not before.
+- [ ] **XX.C3.** Do not raise the cap again without a recorded decision.
+
+## XX.D — The Arithmetic Structure Compiler (ASC-1 → ASC-2)
+
+Name adopted. It is not a detector; it is a compiler that decompiles machine code into arithmetic
+and emits the arithmetic as the proof. Passes, in order:
+
+- [ ] **XX.D1. Pass 1, lift.** Every word operation becomes an exact integer equation:
+  add/adc `s + 2⁶⁴c = a + b + c_in`; sub/sbc `s − 2⁶⁴b_out = a − b − b_in`;
+  mul/umulh `lo + 2⁶⁴hi = a·b`; shifts/masks as division with a named remainder;
+  csel/cmov `p·x + (1−p)·y` with `p ∈ {0,1}`.
+- [ ] **XX.D2. Pass 2, chain discovery by flag dataflow.** Chains come from following carry/borrow
+  **edges**, not instruction adjacency; limb weights `2^(64i)` come from load/store offsets, not a
+  pattern. This is what p256 fails on, and what ADX needs (`adcx`/`adox` run two interleaved chains
+  on CF and OF, so any pattern detector breaks).
+- [ ] **XX.D3. Pass 3, collapse.** Each chain becomes one weighted sum. Multiplication is the same
+  with column weights `Σ 2^(64(i+j))·aᵢbⱼ`. Montgomery reduction is `A + m·N = 2⁶⁴·A′` — one more
+  weighted equation plus a multiple of the modulus, so Montgomery and `IDEAL` fall out of the same
+  compiler rather than needing a separate route.
+- [ ] **XX.D4. Pass 4, selector folding** (this is `XX.B`), removing the oracle branches.
+- [ ] **XX.D5. Pass 5, ranges.** Carries in `[0,1]`, limbs in `[0,2⁶⁴)` by construction; composed
+  bounds from interval arithmetic over the weights; exactness from one lemma — congruent mod `2ⁿ`
+  and both in `[0,2ⁿ)` implies equal. This replaces the integrality `INT_ARITH` cannot do.
+- [ ] **XX.D6. Pass 6, close.** For a mod-`p` spec the certificate is an integer multiplier `k` with
+  `out − spec = k·p`, plus `out < p`.
+- [ ] **XX.D7. Output: one certificate format, plain data** — equations, weights, selectors, ranges,
+  multipliers — with **two backends**: the HOL Light tactic emitter (keeps statement identity and
+  the comparison against human proofs) and the Tekmerion kernel `LIA`/`IDEAL` check (polynomial
+  identity plus range checks, ~O(limbs²), not millions of inferences). The same certificate checked
+  both ways is the kernel's differential test at no extra cost.
+
+## XX.E — Rules that keep it honest
+
+- [ ] **XX.E1. Never fail silently.** `aggregates=0` is today a silent failure. When the compiler
+  cannot lift something it must name the node and the operation. That gives a coverage map, and the
+  misses say what to build next.
+- [ ] **XX.E2. Compiler is the default, SAT is the counted fallback.** Every SAT fallback is
+  counted, so "solver-free" becomes a measured percentage across the 27 tasks rather than a claim
+  about three named ones.
+- [ ] **XX.E3. Emit a readable algorithm** — "4-limb add, then conditional subtract of 2²⁵⁵−19,
+  selector = final borrow" — so a reviewer has something to read besides the assembly.
+- [ ] **XX.E4. Kernel rule discipline** (proof engineering): each rule gets a Lean soundness proof
+  **before** any headline number relies on it. Order: HOL route proves the result → the kernel rule
+  matches it on the same statement → only then is its cost a claim. Nobody may say the checker got
+  cheaper by getting weaker.
+- [ ] **XX.E5. Multi-backend correctness by oracle**, not `N` hard proofs: prove the scalar oracle
+  against the spec once, then each backend proves equivalence to the oracle (the `_CORRECT` +
+  `ensures2` pattern). For compiled outputs prefer **translation validation** per compile over a
+  verified compiler — it covers whatever produced the binary, including vendor toolchains.
+- [ ] **XX.E6. Integer-only normative universe, permanently.** Floats may exist as a declared,
+  non-normative universe with an explicit error contract. Once floats enter the normative
+  semantics, byte-exactness across substrates ends.
+- [ ] **XX.E7. "Better than aerospace", made specific.** A verification tool whose failure can only
+  miss an error is TQL-5 by DO-330. Claim the concrete target: **Tekmerion meets the TQL-1
+  objectives, the level written for code generators, although the standard would only require
+  TQL-5.** State the objectives it must meet; do not use the phrase without them.
+
+## XX.F — Order of execution
+
+1. **`XX.0`** — merge to `main` and publish. The default branch must show the current state.
+2. **`XX.A`** — reconcile the two add numbers; a published claim must not carry a contradiction.
+3. **`XX.B`** — selector folding, measured against 1.85M; retry x86 after it.
+4. **`XX.D7/XX.C`** — certify the weights receipt and check it in the kernel (`LIA`), giving the
+   first "cheaper than the human proof on a statement HOL Light also accepts".
+5. **`XX.D2`** — dataflow chain discovery, so p256 gets an aggregate.
+6. **`XX.D3`, `XX.E2`** — multiplication column sums; compiler default with counted fallbacks and
+   the 27-task table.
+7. **`XX.E4`–`XX.E7`** — soundness proofs per rule, oracle-based backend equivalence, the TQL-1
+   objective list.
