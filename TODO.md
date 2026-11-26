@@ -3556,9 +3556,13 @@ becomes a pivot with a `2^256` coefficient.
 
 ## XIX.E — P2: proof objects, native consumption, coverage
 
-- [ ] **XIX.E1.** Proof-object export for the 27 generated and 27 human proofs (per-theorem,
-  streamed, with a size gate; the `wip/xxiii-b-proof-objects` scaffolding may be recovered but must
-  be verified).
+- [x] **XIX.E1 (started; PROVISIONAL).** One derivation exported and replayed end to end:
+  `ADD_SYM`, re-derived under the recording kernel — 314 recorded nodes, 227 reachable,
+  13 imports, 7,039 bytes — replayed to the recorded statement; see
+  `research/receipts/ix84-export-and-cap.md`. Finalisation streams (`G1.6`), but replay keeps
+  one theorem per reachable node and is bounded by `--budget`, so the 18M-node
+  `x86/bignum_neg_sm2` is deferred to a frontier-bounded replay rather than shipped
+  unreplayed. The checker is well-formed, **not proved sound** (`XVII.B5`, G1–G3).
 - [ ] **XIX.E2.** Consume the arithmetic certificates in the native kernel, so one representation
   serves both routes.
 - [ ] **XIX.E3.** Multiplication and Montgomery reduction (`XVII.C1`, assembly-as-hardware).
@@ -3579,19 +3583,25 @@ no export run, no tests.
 
 ### XIX.G.1 — The checker must not define its own standard of validity
 
-- [ ] **G1.1. `Rule::Import` reconstructs a theorem from the object's own payload.** It does not
-  establish that the imported theorem was previously justified; a digest supplied *by the object*
-  cannot establish it. Require an external, validated environment:
-  `validate(expected, object, theory: &ValidatedTheory, imports: &CheckedTheoremStore, budget)`.
-- [ ] **G1.2. Axiom acceptance is checked against the object's own declared set.** The theory must
-  say which axioms and definitions are authorised; the certificate may not.
-- [ ] **G1.3. Definitions must establish constant-name freshness** (a definition may not silently
-  rebind an existing constant).
-- [ ] **G1.4. Type definitions need a complete theory-extension registry** (which types exist, and
-  under which witness).
-- [ ] **G1.5. Statement identity must bind the complete theory environment**, not just the term.
-- [ ] **G1.6. Finalisation accumulates compacted nodes and serialised output in memory** — a
-  scalability defect; stream it.
+- [x] **G1.1. `Rule::Import` requires an external store.** `validate` now takes a
+  `CheckedTheoremStore`; the stored sequent (not the object's payload or digest) becomes the
+  theorem, and a mismatch is refused. Test: `g1_1_import_requires_external_store`.
+- [x] **G1.2. Axiom authority comes from the theory.** `Axiom` is accepted only if its
+  statement digest is in `ValidatedTheory::axioms`; the certificate's declared set is only
+  cross-checked. Tests: `g1_2_axiom_requires_theory_authorisation`,
+  `control_unauthorised_axiom_is_refused`.
+- [x] **G1.3. Definitions establish freshness.** A definition rebinding an existing constant
+  is refused. Test: `g1_3_definition_rebinding_is_refused`.
+- [x] **G1.4. Type definitions use a complete registry.** `(type, abs, rep)` must be
+  authorised, names fresh, and both halves present. Test:
+  `g1_4_type_definition_requires_registry`.
+- [x] **G1.5. Statement identity binds the theory.** `statement_id = H(theory_digest ‖ hyps ‖
+  concl)`, and the theory digest binds the pinned store digest. Test:
+  `g1_5_statement_identity_binds_the_theory`.
+- [x] **G1.6. Finalisation streams.** Payloads are read one record at a time and the node
+  table is written through a digesting writer; no emitted-node vector or serialised output is
+  accumulated. Test: `g1_6_finalize_buffers_one_payload_not_the_object` (20,000-node chain,
+  peak payload buffer 4 bytes against a >200 KB object).
 
 ### XIX.G.2 — Export one derivation first, not fifty-four
 
@@ -3650,10 +3660,14 @@ now close without a solver.
 after one branch closed. Per `AGENTS.md` §7a a fired cap is a result, not a retry. Raising it is a
 decision, and it is made here once, explicitly:
 
-- [ ] **XIX.H1.** Re-run `x86/add_p25519` under `tools/cap.sh 24G` **once**, with the memory
-  attribution recorded (which phase/close grows). If it closes, the number is reported with the cap
-  in the receipt; if it fires again, the mechanism is judged not to scale on x86 as written and the
-  finding is recorded rather than worked around.
+- [x] **XIX.H1.** Re-ran once at `tools/cap.sh 24G`: **capped at 24,900,604 KB (23.75 GiB,
+  98.95% of the cap)** after **16 phase marks**, at the second `bridge:algebra-arith`; one
+  branch closed (`ORACLE close ok` = 1), `Fatal error: allocation failure during minor GC`.
+  Doubling the cap doubled the peak (12.31 → 24.89 GB) and it still did not close, so the
+  mechanism does **not** scale on x86 as written. Decision: no further inflation and no
+  weakening; `x86.bignum_add_p25519` stays outside `ALGEBRAIC_CLOSE_TASKS`. The first 24 G
+  invocation ran the ungated SAT route (120,066,521 inferences, 1.95 GB) and is recorded as
+  such in `research/receipts/ix84-h1.json`.
 - [ ] **XIX.H2.** `arm/add_p256` finds **0 aggregates**: its accumulator presentation lacks disjoint
   `(outgoing B, incoming 1)` carry paths, so the detector does not fire. That is a detector
   limitation, not a mathematics limitation — record it against `XIX.D` (a certificate

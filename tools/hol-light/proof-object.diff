@@ -1,0 +1,412 @@
+--- a/fusion.ml
++++ b/fusion.ml
+@@ -93,6 +93,14 @@
+       val stamp_string : thm -> string
+       val footprint_of : thm -> (string * string) list
+       val inference_count : unit -> int
++
++      (* Proof-object recording (export build only).  Recording is enabled by
++         the environment variable TEKMERION_PROOF_RAW naming the raw stream;
++         when it is unset the kernel behaves exactly as the stamp build. *)
++      val proof_enabled : unit -> bool
++      val proof_record_begin : unit -> unit
++      val proof_node_count : unit -> int
++      val proof_export : string -> thm -> unit
+ end;;
+ 
+ (* ------------------------------------------------------------------------- *)
+@@ -109,7 +117,9 @@
+             | Comb of term * term
+             | Abs of term * term
+ 
+-  type thm = Sequent of (term list * term) * int
++  type thm = Sequent of (term list * term) * int * int
++  (* (hyps, concl) * axiom mask * proof-object node id.  The node id is -1
++     when recording is disabled. *)
+ 
+ (* ------------------------------------------------------------------------- *)
+ (* Axiom-stamp instrumentation.                                               *)
+@@ -211,7 +221,7 @@
+       else scan (i + 1) (m lsr 1) acc in
+     List.rev (scan 1 mask [])
+ 
+-  let stamp_of (Sequent(_,mask)) = mask_ids mask
++  let stamp_of (Sequent(_,mask,_)) = mask_ids mask
+ 
+   let stamp_string th =
+     let reg = axiom_registry () in
+@@ -234,7 +244,7 @@
+   (* Statement-level symbol footprint of a conclusion: the constants and    *)
+   (* type constructors that occur in it, each mapped to its introducer when  *)
+   (* the registry knows one.  This is NOT the transitive derivation closure. *)
+-  let footprint_of (Sequent((_,c),_)) =
++  let footprint_of (Sequent((_,c),_,_)) =
+     let reg = !definition_registry_data in
+     let syms = ref [] in
+     let add key display =
+@@ -262,6 +272,178 @@
+     List.sort compare !syms
+ 
+ (* ------------------------------------------------------------------------- *)
++(* Proof-object recording.                                                    *)
++(*                                                                            *)
++(* Every primitive inference appends one node to a raw stream:                *)
++(*                                                                            *)
++(*   tag=1  len(u32)  rule(u8)  p0(u32)  p1(u32)  plen(u32)  payload           *)
++(*                                                                            *)
++(* where p0/p1 are the node ids of the parents (0xFFFFFFFF = absent) and the  *)
++(* payload is the rule's term-level input, encoded structurally below.  A      *)
++(* final tag=2 record carries the root id, conclusion, hypotheses and axiom   *)
++(* registry.  Integers are big-endian.  Nothing is kept in memory except the  *)
++(* counter, so resident memory grows with the live proof, not the stream.      *)
++(*                                                                            *)
++(* Rule tags: 0 REFL, 1 TRANS, 2 MK_COMB, 3 ABS, 4 BETA, 5 ASSUME,             *)
++(*            6 EQ_MP, 7 DEDUCT_ANTISYM_RULE, 8 INST_TYPE, 9 INST,            *)
++(*            10 new_axiom, 11 new_basic_definition,                         *)
++(*            12 new_basic_type_definition (first result),                    *)
++(*            13 new_basic_type_definition (second result).                   *)
++(*                                                                            *)
++(* Term encoding: 0 Var(name,type) 1 Const(name,type) 2 Comb(f,x)             *)
++(*                3 Abs(var-term,body).  Type encoding: 0 Tyvar(name)          *)
++(*                1 Tyapp(name,[args]).  Names and strings are u32 length +    *)
++(*                bytes.  Every variable and constant carries its full type,  *)
++(*                so the stream is self-contained: a reader needs no global   *)
++(*                signature to reconstruct or type-check it.                  *)
++(* ------------------------------------------------------------------------- *)
++
++  let po_channel = ref (None : out_channel option)
++
++  let po_nodes = ref 0
++
++  (* Recording is off until [proof_record_begin].  The ambient library is
++     built before that point at module initialisation, so its theorems carry
++     node id -1; when such a theorem is used as a parent it is emitted as an
++     IMPORT leaf (rule 14) recording its full sequent. *) 
++  let po_active = ref false
++
++  let po_begin_inferences = ref 0
++
++  let import_table : (string,int) Hashtbl.t = Hashtbl.create 1024
++
++  let proof_enabled () = !po_channel <> None
++
++  let proof_node_count () = !po_nodes
++
++  let () =
++    match Sys.getenv_opt "TEKMERION_PROOF_RAW" with
++    | Some p when p <> "" ->
++        let oc =
++          try open_out_bin p
++          with Sys_error m ->
++            failwith ("proof_object: cannot open raw stream " ^ p ^ ": " ^ m) in
++        output_string oc "HLRAW1\n";
++        flush oc;
++        po_channel := Some oc
++    | _ -> ()
++
++  let put_u8 b v = Buffer.add_char b (Char.chr (v land 0xff))
++
++  let put_u32 b v =
++    Buffer.add_char b (Char.chr ((v lsr 24) land 0xff));
++    Buffer.add_char b (Char.chr ((v lsr 16) land 0xff));
++    Buffer.add_char b (Char.chr ((v lsr 8) land 0xff));
++    Buffer.add_char b (Char.chr (v land 0xff))
++
++  let put_str b s = put_u32 b (String.length s); Buffer.add_string b s
++
++  let out_u32 oc v =
++    output_char oc (Char.chr ((v lsr 24) land 0xff));
++    output_char oc (Char.chr ((v lsr 16) land 0xff));
++    output_char oc (Char.chr ((v lsr 8) land 0xff));
++    output_char oc (Char.chr (v land 0xff))
++
++  let rec put_type b ty =
++    match ty with
++      Tyvar v -> put_u8 b 0; put_str b v
++    | Tyapp(f,args) ->
++        put_u8 b 1; put_str b f; put_u32 b (List.length args);
++        List.iter (put_type b) args
++
++  let rec put_term b tm =
++    match tm with
++      Var(s,ty) -> put_u8 b 0; put_str b s; put_type b ty
++    | Const(s,ty) -> put_u8 b 1; put_str b s; put_type b ty
++    | Comb(f,x) -> put_u8 b 2; put_term b f; put_term b x
++    | Abs(v,bod) -> put_u8 b 3; put_term b v; put_term b bod
++
++  (* Emit one node.  The node id is allocated only when a node is actually   *)
++  (* written, so ids are dense and every recorded id is < the final count.    *)
++  let po_emit rule p0 p1 payload =
++    if not !po_active then -1 else
++    match !po_channel with
++      None -> -1
++    | Some oc ->
++        let id = !po_nodes in
++        incr po_nodes;
++        let plen = Buffer.length payload in
++        output_char oc (Char.chr 1);
++        out_u32 oc (1 + 4 + 4 + 4 + plen);
++        output_char oc (Char.chr rule);
++        out_u32 oc p0;
++        out_u32 oc p1;
++        out_u32 oc plen;
++        Buffer.output_buffer oc payload;
++        id
++
++  let proof_record_begin () =
++    po_active := (!po_channel <> None);
++    po_begin_inferences := inference_count ()
++
++  (* Materialise a parent.  A theorem created before recording began has no
++     node; emit (once) an IMPORT leaf carrying its hypotheses and conclusion. *)
++  let ensure_node asl c nid =
++    if not !po_active then -1
++    else if nid >= 0 then nid
++    else begin
++      let b = Buffer.create 256 in
++      put_u32 b (List.length asl);
++      List.iter (put_term b) asl;
++      put_term b c;
++      let key = Buffer.contents b in
++      match Hashtbl.find_opt import_table key with
++        Some id -> id
++      | None ->
++          let id = po_emit 14 (-1) (-1) b in
++          Hashtbl.add import_table key id;
++          id
++    end
++
++  let po_leaf rule tm =
++    if not !po_active then -1 else begin
++      let b = Buffer.create 64 in
++      put_term b tm;
++      po_emit rule (-1) (-1) b
++    end
++
++  let po_unary rule parent =
++    po_emit rule parent (-1) (Buffer.create 0)
++
++  let po_binary rule p0 p1 = po_emit rule p0 p1 (Buffer.create 0)
++
++  let po_term_arg rule parent tm =
++    if not !po_active then -1 else begin
++      let b = Buffer.create 64 in
++      put_term b tm;
++      po_emit rule parent (-1) b
++    end
++
++  (* The final record: root id, conclusion, hypotheses, inference count and  *)
++  (* axiom registry.  Written once, after the target theorem exists.         *)
++  let proof_export name (Sequent((asl,c),_,id)) =
++    match !po_channel with
++      None -> ()
++    | Some oc ->
++        let b = Buffer.create 1024 in
++        put_str b name;
++        put_u32 b id;
++        put_u32 b (List.length asl);
++        List.iter (put_term b) asl;
++        put_term b c;
++        put_u32 b (inference_count ());
++        put_u32 b !po_begin_inferences;
++        put_u32 b !po_nodes;
++        let reg = axiom_registry () in
++        put_u32 b (List.length reg);
++        List.iter
++          (fun (i,dg,txt) -> put_u32 b i; put_str b dg; put_str b txt) reg;
++        output_char oc (Char.chr 2);
++        out_u32 oc (Buffer.length b);
++        Buffer.output_buffer oc b;
++        flush oc
++
++(* ------------------------------------------------------------------------- *)
+ (* List of current type constants with their arities.                        *)
+ (*                                                                           *)
+ (* Initially we just have the boolean type and the function space            *)
+@@ -643,11 +825,11 @@
+ (* Basic theorem destructors.                                                *)
+ (* ------------------------------------------------------------------------- *)
+ 
+-  let dest_thm (Sequent((asl,c),_)) = (asl,c)
++  let dest_thm (Sequent((asl,c),_,_)) = (asl,c)
+ 
+-  let hyp (Sequent((asl,_),_)) = asl
++  let hyp (Sequent((asl,_),_,_)) = asl
+ 
+-  let concl (Sequent((_,c),_)) = c
++  let concl (Sequent((_,c),_,_)) = c
+ 
+ (* ------------------------------------------------------------------------- *)
+ (* Basic equality properties; TRANS is derivable but included for efficiency *)
+@@ -655,36 +837,41 @@
+ 
+   let REFL tm =
+     bump_inferences ();
+-    Sequent(([],safe_mk_eq tm tm),0)
++    let id = po_leaf 0 tm in
++    Sequent(([],safe_mk_eq tm tm),0,id)
+ 
+-  let TRANS (Sequent((asl1,c1),s1)) (Sequent((asl2,c2),s2)) =
++  let TRANS (Sequent((asl1,c1),s1,i1)) (Sequent((asl2,c2),s2,i2)) =
+     bump_inferences ();
+     match (c1,c2) with
+       Comb((Comb(Const("=",_),_) as eql),ml),Comb(Comb(Const("=",_),mn),mr)
+         when alphaorder ml mn = 0 ->
+-          Sequent((term_union asl1 asl2,Comb(eql,mr)),mask_union s1 s2)
++          let id = po_binary 1 (ensure_node asl1 c1 i1) (ensure_node asl2 c2 i2) in
++          Sequent((term_union asl1 asl2,Comb(eql,mr)),mask_union s1 s2,id)
+     | _ -> failwith "TRANS"
+ 
+ (* ------------------------------------------------------------------------- *)
+ (* Congruence properties of equality.                                        *)
+ (* ------------------------------------------------------------------------- *)
+ 
+-  let MK_COMB((Sequent((asl1,c1),s1)),(Sequent((asl2,c2),s2))) =
++  let MK_COMB((Sequent((asl1,c1),s1,i1)),(Sequent((asl2,c2),s2,i2))) =
+      bump_inferences ();
+      match (c1,c2) with
+        Comb(Comb(Const("=",_),l1),r1),Comb(Comb(Const("=",_),l2),r2) ->
+         (match type_of r1 with
+            Tyapp("fun",[ty;_]) when compare ty (type_of r2) = 0
+-             -> Sequent((term_union asl1 asl2,
+-                        safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2))),mask_union s1 s2)
++             -> let id = po_binary 2 (ensure_node asl1 c1 i1) (ensure_node asl2 c2 i2) in
++                Sequent((term_union asl1 asl2,
++                        safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2))),
++                        mask_union s1 s2,id)
+          | _ -> failwith "MK_COMB: types do not agree")
+      | _ -> failwith "MK_COMB: not both equations"
+ 
+-  let ABS v (Sequent((asl,c),s)) =
++  let ABS v (Sequent((asl,c),s,i)) =
+     bump_inferences ();
+     match (v,c) with
+       Var(_,_),Comb(Comb(Const("=",_),l),r) when not(exists (vfree_in v) asl)
+-         -> Sequent((asl,safe_mk_eq (Abs(v,l)) (Abs(v,r))),s)
++         -> let id = po_term_arg 3 (ensure_node asl c i) v in
++            Sequent((asl,safe_mk_eq (Abs(v,l)) (Abs(v,r))),s,id)
+     | _ -> failwith "ABS";;
+ 
+ (* ------------------------------------------------------------------------- *)
+@@ -695,7 +882,8 @@
+     bump_inferences ();
+     match tm with
+       Comb(Abs(v,bod),arg) when compare arg v = 0
+-        -> Sequent(([],safe_mk_eq tm bod),0)
++        -> let id = po_leaf 4 tm in
++           Sequent(([],safe_mk_eq tm bod),0,id)
+     | _ -> failwith "BETA: not a trivial beta-redex"
+ 
+ (* ------------------------------------------------------------------------- *)
+@@ -704,34 +892,52 @@
+ 
+   let ASSUME tm =
+     bump_inferences ();
+-    if compare (type_of tm) bool_ty = 0 then Sequent(([tm],tm),0)
++    if compare (type_of tm) bool_ty = 0 then
++      let id = po_leaf 5 tm in Sequent(([tm],tm),0,id)
+     else failwith "ASSUME: not a proposition"
+ 
+-  let EQ_MP (Sequent((asl1,eq),s1)) (Sequent((asl2,c),s2)) =
++  let EQ_MP (Sequent((asl1,eq),s1,i1)) (Sequent((asl2,c),s2,i2)) =
+     bump_inferences ();
+     match eq with
+       Comb(Comb(Const("=",_),l),r) when alphaorder l c = 0
+-        -> Sequent((term_union asl1 asl2,r),mask_union s1 s2)
++        -> let id = po_binary 6 (ensure_node asl1 eq i1) (ensure_node asl2 c i2) in
++           Sequent((term_union asl1 asl2,r),mask_union s1 s2,id)
+     | _ -> failwith "EQ_MP"
+ 
+-  let DEDUCT_ANTISYM_RULE (Sequent((asl1,c1),s1)) (Sequent((asl2,c2),s2)) =
++  let DEDUCT_ANTISYM_RULE (Sequent((asl1,c1),s1,i1))
++                          (Sequent((asl2,c2),s2,i2)) =
+     bump_inferences ();
+     let asl1' = term_remove c2 asl1 and asl2' = term_remove c1 asl2 in
+-    Sequent((term_union asl1' asl2',safe_mk_eq c1 c2),mask_union s1 s2)
++    let id = po_binary 7 (ensure_node asl1 c1 i1) (ensure_node asl2 c2 i2) in
++    Sequent((term_union asl1' asl2',safe_mk_eq c1 c2),mask_union s1 s2,id)
+ 
+ (* ------------------------------------------------------------------------- *)
+ (* Type and term instantiation.                                              *)
+ (* ------------------------------------------------------------------------- *)
+ 
+-  let INST_TYPE theta (Sequent((asl,c),s)) =
++  let INST_TYPE theta (Sequent((asl,c),s,i)) =
+     bump_inferences ();
++    let id =
++      if not !po_active then -1 else begin
++        let b = Buffer.create (List.length theta * 32) in
++        put_u32 b (List.length theta);
++        List.iter (fun (x,y) -> put_type b x; put_type b y) theta;
++        po_emit 8 (ensure_node asl c i) (-1) b
++      end in
+     let inst_fn = inst theta in
+-    Sequent((term_image inst_fn asl,inst_fn c),s)
++    Sequent((term_image inst_fn asl,inst_fn c),s,id)
+ 
+-  let INST theta (Sequent((asl,c),s)) =
++  let INST theta (Sequent((asl,c),s,i)) =
+     bump_inferences ();
++    let id =
++      if not !po_active then -1 else begin
++        let b = Buffer.create (List.length theta * 64) in
++        put_u32 b (List.length theta);
++        List.iter (fun (x,y) -> put_term b x; put_term b y) theta;
++        po_emit 9 (ensure_node asl c i) (-1) b
++      end in
+     let inst_fun = vsubst theta in
+-    Sequent((term_image inst_fun asl,inst_fun c),s)
++    Sequent((term_image inst_fun asl,inst_fun c),s,id)
+ 
+ (* ------------------------------------------------------------------------- *)
+ (* Handling of axioms.                                                       *)
+@@ -744,8 +950,9 @@
+   let new_axiom tm =
+     bump_inferences ();
+     if compare (type_of tm) bool_ty = 0 then
+-      let id = register_axiom tm in
+-      let th = Sequent(([],tm),mask_bit id) in
++      let aid = register_axiom tm in
++      let nid = po_leaf 10 tm in
++      let th = Sequent(([],tm),mask_bit aid,nid) in
+        (the_axioms := th::(!the_axioms); th)
+     else failwith "new_axiom: Not a proposition"
+ 
+@@ -767,7 +974,7 @@
+         else if not (subset (type_vars_in_term r) (tyvars ty))
+         then failwith "new_definition: Type variables not reflected in constant"
+         else let c = new_constant(cname,ty); Const(cname,ty) in
+-             let dth = Sequent(([],safe_mk_eq c r),0) in
++             let dth = Sequent(([],safe_mk_eq c r),0,po_leaf 11 tm) in
+              note_definition ("const:" ^ cname)
+                              ("new_basic_definition(" ^ cname ^ ")");
+              the_definitions := dth::(!the_definitions); dth
+@@ -788,7 +995,8 @@
+ (* Where "abs" and "rep" are new constants with the nominated names.         *)
+ (* ------------------------------------------------------------------------- *)
+ 
+-  let new_basic_type_definition tyname (absname,repname) (Sequent((asl,c),s)) =
++  let new_basic_type_definition tyname (absname,repname)
++                               (Sequent((asl,c),s,i)) =
+     bump_inferences ();
+     if exists (can get_const_type) [absname; repname] then
+       failwith "new_basic_type_definition: Constant(s) already in use" else
+@@ -818,10 +1026,16 @@
+                     ("new_basic_type_definition(" ^ tyname ^ ":" ^
+                      absname ^ "/" ^ repname ^ ")");
+     let a = Var("a",aty) and r = Var("r",rty) in
++    let payload which =
++      let b = Buffer.create 64 in
++      put_u8 b which; put_str b tyname; put_str b absname; put_str b repname; b in
++    let parent = ensure_node asl c i in
++    let id1 = if not !po_active then -1 else po_emit 12 parent (-1) (payload 0) in
++    let id2 = if not !po_active then -1 else po_emit 13 parent (-1) (payload 1) in
+     (* The existence witness is a real dependency: both results carry it. *)
+-    Sequent(([],safe_mk_eq (Comb(abs,mk_comb(rep,a))) a),s),
++    Sequent(([],safe_mk_eq (Comb(abs,mk_comb(rep,a))) a),s,id1),
+     Sequent(([],safe_mk_eq (Comb(P,r))
+-                          (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r)),s)
++                          (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r)),s,id2)
+ 
+ end;;
+ 

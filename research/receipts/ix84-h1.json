@@ -1,0 +1,76 @@
+{
+  "schema": "tekmerion-ix84-h1/1",
+  "receipt": "ix84",
+  "part": "H1",
+  "status": "PROVISIONAL — kernel/host measurement; not an assurance-track witness",
+  "branch": "staging",
+  "base_commit": "c276f62",
+  "authorisation": "XIX.H1: one re-run of x86/add_p25519 under tools/cap.sh 24G",
+  "environment": {
+    "free_g_before": ["total 125", "used 15", "free 48", "shared 1", "buff/cache 61", "available 110"],
+    "disk": "/dev/nvme1n1p1 1.3T 902G 360G 72% /mnt/1tb_kingston",
+    "hol_switch": ".bench/hol-light-stamp2",
+    "cap_kb": 25165824,
+    "cap_label": "24G"
+  },
+  "invocations": [
+    {
+      "n": 1,
+      "route": "default SAT entry (ungated)",
+      "answer": "emitted by target/release/emit_x86",
+      "command": "TEKMERION_ALG_CLOSE=x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT tools/cap.sh --timeout 3600 24G -- bash .bench/ix84/run_task_24g.sh x86 curve25519 add p25519 .bench/ix84/h1",
+      "rc": 0,
+      "inferences": 120066521,
+      "phase_marks": 37,
+      "oracle_close_ok": 0,
+      "sampled_group_peak_rss_kb": 1947228,
+      "max_process_vmhwm_kb": 1750776,
+      "note": "x86.bignum_add_p25519 is deliberately not in ALGEBRAIC_CLOSE_TASKS, so the gate was ignored and this run exercised the SAT route, not H1's mechanism. It never approached the cap. It is disclosed for completeness and is not counted as the authorised test."
+    },
+    {
+      "n": 2,
+      "route": "aggregate (BRIDGE_ADD_REF_ALG_TAC)",
+      "answer": ".bench/ix83/xadd1/x86_add_p25519.answer",
+      "command": "TEKMERION_ALG_CLOSE=x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT tools/cap.sh --timeout 3600 24G -- bash .bench/ix84/run_task_24g.sh x86 curve25519 add p25519 .bench/ix84/h1agg .bench/ix83/xadd1/x86_add_p25519.answer",
+      "rc": 2,
+      "cap": "24G",
+      "sampled_group_peak_rss_kb": 24900604,
+      "max_process_vmhwm_kb": 24887916,
+      "peak_gib": 23.747,
+      "fraction_of_cap_percent": 98.95,
+      "phase_marks": 16,
+      "last_phase": "bridge:algebra-arith",
+      "aggregate_carriers": ["&(bitval carry_s16)", "&(bitval carry_s8)"],
+      "oracle_close_ok": 1,
+      "oracle_close_failed": 0,
+      "outcome": "CAPPED",
+      "failure": "Fatal error: allocation failure during minor GC",
+      "make_error": "make: *** [Makefile:501: curve25519/bignum_add_p25519.correct] Error 134"
+    }
+  ],
+  "phase_marks": [
+    "00 rewrite 83158978",
+    "01 rewrite 83158978",
+    "02 rewrite 83159110",
+    "03 finalisation 83159111",
+    "init finalisation 83159273",
+    "04 rewrite 83159959",
+    "05 rewrite 83160320",
+    "06 play 83160785",
+    "07 finalisation 84505745",
+    "08 rewrite 84738831",
+    "09 rewrite 84739025",
+    "10 finalisation 84739431",
+    "11 bridge 84739487",
+    "bridge:algebra 84790929",
+    "bridge:algebra-arith 84919759",
+    "bridge:algebra-arith 85135368"
+  ],
+  "memory_attribution": {
+    "grows_at": "the second bridge:algebra-arith close (the correction-plus-mask branch's INT_ARITH)",
+    "evidence": "the last marker written before the allocation failure is ORACLE aggregate-carriers=2 [&(bitval carry_s16),&(bitval carry_s8)]; the same wall was recorded at 12 G in ix83 §4.1",
+    "cap_doubling": "12.31 GB at the 12 G cap (ix83) -> 24.89 GB at the 24 G cap; the peak roughly doubles with the cap and the theorem still does not close"
+  },
+  "diagnosis": "The x86 add's correction is a full-width word_sub (word_add M N) p guarded by bit 63; the second (correction-plus-mask) branch's INT_ARITH builds a linear system whose internal representation grows past any practical address-space cap, so the mechanism does not scale on x86 as written.",
+  "decision": "Do not raise the cap further and do not weaken the close. x86.bignum_add_p25519 remains outside ALGEBRAIC_CLOSE_TASKS. The published ARM totals are unaffected."
+}

@@ -25,6 +25,7 @@ pub mod mutate;
 pub mod mutate_guard;
 pub mod mutate_lifecycle;
 pub mod patch_wrapper;
+pub mod proof_object;
 pub mod run_traces_inject;
 pub mod script_gate;
 pub mod sealed_court;

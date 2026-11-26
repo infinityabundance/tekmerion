@@ -1,0 +1,140 @@
+{
+  "schema": "tekmerion-ix84-export/1",
+  "receipt": "ix84",
+  "part": "E1",
+  "status": "PROVISIONAL — well-formed export and replay; soundness obligations XVII.B5 and G1–G3 remain open",
+  "branch": "staging",
+  "base_commit": "c276f62",
+  "theorem": "ADD_SYM",
+  "theorem_statement": "!m n. m + n = n + m",
+  "theorem_choice": "The smallest of the 27 generated proofs is x86/bignum_neg_sm2 at ~18M primitive inferences. Finalisation now streams (peak payload buffer 2,013 bytes for the 7,039-byte ADD_SYM object), but the replay still keeps one Thm per reachable node and is bounded by --budget (default 2,000,000). An 18M-node replay would be refused as BudgetExceeded rather than replayed, so per XIX.E1/G2.1 the first end-to-end export uses a genuinely small library theorem, ADD_SYM, re-derived under the recording kernel (314 attempted nodes). Scaling to the bignum derivation requires a frontier-bounded replay, which is the next E1 step.",
+  "recording": {
+    "kernel_build": ".bench/hol-light-objects (recording patch; untracked)",
+    "raw_stream": ".bench/ix84/addsym.raw",
+    "raw_nodes": 314,
+    "raw_bytes": 78521,
+    "inference_begin": 14976842,
+    "inference_total": 14977147,
+    "inference_delta": 305,
+    "run_rc": 0
+  },
+  "export": {
+    "object": ".bench/ix84/e1/addsym.hlpo",
+    "format": "HLPROOF1 version 2",
+    "node_count_reachable": 227,
+    "nodes_attempted": 314,
+    "imports": 13,
+    "primitive_nodes": 214,
+    "bytes": 7039,
+    "peak_buffered_payload_bytes": 2013,
+    "finalize_ms": 24,
+    "finalize_peak_rss_kb": 3716,
+    "cap": "20G",
+    "cap_fired": false,
+    "store_entries": 13,
+    "store_bytes": 4985
+  },
+  "replay": {
+    "result": "VALIDATED",
+    "validate_ms": 24,
+    "validate_peak_rss_kb": 3804,
+    "cap": "20G",
+    "cap_fired": false,
+    "node_count": 227,
+    "reachable": 227,
+    "imports": 13,
+    "statement_id_matches_expected": true,
+    "conclusion_alpha_equal_to_recorded_statement": true
+  },
+  "digests": {
+    "statement_digest": "00879bbaf18ffe72623ab7cbac68e0b428454a510384255c9f397da267934341",
+    "statement_id": "362ae773944141211ad4c03617ac00f82f93c3c176d0b287219de8124a0c015e",
+    "theory_digest": "09e046f90bf202c06dc156b50eb3d5e1e1ae69aee6d358a79d3da6fab82dde73",
+    "store_digest": "e3d3ef06517131546634707268667be5e10cb1df393c4c819777f4c0b8fd1de8",
+    "derivation_digest": "e509ccece229e4242b5dc1f04e042a9f6e6c03f08209a9022308a6f7f121ec0c"
+  },
+  "foundational_dependencies": {
+    "certificate_axiom_nodes": [],
+    "certificate_definition_nodes": [],
+    "certificate_type_definition_nodes": [],
+    "theory_permitted_axioms": [],
+    "theory_permitted_definitions": [],
+    "theory_permitted_type_definitions": [],
+    "difference": false,
+    "imports_checked_against_external_store": 13,
+    "ambient_axiom_registry_footer": ["8b87f0cf", "397b0b82", "3af16d5f"],
+    "note": "The certificate declares no Axiom/Definition/TypeDef nodes; the validated theory permits none of each. The 13 IMPORT sequents are resolved through the external CheckedTheoremStore, never from the object's own digests. The footer's three ambient axiom entries are provenance for the recording session; they are not re-assumed as certificate Axiom nodes."
+  },
+  "refusals": [
+    {
+      "control": "truncated object",
+      "test": "control_truncated_object_is_refused",
+      "verbatim": "TRUNCATED REFUSED: object: bad magic"
+    },
+    {
+      "control": "spliced object (nodes from another theorem)",
+      "test": "control_spliced_object_is_refused",
+      "verbatim": "SPLICED REFUSED: refused: node 2 (TRANS) does not follow from its parents: middle terms differ"
+    },
+    {
+      "control": "wrong conclusion",
+      "test": "control_wrong_conclusion_is_refused",
+      "verbatim": "WRONG CONCLUSION REFUSED: refused: replayed statement identity 01efd6d0f08065a453e715d86da87fbf8d480a928e01184eb69ea163d1f8855e differs from expected 104a8e411f02c70462efb852951bf4bc45db0823f5df3a4ba5e129ead304f569"
+    },
+    {
+      "control": "object imports an unjustified theorem",
+      "test": "control_unjustified_import_is_refused",
+      "verbatim": "UNJUSTIFIED IMPORT REFUSED: refused: IMPORT sequent 20d053e45f1574d4e616031532dedb190cba4e45445cad68ba46096ed8429029 is not justified by the checked-theorem store"
+    },
+    {
+      "control": "unauthorised axiom node (G1.2, end to end)",
+      "test": "control_unauthorised_axiom_is_refused",
+      "verbatim": "UNAUTHORISED AXIOM REFUSED: refused: axiom a6f5e0281b602f265f700a371ffc3c703b692d1d4b1a6313b8c89ab31c5dbd55 is not authorised by the validated theory"
+    }
+  ],
+  "defects_fixed": [
+    {
+      "id": "G1.1",
+      "fix": "Rule::Import requires a CheckedTheoremStore supplied by the caller; the result is the stored theorem, and the payload must match it. The object's own digests never justify an import.",
+      "test": "g1_1_import_requires_external_store"
+    },
+    {
+      "id": "G1.2",
+      "fix": "Axiom nodes are accepted only if their statement digest is in ValidatedTheory::axioms; the certificate's declared set is cross-checked but has no authority.",
+      "test": "g1_2_axiom_requires_theory_authorisation"
+    },
+    {
+      "id": "G1.3",
+      "fix": "A definition is refused if its constant name already exists in the theory or in an earlier accepted definition; it must also be an authorised definition digest.",
+      "test": "g1_3_definition_rebinding_is_refused"
+    },
+    {
+      "id": "G1.4",
+      "fix": "A type definition needs an entry (type, abs, rep) in the theory's extension registry, fresh names, and both abs/rep halves present.",
+      "test": "g1_4_type_definition_requires_registry"
+    },
+    {
+      "id": "G1.5",
+      "fix": "statement_id = SHA-256(theory_digest || canonical hyps || canonical conclusion); the theory digest binds the pinned store digest. The same term under a different environment is a different statement.",
+      "test": "g1_5_statement_identity_binds_the_theory"
+    },
+    {
+      "id": "G1.6",
+      "fix": "Finalisation streams: payloads are read one record at a time, the node table is written straight to a digesting writer, and no emitted-node vector or serialised output is accumulated.",
+      "test": "g1_6_finalize_buffers_one_payload_not_the_object"
+    }
+  ],
+  "additional_defect_found_and_fixed": {
+    "what": "The recovered scaffold's rev_assocd matched the first component of each pair; HOL Light matches the second and returns the first. Type and term instantiation directions were therefore reversed, and the real ADD_SYM replay failed at node 45 (EQ_MP).",
+    "fix": "type_subst and inst now use the HOL convention: pairs are (replacement, variable).",
+    "test": "substitution_pair_order_matches_hol_light",
+    "witness": "the ADD_SYM replay now reaches the root and VALIDATED"
+  },
+  "not_proved": [
+    "The checker is well-formed, not proved sound. XVII.B5 and G1–G3 remain open.",
+    "The store is produced by the exporter from the kernel's IMPORT leaves and pinned by digest; sourcing it from an independently validated library export is still future work.",
+    "The replay is not frontier-bounded; an 18M-node bignum replay would exceed the node budget (see theorem_choice).",
+    "One theorem, one theory manifest, one host. No number is claimed for the other 53."
+  ],
+  "provisional_until": "the assurance track witnesses the export at identity-bound grade (XVIII.D)"
+}
