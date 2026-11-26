@@ -3508,9 +3508,24 @@ becomes a pivot with a `2^256` coefficient.
   primitive inferences, 28.0 s, 12 oracle branches, **0** SAT closes, against 1,848,494 (human),
   111,501,987 (sliced SAT), 119,194,788 (full). C1 is a real `equals_thm` (`true`, both
   conclusions alpha-equivalent, both with zero hypotheses). Receipt: `ix82-aggregate.md`.
-- [ ] **XIX.C4.** Extend to `sub`, `neg` and the x86 versions. **Not attempted:** there is no
-  algebraic entry point for them (only `BRIDGE_ADD_REF_ALG_TAC` exists). The chain reader is
-  generic; the per-route adaptation is open.
+- [~] **XIX.C4.** Extend to `sub`, `neg`, the x86 add and two wider curves (IX.83).
+  **Closed (opt-in, `TEKMERION_ALG_CLOSE=<task id>`).**
+  `arm.bignum_sub_p25519` **9,029,510** primitive inferences, 34 s, 24 oracle branches, 0 SAT
+  closes (111,501,987 sliced for the family; human `_CORRECT` not obtainable by the typed
+  machinery). `arm.bignum_neg_p25519` **5,683,733**, 27 s, 10 branches, 0 SAT closes (default
+  33,888,658). `arm.bignum_add_p25519` re-measured at **5,745,767** (IX.82: 5,233,638; the
+  difference is the shared close-set and fact-premise changes, not a different aggregate).
+  **Not closed:** `x86.bignum_add_p25519` — the aggregate builder finds the x86 chains and the
+  first branches close, but the correction-plus-`bit 63` branch drives `INT_ARITH` past the 12 GB
+  cap (recorded as `capped`, not retried); its entry point exists but it is not in the closing
+  list. `arm.bignum_add_p256` — **no aggregate is emitted** (`aggregates=0`): its accumulator
+  equations do not present the disjoint `(outgoing B, incoming 1)` carry paths the detector
+  requires, so the residual is unchanged and the close fails. `arm.bignum_add_p384` not attempted
+  (budget). Controls C1 (weaker: answers differ only in the entry-point line), C2
+  `{ETA_AX, SELECT_AX, INFINITY_AX}`, C3 (aggregate removed: `sub` fails), C4 (`cadical` shim:
+  zero invocations, marker absent), C5 (no cheating), C6 (default tactic byte-identical; the
+  counts move by a constant **+21,789** because the new shared definitions are inlined into every
+  answer). Receipt: `ix83-generality.md`.
 - [x] **XIX.C5. Say it plainly.** For `arm/add_p25519` the 60.35× sliced-SAT gap is now **2.83×**
   over the human body **without the new kernel**. The remaining factor is the 12-branch case split
   and the normalisation before each close, not SAT. The kernel's purpose narrows to trust,
@@ -3519,11 +3534,21 @@ becomes a pivot with a `2^256` coefficient.
 ## XIX.D — P1: the elimination engine must produce certificates, not traces
 
 - [x] **XIX.D1.** Retain the exact coefficients of the linear combination, not just the supporting
-  theorem list. **Partly done (IX.82):** the aggregate is built with its integer weights and
-  premises, and both are printed (`AGGREGATE … weights=[…] premises=4 conclusion=…`) and recorded
-  in `ix82-aggregate.json`; the proof itself is the certificate. Still open: a serialised
-  `LinearCombinationCertificate { premises, coefficients: BigInt[], conclusion }` consumed by a
-  checker that verifies the polynomial identity.
+  theorem list. **Partly done (IX.82, widened in IX.83):** the aggregate is built with its integer
+  weights and premises, and both are printed (`AGGREGATE … weights=[…] premises=4 conclusion=…`)
+  and recorded in `ix82-aggregate.json` / `ix83-generality.json`; the proof itself is the
+  certificate. IX.83 adds the instruction-specific corrections to the same record: the top-bit
+  mask split (`(premises, case, equation)` proved from `VAL_WORD_AND_MASK_WORD` + `MOD_CASES`),
+  the zero-test fold (`WORD_OR_EQ_0`/`VAL_WORD_OR_EQ_0`/`WORD_JOIN_EQ_0`), and the x86 `bit`
+  bound (`MSB_VAL`). Still open: a serialised `LinearCombinationCertificate { premises,
+  coefficients: BigInt[], conclusion }` consumed by a checker that verifies the identity.
+- [ ] **Generality verdict (IX.83).** The *mechanism* is shared and closes for three instruction
+  shapes on one architecture (add, subtract, negate) at one width. It is **not yet**
+  add-family-general across architectures or curves: the x86 add needs a per-model correction it
+  does not yet close within the cap, and p256's accumulator presentation yields no aggregate at
+  all. So the next investment on this axis is still `XIX.D` (a certificate representation the
+  chain reader can be extended against), not a new per-curve template. The instruction-specific
+  parts are named in `ix83-generality.md` §5; nothing names a curve, a width or a limb count.
 - [ ] **XIX.D2.** Extend to inequality certificates with nonnegative multipliers, then justified
   integer cuts and carry integrality — the direct bridge to the native `LIA` module.
 - [ ] **XIX.D3.** Make **canonical sparse arithmetic forms** a first-class representation (the

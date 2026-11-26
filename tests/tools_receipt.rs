@@ -28,8 +28,11 @@ use tekmerion::tools::{curve_check, dropin};
 /// `deafeb4d…` (after XVI.D's failure taxonomy), `ace0b868…` (after XVII.A5's
 /// mathematical-failure allow-list), `c4b52cc7…` (after XIX.A's interval-sum
 /// fix), `65ced317…` (after XIX.C1's weighted-sum aggregate: the chain/weight
-/// builder, the negated-literal linear parser, and the aggregate-band fact).
-const BRIDGE_DIGEST: &str = "65ced317f254a0122117e3800b07a331e03ed98d3efb1e0f4aa12bbceff9b6ca";
+/// builder, the negated-literal linear parser, and the aggregate-band fact),
+/// `070ed5b4…` (after IX.83's generalisation: the top-bit mask split, the
+/// zero-test/OR fold, the x86 `bit` bound, the shared sub/neg entry points,
+/// and the non-chain-equality close set).
+const BRIDGE_DIGEST: &str = "070ed5b4de5f2c42598c9cd9c5cc14a16603b2a80d10ce8c9e80c010b2885448";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -128,7 +131,7 @@ fn curve_check_reproduces_the_recorded_report() {
     // count was silently pinned to 33.  XIX.B4 fixes the scanner (quotations
     // and strings are opaque), so the honest count is 81 again.  XIX.C1's
     // aggregate block adds five `prove` calls: 81 -> 86, hits still 0.
-    assert_eq!(statements, 86);
+    assert_eq!(statements, 91);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -167,10 +170,10 @@ fn instrument_reproduces_the_recorded_output() {
     // -> 217 (IX.78 adds the oracle close) -> 221 (XIX.A adds the four sum
     // bound helpers) -> 232 (XIX.C1 adds the aggregate builder, its chain and
     // weight helpers, the linear-combination proof and the aggregate-band fact).
-    assert_eq!(phrases, 232);
+    assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "fb1677dc3e7785cae102b118b6d8b4731c90951ef02d6fc8c5d9b9402ca2bcf5"
+        "f84b7582f82f4ea43d4f2b40985f6f1779705dffd75d67367517ca05f2fb5715"
     );
 }
 
@@ -214,7 +217,7 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // bridge_bounds_of_terms): 261 -> 265.  XIX.C1 adds eleven `let` phrases to
     // bridge.ml (the aggregate builder, its chain/weight helpers, the
     // linear-combination proof, and the aggregate-band fact): 265 -> 276.
-    assert_eq!(parts.len(), 276);
+    assert_eq!(parts.len(), 293);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -281,19 +284,19 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     for (mode, digest) in [
         (
             "add-ref",
-            "a930a4e6466d3f4db7becfddbddb73b07e626fef546ea39406e5a89660137029",
+            "55920f3e4b9cc42d075c22be8d3ad156c20dd2ff191e7d49882a357c8984ee2c",
         ),
         (
             "sub",
-            "eb3215a8be9965309c357d98a4ccb57deb8efec65617bb62aa98c98d149eac71",
+            "78a05032259a798c035adb9a6b8bd5926bb11ade48835456025cbf891048b50c",
         ),
         (
             "neg",
-            "e957d506e1e2d8044d3b1f9b9df66e359b162059fbb5b6c956e1eb0c45833fdd",
+            "f67d0350a4f1ebab2af9e1c62e841a71d8d24188c3f91b8268c531b2dfb18cbe",
         ),
         (
             "add-p384",
-            "5fad9abe89f876e841404c414bb12110afd17f9c9042cda20c9e8eb6106bf5ee",
+            "a50237816f2236d585ae80e0a467d3f1e7eff927bc2d8118210e55c6072fbc6d",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

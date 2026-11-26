@@ -1063,6 +1063,33 @@ let BRIDGE_VAL_WORD_CONV : conv =
     | _ -> failwith "BRIDGE_VAL_WORD_CONV" in
   DEPTH_CONV one;;
 
+(* `bit (w-1) x' (the x86 correction tests the top bit) as a bound on `val x'.
+   `MSB_VAL' states the index as `dimindex(:N) - 1', which does not match the
+   reduced numeral in the goal, so the instance is built at the word's own type
+   and reduced; the reduction is on the *num* form (`MSB_VAL'), because
+   `DEPTH_CONV' over `MSB_INT_VAL''s `&2 pow k' recurses without bound
+   (measured: stack overflow). *)
+let BRIDGE_BIT_MSB_CONV : conv =
+  let one tm =
+    match tm with
+    | Comb(Comb(Const("bit",_), k), w) when is_numeral k ->
+        let bits = bridge_word_width (type_of w) in
+        if not (bits >= 1 && Num.eq_num (dest_numeral k) (Num.num_of_int (bits - 1)))
+        then failwith "BRIDGE_BIT_MSB_CONV: not the top bit" else
+        let th = CONV_RULE (DEPTH_CONV DIMINDEX_CONV)
+                   (SPEC w (INST_TYPE [bridge_finty bits, `:N`] MSB_VAL)) in
+        let e1 = NUM_REDUCE_CONV
+                   (mk_binop `(-):num->num->num`
+                      (mk_numeral (Num.num_of_int bits))
+                      (mk_numeral (Num.num_of_int 1))) in
+        let th = REWRITE_RULE[e1] th in
+        let e2 = NUM_REDUCE_CONV
+                   (mk_binop `(EXP):num->num->num` `2`
+                      (mk_numeral (Num.num_of_int (bits - 1)))) in
+        REWRITE_RULE[e2] th
+    | _ -> failwith "BRIDGE_BIT_MSB_CONV" in
+  DEPTH_CONV one;;
+
 (* [IX.70] The WIP normalised the assumptions only through the shifts and
    never rewrote the machine add/sub or the unsigned comparisons.  Two
    consequences, both measured on arm/add_p25519:
@@ -1073,7 +1100,9 @@ let BRIDGE_VAL_WORD_CONV : conv =
    The normalisation below is generic: it is a confluence-free rewrite to the
    integer fragment, run on the goal and every assumption. *)
 let BRIDGE_ALG_NORM_ASSUM (th:thm) : thm =
-  let th = REWRITE_RULE[WORD_ULT; WORD_ULE; VAL_WORD_0; VAL_WORD_BITVAL] th in
+  let th = REWRITE_RULE[WORD_ULT; WORD_ULE; VAL_WORD_0; VAL_WORD_BITVAL;
+                        GSYM VAL_EQ_0] th in
+  let th = CONV_RULE BRIDGE_BIT_MSB_CONV th in
   let th = CONV_RULE NUM_TO_INT_CONV th in
   let th = CONV_RULE BRIDGE_VAL_JOIN_DEPTH_CONV th in
   let th = CONV_RULE BRIDGE_VAL_WORD_CONV th in
@@ -1088,7 +1117,8 @@ let BRIDGE_ALG_NORM_ASSUM (th:thm) : thm =
 let BRIDGE_ALG_NORM_TAC : tactic =
   fun g ->
     (RULE_ASSUM_TAC BRIDGE_ALG_NORM_ASSUM THEN
-     REWRITE_TAC[WORD_ULT; WORD_ULE; VAL_WORD_0; VAL_WORD_BITVAL] THEN
+     REWRITE_TAC[WORD_ULT; WORD_ULE; VAL_WORD_0; VAL_WORD_BITVAL;
+                 GSYM VAL_EQ_0] THEN
      CONV_TAC NUM_TO_INT_CONV THEN
      CONV_TAC BRIDGE_VAL_JOIN_DEPTH_CONV THEN
      CONV_TAC BRIDGE_VAL_WORD_CONV THEN
@@ -1280,6 +1310,133 @@ let BRIDGE_ATOM_BOUNDS_TAC : tactic =
       | _ -> acc) atoms [] in
     if facts = [] then ALL_TAC (asl,w)
     else (MP_TAC (end_itlist CONJ facts) THEN STRIP_TAC) (asl,w);;
+
+(* ------------------------------------------------------------------------- *)
+(* 6c.2b The top-bit mask (IX.83).                                           *)
+(*                                                                           *)
+(* `sub_p25519' and `neg_p25519' end with `AND x (2 EXP 255 - 1)' at the word *)
+(* level, which is `val(word_and x (word(2^(w-1)-1)))'.  As an integer atom  *)
+(* that is `val x MOD 2^(w-1)', and the linear prover has no MOD: the       *)
+(* aggregate close cannot relate it to `val x'.  It does not have to: for a  *)
+(* `w'-bit word `val x < 2^w = 2 * 2^(w-1)', so the top bit is either clear *)
+(* (the truncated value is `val x') or set (it is `val x - 2^(w-1)').  Both  *)
+(* directions are proved from `VAL_WORD_AND_MASK_WORD' and `MOD_CASES'; the  *)
+(* tactic below case-splits on `val x < 2^(w-1)' and assumes the matching    *)
+(* *equation*, not a disjunction: an added disjunction would be re-found by  *)
+(* `BRIDGE_SPLIT_INT_DISJ_TAC' (which leaves the hypothesis in place) and    *)
+(* split forever.  Nothing here names a curve or an instruction.             *)
+(* ------------------------------------------------------------------------- *)
+
+let BRIDGE_EXP_STEP = prove
+ (`!k:num. 2 EXP (k + 1) = 2 * 2 EXP k`,
+  GEN_TAC THEN REWRITE_TAC[EXP_ADD; EXP_1; MULT_AC]);;
+
+let BRIDGE_VAL_TOP_MASK_BOUND = prove
+ (`!(x:N word). val x < 2 * 2 EXP (dimindex(:N) - 1)`,
+  GEN_TAC THEN REWRITE_TAC[GSYM BRIDGE_EXP_STEP] THEN
+  SUBGOAL_THEN `1 <= dimindex(:N)` ASSUME_TAC THENL
+   [REWRITE_TAC[DIMINDEX_GE_1]; ALL_TAC] THEN
+  SUBGOAL_THEN `dimindex(:N) - 1 + 1 = dimindex(:N)` SUBST1_TAC THENL
+   [ASM_ARITH_TAC; REWRITE_TAC[VAL_BOUND]]);;
+
+let BRIDGE_AND_TOP_MASK_LOW = prove
+ (`!(x:N word).
+     val x < 2 EXP (dimindex(:N) - 1)
+     ==> int_of_num(val(word_and x (word(2 EXP (dimindex(:N) - 1) - 1)))) =
+         int_of_num(val x)`,
+  REPEAT STRIP_TAC THEN
+  MP_TAC(ISPECL [`x:N word`; `dimindex(:N) - 1`] VAL_WORD_AND_MASK_WORD) THEN
+  DISCH_THEN SUBST1_TAC THEN
+  AP_TERM_TAC THEN MATCH_MP_TAC MOD_LT THEN ASM_REWRITE_TAC[]);;
+
+let BRIDGE_AND_TOP_MASK_HIGH = prove
+ (`!(x:N word).
+     ~(val x < 2 EXP (dimindex(:N) - 1))
+     ==> int_of_num(val(word_and x (word(2 EXP (dimindex(:N) - 1) - 1)))) +
+         int_of_num(2 EXP (dimindex(:N) - 1)) = int_of_num(val x)`,
+  REPEAT STRIP_TAC THEN
+  MP_TAC(ISPECL [`x:N word`; `dimindex(:N) - 1`] VAL_WORD_AND_MASK_WORD) THEN
+  DISCH_THEN SUBST1_TAC THEN
+  REWRITE_TAC[INT_OF_NUM_ADD] THEN AP_TERM_TAC THEN
+  MP_TAC(ISPECL [`val(x:N word)`; `2 EXP (dimindex(:N) - 1)`] MOD_CASES) THEN
+  REWRITE_TAC[BRIDGE_VAL_TOP_MASK_BOUND] THEN
+  DISCH_THEN SUBST1_TAC THEN
+  ASM_REWRITE_TAC[] THEN ASM_ARITH_TAC);;
+
+(* the `val(word_and x (word m))' atom and its argument, when the numeral    *)
+(* mask is the low `w-1' bits of a `w'-bit word.  Any other mask is left     *)
+(* alone (it is not a top-bit truncation).                                   *)
+let bridge_top_mask_atom t =
+  match t with
+  | Comb((Const("val",_) as v), Comb(Comb(Const("word_and",_), x),
+                                      Comb(Const("word",_), n)))
+    when is_numeral n ->
+      (try
+         let bits = bridge_word_width (type_of x) in
+         let rec pow2 k = if k <= 0 then num_1
+           else Num.mult_num (Num.num_of_int 2) (pow2 (k - 1)) in
+         let mask = Num.sub_num (pow2 (bits - 1)) num_1 in
+         if bits >= 1 && Num.eq_num (dest_numeral n) mask
+         then Some (t, v, x) else None
+       with _ -> None)
+  | _ -> None;;
+
+let bridge_mask_atoms tm =
+  List.fold_left (fun acc u ->
+      match bridge_top_mask_atom u with
+      | Some (t,v,x) when not (List.exists (fun (_,_,y) -> aconv x y) acc) ->
+          acc @ [(t,v,x)]
+      | _ -> acc) [] (find_terms (fun _ -> true) tm);;
+
+let bridge_has_top_mask tm =
+  bridge_mask_atoms tm <> [];;
+
+(* case-split the top bit of every masked limb and assume the equation it    *)
+(* determines, so the linear close sees `val(mask)' as an affine function of *)
+(* `val x' in each branch.                                                    *)
+let BRIDGE_AND_MASK_FACTS_TAC : tactic =
+  fun (asl,w) ->
+    let atoms =
+      List.fold_left (fun acc tm ->
+          List.fold_left (fun a (t,v,x) ->
+              if List.exists (fun (_,_,y) -> aconv x y) a then a
+              else a @ [(t,v,x)])
+            acc (bridge_mask_atoms tm))
+        [] (w :: List.map (fun (_,th) -> concl th) asl) in
+    bridge_slice_note "MASK atoms=%d [%s]" (List.length atoms)
+      (String.concat "," (List.map (fun (_,_,x) -> string_of_term x) atoms));
+    let one (mt,v,x) : tactic =
+      let bits = bridge_word_width (type_of x) in
+      let rec pow2 k = if k <= 0 then num_1
+        else Num.mult_num (Num.num_of_int 2) (pow2 (k - 1)) in
+      let top = pow2 (bits - 1) in
+      let topn = mk_numeral top in
+      let y = mk_comb(v, x) in
+      let iy = mk_comb(`int_of_num:num->int`, y)
+      and im = mk_comb(`int_of_num:num->int`, mt)
+      and ie = mk_comb(`int_of_num:num->int`, topn) in
+      let cond = mk_comb(mk_comb(`(<):num->num->bool`, y), topn) in
+      let cond_int = mk_comb(mk_comb(`(<):int->int->bool`, iy), ie) in
+      let cond_int_ge = mk_comb(mk_comb(`(<=):int->int->bool`, ie), iy) in
+      let low = CONV_RULE (DEPTH_CONV DIMINDEX_CONV THENC NUM_REDUCE_CONV)
+                  (ISPEC x (INST_TYPE [bridge_finty bits, `:N`] BRIDGE_AND_TOP_MASK_LOW))
+      and high = CONV_RULE (DEPTH_CONV DIMINDEX_CONV THENC NUM_REDUCE_CONV)
+                  (ISPEC x (INST_TYPE [bridge_finty bits, `:N`] BRIDGE_AND_TOP_MASK_HIGH)) in
+      (* the boolean case becomes an *integer* bound as well, so the close can
+         bound the written word by `2^(w-1)' in the low case and `2^(w-1)'
+         from below in the high case. *)
+      ASM_CASES_TAC cond THENL
+       [SUBGOAL_THEN cond_int ASSUME_TAC THENL
+         [REWRITE_TAC[INT_OF_NUM_LT] THEN FIRST_ASSUM ACCEPT_TAC; ALL_TAC] THEN
+        SUBGOAL_THEN (mk_eq(im, iy)) ASSUME_TAC THENL
+         [MATCH_MP_TAC low THEN FIRST_ASSUM ACCEPT_TAC; ALL_TAC];
+        SUBGOAL_THEN cond_int_ge ASSUME_TAC THENL
+         [REWRITE_TAC[INT_OF_NUM_LE] THEN
+          MATCH_MP_TAC(ARITH_RULE `~(a:num < b) ==> b <= a`) THEN
+          FIRST_ASSUM ACCEPT_TAC; ALL_TAC] THEN
+        SUBGOAL_THEN (mk_eq(mk_binop `(+):int->int->int` im ie, iy)) ASSUME_TAC THENL
+         [MATCH_MP_TAC high THEN FIRST_ASSUM ACCEPT_TAC; ALL_TAC]] in
+    EVERY (List.map one atoms) (asl,w);;
 
 (* ------------------------------------------------------------------------- *)
 (* 6c. The oracle close (IX.78).                                             *)
@@ -1837,6 +1994,98 @@ let bridge_oracle_facts defs ineqs =
       end) defs;
   List.rev !out;;
 
+(* ========================================================================= *)
+(* 6c.2c The zero test: `word_join' and `word_or' agree on being zero.        *)
+(*                                                                           *)
+(* A complement routine tests its input for zero with an OR of its limbs,    *)
+(* while the reference function's guard is an equality on the whole word     *)
+(* built by `word_join'.  BITBLAST does not connect those two encodings       *)
+(* (measured: `word_join a b = word 0 ==> word_or a b = word 0' comes back    *)
+(* SATISFIABLE), so the link is made here, as a word identity valid for every *)
+(* width and every pair of limbs.  The algebraic close needs the same link:  *)
+(* the chain equations say `sum + n = p`, and the reference's guard says      *)
+(* `n = 0'; without the fold the machine's `val(or n) != 0' branch is not     *)
+(* refutable.  No curve constant occurs below.                               *)
+(* ========================================================================= *)
+
+let WORD_JOIN_EQ_0 = prove
+ (`!x:M word y:N word.
+     dimindex(:M) + dimindex(:N) = dimindex(:P)
+     ==> (((word_join:M word->N word->P word) x y = word 0) <=>
+          (x = word 0 /\ y = word 0))`,
+  REPEAT GEN_TAC THEN DISCH_TAC THEN
+  SUBGOAL_THEN
+   `val((word_join:M word->N word->P word) x y) =
+    2 EXP dimindex(:N) * val(x:M word) + val(y:N word)`
+  ASSUME_TAC THENL
+   [MATCH_MP_TAC VAL_WORD_JOIN_SIMPLE THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
+  REWRITE_TAC[GSYM VAL_EQ_0] THEN
+  ASM_REWRITE_TAC[] THEN
+  REWRITE_TAC[ADD_EQ_0; MULT_EQ_0; EXP_EQ_0; ARITH_EQ] THEN
+  SUBGOAL_THEN `~(2 EXP dimindex(:N) = 0)` (fun th -> REWRITE_TAC[th]) THENL
+   [REWRITE_TAC[EXP_EQ_0; ARITH_EQ]; ALL_TAC] THEN
+  CONV_TAC TAUT);;
+
+(* the same statement instantiated at the actual limb/result widths, so the
+   width side condition is discharged here and the rewrite needs no subgoal *)
+let BRIDGE_JOIN_ZERO_CONV : conv =
+  let conv tm =
+    let (l,r) = dest_eq tm in
+    let (j,args) = strip_comb l in
+    if name_of j <> "word_join" || List.length args <> 2 then
+      failwith "BRIDGE_JOIN_ZERO_CONV: not a join equation" else
+    let x = List.nth args 0 and y = List.nth args 1 in
+    (match r with
+       Comb(Const("word",_),n) when n = `0` -> ()
+     | _ -> failwith "BRIDGE_JOIN_ZERO_CONV: right side is not `word 0'");
+    let mx = bridge_word_width (type_of x)
+    and my = bridge_word_width (type_of y)
+    and mp = bridge_word_width (type_of l) in
+    let inst = INST_TYPE
+      [bridge_finty mx, `:M`; bridge_finty my, `:N`; bridge_finty mp, `:P`]
+      WORD_JOIN_EQ_0 in
+    let th = SPECL [x;y] inst in
+    let side = lhand(concl th) in
+    let side_th = prove(side,
+      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
+               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
+    MP th side_th in
+  conv;;
+
+(* fold both zero tests to a conjunction of limb-wise `= word 0', in the goal
+   and in the hypotheses *)
+let BRIDGE_ZERO_TEST_TAC : tactic = fun (asl,w) ->
+  (RULE_ASSUM_TAC(REWRITE_RULE[WORD_OR_EQ_0]) THEN
+   REWRITE_TAC[WORD_OR_EQ_0] THEN
+   RULE_ASSUM_TAC(CONV_RULE (TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV)) THEN
+   CONV_TAC(TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV) THEN
+   RULE_ASSUM_TAC(REWRITE_RULE[CONJ_ACI]) THEN
+   REWRITE_TAC[CONJ_ACI]) (asl,w);;
+
+(* The algebraic close needs the same fold *plus* the val-level OR form (the
+   accumulator hands the select condition as `val(or ...) <> 0') and the
+   reduction of zero tests over already-substituted `word 0' limbs, so the
+   impossible select branch becomes `F'.  Separate from the SAT fold above so
+   the shipped x86 neg route is byte-for-byte the tactic it had. *)
+(* The algebraic close meets the machine's zero test in *integer* form
+   (`&(val(word_or ...)) = &0') only after the normalisation, so the OR fold is
+   done there, by a rewrite that is exact on the actual type.  Applied to the
+   goal and every hypothesis; a term with no OR is untouched. *)
+let INT_VAL_WORD_OR_EQ_0 = prove
+ (`!x:N word y:N word.
+     (int_of_num(val(word_or x y)) = &0) <=>
+     (int_of_num(val x) = &0 /\ int_of_num(val y) = &0)`,
+  REWRITE_TAC[INT_OF_NUM_EQ; VAL_WORD_OR_EQ_0]);;
+
+let BRIDGE_INT_OR_ZERO_CONV : conv =
+  GEN_REWRITE_CONV TOP_DEPTH_CONV [INT_VAL_WORD_OR_EQ_0];;
+
+let BRIDGE_ZERO_FOLD_TAC : tactic = fun (asl,w) ->
+  (RULE_ASSUM_TAC(REWRITE_RULE[INT_SUB_RZERO]) THEN
+   REWRITE_TAC[INT_SUB_RZERO] THEN
+   RULE_ASSUM_TAC(CONV_RULE BRIDGE_INT_OR_ZERO_CONV) THEN
+   CONV_TAC BRIDGE_INT_OR_ZERO_CONV) (asl,w);;
+
 (* ------------------------------------------------------------------------- *)
 (* 6c.3c Aggregate, don't eliminate (XIX.C1).                                 *)
 (*                                                                           *)
@@ -2061,6 +2310,20 @@ let bridge_aggregates eqs =
                       (List.length wpath) (string_of_term (concl th));
                     Some th))) comps;;
 
+(* An integer equation that carries no `&(bitval c)' atom is not a limb of a
+   carry chain: it is a *branch fact* such as a folded zero test
+   (`val(join n) = 0') or the top-bit mask relation.  Such facts are not
+   premises of any aggregate, so the aggregate sum does not state them and the
+   close must keep them.  The chain rows themselves stay out (that is what the
+   aggregate replaces; keeping both multiplies the prover's elimination). *)
+let bridge_int_eq_has_carry th =
+  match concl th with
+  | Comb(Comb(Const("=",_),a),_) when type_of a = `:int` ->
+      (match bridge_lf_row_of_thm th with
+       | Some f -> List.exists bridge_is_bitval_atom (bridge_lf_vars f)
+       | None -> true)
+  | _ -> false;;
+
 (* the top carry of a chain is decided by its aggregate, not by eliminating   *)
 (* the chain: the aggregate is `M + N = W + B^n * c', `INT_ARITH' encodes     *)
 (* integer discreteness through `INT_NOT_EQ', so `c = 0' follows from         *)
@@ -2081,7 +2344,10 @@ let bridge_aggregate_facts aggregates all_hyps =
     | Comb(Comb(Const("\\/",_),_),_) -> false
     | _ -> true in
   let side_hyps =
-    List.filter (fun th -> conjunctive th && not (is_int_eq th)) all_hyps in
+    List.filter
+      (fun th -> conjunctive th &&
+                 (not (is_int_eq th) || not (bridge_int_eq_has_carry th)))
+      all_hyps in
   (* `&(bitval b)' is a natural number, so `< &1' is `= &0'.  The `bitval'
      case split is what supplies the two possible values; the strict bound
      itself is proved by linear arithmetic from the aggregate. *)
@@ -2098,8 +2364,8 @@ let bridge_aggregate_facts aggregates all_hyps =
   bridge_slice_note "ORACLE aggregate-carriers=%d [%s]"
     (List.length carriers)
     (String.concat "," (List.map (fun (v,_) -> string_of_term v) carriers));
-  let prove_zero_lt (v, agg) =
-    let premises = agg :: side_hyps in
+  let prove_zero_lt v =
+    let premises = aggregates @ side_hyps in
     let band () =
       let th = prove(bridge_mk_imps premises
                        (mk_binop lt_tm v (bridge_int_lit num_1)),
@@ -2117,8 +2383,8 @@ let bridge_aggregate_facts aggregates all_hyps =
       bridge_slice_note "ORACLE agg-band %s failed: %s"
         (string_of_term v) (Printexc.to_string e);
       None in
-  let prove_fact (v, agg) k =
-    let premises = agg :: side_hyps in
+  let prove_fact v k =
+    let premises = aggregates @ side_hyps in
     try
       let th = prove(bridge_mk_imps premises (mk_eq(v, bridge_int_lit k)),
                      INT_ARITH_TAC) in
@@ -2126,19 +2392,19 @@ let bridge_aggregate_facts aggregates all_hyps =
     with _ -> None in
   List.filter_map (fun carrier ->
       let v = fst carrier in
-      match prove_zero_lt carrier with
+      match prove_zero_lt v with
       | Some th ->
           bridge_slice_note "ORACLE fact %s = 0 why=aggregate-band"
             (string_of_term v);
           Some th
       | None ->
-          (match prove_fact carrier num_0 with
+          (match prove_fact v num_0 with
            | Some th ->
                bridge_slice_note "ORACLE fact %s = 0 why=aggregate"
                  (string_of_term v);
                Some th
            | None ->
-               (match prove_fact carrier num_1 with
+               (match prove_fact v num_1 with
                 | Some th ->
                     bridge_slice_note "ORACLE fact %s = 1 why=aggregate"
                       (string_of_term v);
@@ -2242,7 +2508,17 @@ let BRIDGE_ORACLE_TAC : tactic =
         | _ -> false in
       let side_hyps =
         List.filter (fun th -> not (is_int_eq th) && not (is_disj th)) all_hyps in
-      let ants = aggregates @ facts' @ side_hyps in
+      (* non-chain integer equalities (folded zero tests, the top-bit mask
+         relation) are branch facts; see `bridge_int_eq_has_carry'. *)
+      let extra_eqs =
+        List.filter (fun th -> is_int_eq th && not (bridge_int_eq_has_carry th))
+          all_hyps in
+      bridge_slice_note "ORACLE extra-eqs=%d [%s]" (List.length extra_eqs)
+        (String.concat " | " (List.map (fun th ->
+             let s = string_of_term (concl th) in
+             if String.length s > 100 then String.sub s 0 100 ^ "..." else s)
+           extra_eqs));
+      let ants = aggregates @ facts' @ side_hyps @ extra_eqs in
       let w_eq = bridge_flat_conv w in
       let w' = rand (concl w_eq) in
       bridge_slice_note "ORACLE close ants=%d size=%d"
@@ -2295,9 +2571,11 @@ let BRIDGE_ALGEBRA_TAC : tactic =
     (at "normalise" BRIDGE_ALG_NORM_TAC THEN
      at "split-conditions" BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
      at "renormalise" BRIDGE_ALG_NORM_TAC THEN
+     at "zero-fold" BRIDGE_ZERO_FOLD_TAC THEN
      at "decide-bitvals" BRIDGE_DECIDE_BITVALS_TAC THEN
      at "bounds" BRIDGE_ATOM_BOUNDS_TAC THEN
      at "reduce" BRIDGE_INT_REDUCE_TAC THEN
+     at "mask-split" BRIDGE_AND_MASK_FACTS_TAC THEN
      at "split-disj" BRIDGE_SPLIT_INT_DISJ_TAC THEN
      at "oracle" BRIDGE_ORACLE_TAC) g;;
 
@@ -2305,6 +2583,7 @@ let BRIDGE_ALGEBRA_TAC : tactic =
 let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =
   fun g ->
     (BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+     BRIDGE_ZERO_TEST_TAC THEN
      expand THEN
      RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
      CONV_TAC BRIDGE_TO_WORD_CONV THEN
@@ -2662,23 +2941,26 @@ let BRIDGE_REF_SIDES tag p (lem:thm) : thm * thm =
              RAND_CONV NUM_REDUCE_CONV THENC NUM_LT_CONV)) in
   (pos,width);;
 
-(* sub: the spec is `&<written value> = (&m - &n) rem &p' *)
-let BRIDGE_SUB_REF_TAC expand pth : tactic =
+(* sub: the spec is `&<written value> = (&m - &n) rem &p'.  The body is the
+   same for the SAT close and the algebraic close (IX.83); only `finish' --
+   `BRIDGE_FINISH_KEEP_TAC' or `BRIDGE_FINISH_KEEP_ALG_TAC' -- differs, so a
+   measurement of one route cannot drift from the other's statement. *)
+let bridge_sub_ref_core tag finish expand pth : tactic =
   ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
   (fun (asl,w) ->
     let (_,rhs) = dest_eq w in
     let (diff,pt) = dest_binop `(rem):int->int->int` rhs in
     let (mt,nt) = dest_binop `(-):int->int->int` diff in
     let m = rand mt and n = rand nt and p0 = rand pt in
-    let (hm,pm,eqm) = BRIDGE_BOUND_HYP "BRIDGE_SUB_REF_TAC" p0 m asl
-    and (hn,pn,eqn) = BRIDGE_BOUND_HYP "BRIDGE_SUB_REF_TAC" p0 n asl in
+    let (hm,pm,eqm) = BRIDGE_BOUND_HYP tag p0 m asl
+    and (hn,pn,eqn) = BRIDGE_BOUND_HYP tag p0 n asl in
     if not (aconv pm pn) then
-      failwith "BRIDGE_SUB_REF_TAC: bounds use different moduli";
+      failwith (tag^": bounds use different moduli");
     let p = pm in
     let lem = SPECL [p; m; n] SUB_INT_REM_MOD in
     let ants = conjuncts (lhand (concl lem)) in
     if List.length ants <> 3 then
-      failwith "BRIDGE_SUB_REF_TAC: unexpected spec-lemma shape";
+      failwith (tag^": unexpected spec-lemma shape");
     let zpos = prove(List.nth ants 0, CONV_TAC NUM_LT_CONV) in
     let sth = MP lem (end_itlist CONJ [zpos; hm; hn]) in
     let (xw,thx) = BRIDGE_WORD_OF_DIGITS m in
@@ -2688,34 +2970,48 @@ let BRIDGE_SUB_REF_TAC expand pth : tactic =
     let (_,thw) = BRIDGE_WORD_OF_DIGITS wv in
     let wt = bridge_finty (bridge_word_width (type_of xw)) in
     let lem2 = SPECL [p; xw; yw] (INST_TYPE [wt,`:W`] SUB_REF_VAL_WORD) in
-    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_SUB_REF_TAC" p lem2 in
+    let (a0,a1) = BRIDGE_REF_SIDES tag p lem2 in
     let hx = REWRITE_RULE[GSYM thx] hm and hy = REWRITE_RULE[GSYM thy] hn in
     let rth = MP lem2 (end_itlist CONJ [a0; a1; hx; hy]) in
     let rth = SYM (REWRITE_RULE[thx; thy] rth) in
     (REWRITE_TAC(eqm @ eqn) THEN
      ASM_REWRITE_TAC[sth; INT_OF_NUM_EQ; rth; SYM thw; ref_sub;
                      LET_DEF; LET_END_DEF] THEN
-     BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;
+     finish expand) (asl,w));;
 
-(* neg: the spec is `bignum_from_memory (...) s = (p - n) MOD p' *)
-let BRIDGE_NEG_REF_TAC expand pth : tactic =
+let BRIDGE_SUB_REF_TAC expand pth : tactic =
+  bridge_sub_ref_core "BRIDGE_SUB_REF_TAC" BRIDGE_FINISH_KEEP_TAC expand pth;;
+
+let BRIDGE_SUB_REF_ALG_TAC expand pth : tactic =
+  bridge_sub_ref_core "BRIDGE_SUB_REF_ALG_TAC" BRIDGE_FINISH_KEEP_ALG_TAC expand pth;;
+
+(* neg: the spec is `bignum_from_memory (...) s = (p - n) MOD p'.  As for
+   `sub', the SAT and algebraic routes share the reduction and differ only in
+   the finish. *)
+let bridge_neg_ref_core tag finish expand pth : tactic =
   ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
   (fun (asl,w) ->
     let (lhs,rhs) = dest_eq w in
     let (dif,pt) = dest_binop `(MOD):num->num->num` rhs in
     let n = rand dif and p0 = rand pt in
-    let (hn,p,eqn) = BRIDGE_LE_HYP "BRIDGE_NEG_REF_TAC" p0 n asl in
+    let (hn,p,eqn) = BRIDGE_LE_HYP tag p0 n asl in
     let (xw,thx) = BRIDGE_WORD_OF_DIGITS n in
     let (ww,thw) = BRIDGE_WORD_OF_DIGITS lhs in
     let wt = bridge_finty (bridge_word_width (type_of xw)) in
     let lem = SPECL [p; xw] (INST_TYPE [wt,`:W`] NEG_REF_VAL_WORD) in
-    let (a0,a1) = BRIDGE_REF_SIDES "BRIDGE_NEG_REF_TAC" p lem in
+    let (a0,a1) = BRIDGE_REF_SIDES tag p lem in
     let hx = REWRITE_RULE[GSYM thx] hn in
     let rth = MP lem (end_itlist CONJ [a0; a1; hx]) in
     let rth = SYM (REWRITE_RULE[thx] rth) in
     (REWRITE_TAC eqn THEN
      REWRITE_TAC[rth; SYM thw; ref_neg; LET_DEF; LET_END_DEF] THEN
-     BRIDGE_FINISH_KEEP_TAC expand) (asl,w));;
+     finish expand) (asl,w));;
+
+let BRIDGE_NEG_REF_TAC expand pth : tactic =
+  bridge_neg_ref_core "BRIDGE_NEG_REF_TAC" BRIDGE_FINISH_KEEP_TAC expand pth;;
+
+let BRIDGE_NEG_REF_ALG_TAC expand pth : tactic =
+  bridge_neg_ref_core "BRIDGE_NEG_REF_ALG_TAC" BRIDGE_FINISH_KEEP_ALG_TAC expand pth;;
 
 (* ========================================================================= *)
 (* 9. Deriving the simulator's carry and flag facts.                        *)
@@ -3138,75 +3434,10 @@ let BRIDGE_MASK_SELECT_TAC : tactic = fun (asl,w) ->
       let th = REWRITE_RULE[cond_eq] th0 in
       ASSUME_TAC (TRANS th cth) (asl,w);;
 
-(* ========================================================================= *)
-(* 10. The zero test: `word_join' and `word_or' agree on being zero.          *)
-(*                                                                           *)
-(* A complement routine tests its input for zero with an OR of its limbs,    *)
-(* while the reference function's guard is an equality on the whole word     *)
-(* built by `word_join'.  BITBLAST does not connect those two encodings       *)
-(* (measured: `word_join a b = word 0 ==> word_or a b = word 0' comes back    *)
-(* SATISFIABLE), so the link is made here, as a word identity valid for every *)
-(* width and every pair of limbs, and both folded zero tests are left in the *)
-(* limb-wise form BITBLAST does decide.  No curve constant occurs below.     *)
-(* ========================================================================= *)
-
-let WORD_JOIN_EQ_0 = prove
- (`!x:M word y:N word.
-     dimindex(:M) + dimindex(:N) = dimindex(:P)
-     ==> (((word_join:M word->N word->P word) x y = word 0) <=>
-          (x = word 0 /\ y = word 0))`,
-  REPEAT GEN_TAC THEN DISCH_TAC THEN
-  SUBGOAL_THEN
-   `val((word_join:M word->N word->P word) x y) =
-    2 EXP dimindex(:N) * val(x:M word) + val(y:N word)`
-  ASSUME_TAC THENL
-   [MATCH_MP_TAC VAL_WORD_JOIN_SIMPLE THEN ASM_REWRITE_TAC[]; ALL_TAC] THEN
-  REWRITE_TAC[GSYM VAL_EQ_0] THEN
-  ASM_REWRITE_TAC[] THEN
-  REWRITE_TAC[ADD_EQ_0; MULT_EQ_0; EXP_EQ_0; ARITH_EQ] THEN
-  SUBGOAL_THEN `~(2 EXP dimindex(:N) = 0)` (fun th -> REWRITE_TAC[th]) THENL
-   [REWRITE_TAC[EXP_EQ_0; ARITH_EQ]; ALL_TAC] THEN
-  CONV_TAC TAUT);;
-
-(* the same statement instantiated at the actual limb/result widths, so the
-   width side condition is discharged here and the rewrite needs no subgoal *)
-let BRIDGE_JOIN_ZERO_CONV : conv =
-  let conv tm =
-    let (l,r) = dest_eq tm in
-    let (j,args) = strip_comb l in
-    if name_of j <> "word_join" || List.length args <> 2 then
-      failwith "BRIDGE_JOIN_ZERO_CONV: not a join equation" else
-    let x = List.nth args 0 and y = List.nth args 1 in
-    (match r with
-       Comb(Const("word",_),n) when n = `0` -> ()
-     | _ -> failwith "BRIDGE_JOIN_ZERO_CONV: right side is not `word 0'");
-    let mx = bridge_word_width (type_of x)
-    and my = bridge_word_width (type_of y)
-    and mp = bridge_word_width (type_of l) in
-    let inst = INST_TYPE
-      [bridge_finty mx, `:M`; bridge_finty my, `:N`; bridge_finty mp, `:P`]
-      WORD_JOIN_EQ_0 in
-    let th = SPECL [x;y] inst in
-    let side = lhand(concl th) in
-    let side_th = prove(side,
-      CONV_TAC(LAND_CONV(BINOP_CONV DIMINDEX_CONV THENC NUM_ADD_CONV) THENC
-               RAND_CONV DIMINDEX_CONV THENC NUM_EQ_CONV)) in
-    MP th side_th in
-  conv;;
-
-(* fold both the OR zero test and the joined-word zero test to a conjunction
-   of limb-wise `= word 0', in the goal and in the hypotheses *)
-let BRIDGE_ZERO_TEST_TAC : tactic = fun (asl,w) ->
-  (RULE_ASSUM_TAC(REWRITE_RULE[WORD_OR_EQ_0]) THEN
-   REWRITE_TAC[WORD_OR_EQ_0] THEN
-   RULE_ASSUM_TAC(CONV_RULE (TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV)) THEN
-   CONV_TAC(TOP_DEPTH_CONV BRIDGE_JOIN_ZERO_CONV) THEN
-   RULE_ASSUM_TAC(REWRITE_RULE[CONJ_ACI]) THEN
-   REWRITE_TAC[CONJ_ACI]) (asl,w);;
-
 (* `BRIDGE_FINISH_KEEP_TAC` with the zero-test fold applied first, so that the
    branch condition the reference's `if x = word 0` leaves behind is the same
-   limb-wise conjunction the machine's OR zero test has been folded to. *)
+   limb-wise conjunction the machine's OR zero test has been folded to.
+   `BRIDGE_ZERO_TEST_TAC' is section 6c.2c. *)
 let BRIDGE_FINISH_KEEP_ZERO_TAC expand : tactic =
   fun g ->
     (BRIDGE_ZERO_TEST_TAC THEN

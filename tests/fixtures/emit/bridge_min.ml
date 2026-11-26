@@ -10,11 +10,11 @@ let BRIDGE_ADD_REF_TAC expand pth : tactic =
   ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
   BRIDGE_SPLIT_CONDITIONS_KEEP_TAC;;
 
-let BRIDGE_SUB_REF_TAC expand pth : tactic =
+let bridge_sub_ref_core tag finish expand pth : tactic =
   ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
   BRIDGE_SPLIT_CONDITIONS_KEEP_TAC;;
 
-let BRIDGE_NEG_REF_TAC expand pth : tactic =
+let bridge_neg_ref_core tag finish expand pth : tactic =
   ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN
   BRIDGE_SPLIT_CONDITIONS_KEEP_TAC;;
 

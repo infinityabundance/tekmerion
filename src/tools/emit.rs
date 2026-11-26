@@ -759,19 +759,42 @@ pub fn post_text(op: &str, state: &str, modulus: &str) -> String {
 /// `TEKMERION_ALG_CLOSE=<task id>` selects the entry point for that one task and
 /// is visible in the emitted answer; unset, every task emits exactly the tactic
 /// it had and its inference count is unchanged.
-pub const ALGEBRAIC_CLOSE_TASKS: &[&str] = &["arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT"];
+///
+/// IX.82 added the weighted-sum aggregate for `arm.bignum_add_p25519`.
+/// IX.83 generalises it to subtraction and negation.  Every task listed here
+/// has a measured, solver-free close in `research/receipts/ix83-generality.md`;
+/// a task not listed emits its SAT entry point even with the gate set.
+///
+/// `x86.bignum_add_p25519`, `arm.bignum_add_p256` and `arm.bignum_add_p384`
+/// have the same generic entry point (the `ref_entry` mapping does not name a
+/// task), but they are **not** listed: the x86 add drives the linear prover
+/// past the 12 GB cap, p256's accumulator presentation emits no aggregate, and
+/// p384 was not attempted.  Shipping them would make the gated answer
+/// unprovable, so the opt-in set stays limited to routes that close.
+pub const ALGEBRAIC_CLOSE_TASKS: &[&str] = &[
+    "arm.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+    "arm.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT",
+    "arm.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT",
+];
 
-/// Pure gate, so the mapping is unit-testable without touching the process
-/// environment.  `enabled` is what the caller reads from `TEKMERION_ALG_CLOSE`.
-fn add_ref_entry(task: Option<&str>, enabled: bool) -> &'static str {
-    match task {
-        Some(t) if enabled && ALGEBRAIC_CLOSE_TASKS.contains(&t) => "BRIDGE_ADD_REF_ALG_TAC",
+/// The entry point a task's reference close emits.  `op` selects the family of
+/// instructions (and therefore the reduction lemma); the gate selects the
+/// finish.  Pure, so the mapping is unit-testable without the environment.
+fn ref_entry(task: Option<&str>, enabled: bool, op: &str) -> &'static str {
+    let gated = matches!(task, Some(t) if enabled && ALGEBRAIC_CLOSE_TASKS.contains(&t));
+    match (op, gated) {
+        ("add", true) => "BRIDGE_ADD_REF_ALG_TAC",
+        ("sub", true) => "BRIDGE_SUB_REF_ALG_TAC",
+        ("neg", true) => "BRIDGE_NEG_REF_ALG_TAC",
+        ("add", false) => "BRIDGE_ADD_REF_TAC",
+        ("sub", false) => "BRIDGE_SUB_REF_TAC",
+        ("neg", false) => "BRIDGE_NEG_REF_TAC",
         _ => "BRIDGE_ADD_REF_TAC",
     }
 }
 
-/// `post_text` for a named task: the only difference is which add entry point
-/// the emitted chain calls (see `add_ref_entry`).
+/// `post_text` for a named task: the only difference is which entry point
+/// the emitted chain calls (see `ref_entry`).
 pub fn post_text_for(
     task: Option<&str>,
     enabled: bool,
@@ -786,19 +809,21 @@ pub fn post_text_for(
              CONV_TAC SYM_CONV THEN CONV_TAC(RAND_CONV BIGNUM_LEXPAND_CONV) THEN\n\
              ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC \"{state}\" THEN\n\
              {} (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}",
-            add_ref_entry(task, enabled)
+            ref_entry(task, enabled, "add")
         ),
         "sub" => format!(
             "ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN\n\
              CONV_TAC(LAND_CONV(RAND_CONV BIGNUM_EXPAND_CONV)) THEN\n\
              ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC \"{state}\" THEN\n\
-             BRIDGE_SUB_REF_TAC (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}"
+             {} (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}",
+            ref_entry(task, enabled, "sub")
         ),
         "neg" => format!(
             "ENSURES_FINAL_STATE_TAC THEN ASM_REWRITE_TAC[] THEN STRIP_TAC THEN\n\
              CONV_TAC(LAND_CONV BIGNUM_EXPAND_CONV) THEN\n\
              ASM_REWRITE_TAC[] THEN DISCARD_STATE_TAC \"{state}\" THEN\n\
-             BRIDGE_NEG_REF_TAC (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}"
+             {} (CONV_TAC (ONCE_DEPTH_CONV BIGNUM_OF_WORDLIST_CONV)) {modulus}",
+            ref_entry(task, enabled, "neg")
         ),
         other => format!("{other}: unknown operation"),
     }
@@ -832,8 +857,15 @@ const NEG_CF_REWRITE: &str = "RULE_ASSUM_TAC(REWRITE_RULE[WORD_NEG_EQ_0; WORD_BI
 
 /// The x86 close: the NEG-derived CF is `~(x = 0)`, so the two eq-0 facts are
 /// rewritten before the bridge and a NEG routine uses the ZERO-test variant.
-pub fn post_simulation_x86(op: &str, state: &str, modulus: &str, uses_neg: bool) -> String {
-    let mut text = post_text(op, state, modulus);
+pub fn post_simulation_x86(
+    task: Option<&str>,
+    enabled: bool,
+    op: &str,
+    state: &str,
+    modulus: &str,
+    uses_neg: bool,
+) -> String {
+    let mut text = post_text_for(task, enabled, op, state, modulus);
     if !uses_neg {
         return text;
     }
@@ -1035,12 +1067,12 @@ const BRIDGE_EDITS: &[MarkerEdit] = &[
         marked: "let BRIDGE_ADD_REF_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
     },
     MarkerEdit {
-        plain: "let BRIDGE_SUB_REF_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
-        marked: "let BRIDGE_SUB_REF_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        plain: "let bridge_sub_ref_core tag finish expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        marked: "let bridge_sub_ref_core tag finish expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
     },
     MarkerEdit {
-        plain: "let BRIDGE_NEG_REF_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
-        marked: "let BRIDGE_NEG_REF_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        plain: "let bridge_neg_ref_core tag finish expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
+        marked: "let bridge_neg_ref_core tag finish expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
     },
     MarkerEdit {
         plain: "let BRIDGE_NEG_REF_ZERO_TAC expand pth : tactic =\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
@@ -1772,7 +1804,14 @@ pub fn build_x86(op: &str, task: &str, policy: &GuardPolicy, repo: &Path) -> Res
     let tactic = [
         format!("{} THEN", preamble(&spec)),
         format!("{} THEN", x86_simulation(&exec_name, &accumulate, last)),
-        post_simulation_x86(op, &format!("s{last}"), &modulus, uses_neg),
+        post_simulation_x86(
+            Some(task),
+            algebraic_close_requested(task),
+            op,
+            &format!("s{last}"),
+            &modulus,
+            uses_neg,
+        ),
     ]
     .join("\n");
     Ok(X86Info {

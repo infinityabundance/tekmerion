@@ -1,0 +1,146 @@
+{
+  "receipt": "ix83-generality",
+  "date": "2026-11-26",
+  "branch": "staging",
+  "parent_commit": "e36dc58",
+  "change": ["tools/bridge.ml", "src/tools/emit.rs"],
+  "gate": "TEKMERION_ALG_CLOSE=<task id>",
+  "base": "18446744073709551616",
+  "weights": [
+    "1",
+    "18446744073709551616",
+    "340282366920938463463374607431768211456",
+    "6277101735386680763835789423207666416102355444464034512896"
+  ],
+  "closed": [
+    {
+      "task": "arm.bignum_add_p25519",
+      "n_limbs": 4,
+      "aggregates": 2,
+      "aggregate_lines": 24,
+      "structure": "raw: W_raw + B^4*c8 = M + N; corrected: W_cor - W_raw = B^4 - p",
+      "primitive_inferences": 5745767,
+      "sat_closes": 0,
+      "wall_seconds": 30,
+      "oracle_branches": 12,
+      "default_sat_inferences": 111523776,
+      "ratio_vs_default": 19.41,
+      "human_correct": 1848494,
+      "ratio_vs_human": 3.11,
+      "note": "re-measured; IX.82 was 5233638 with the earlier close set"
+    },
+    {
+      "task": "arm.bignum_sub_p25519",
+      "n_limbs": 4,
+      "aggregates": 2,
+      "aggregate_lines": 48,
+      "structure": "corrected: W_cor - W_raw - B^4*c14 = -19 (subtractive constant, borrow c14); raw: W_raw - (M - N) = B^4",
+      "primitive_inferences": 9029510,
+      "sat_closes": 0,
+      "wall_seconds": 34,
+      "oracle_branches": 24,
+      "default_sat_inferences": 87971295,
+      "ratio_vs_default": 9.74,
+      "human_correct": null,
+      "note": "top-bit word_and split doubles the branches; c14 needs both aggregates as premises"
+    },
+    {
+      "task": "arm.bignum_neg_p25519",
+      "n_limbs": 4,
+      "aggregates": 1,
+      "aggregate_lines": 10,
+      "structure": "W + n - B^4*c12 = p",
+      "primitive_inferences": 5683733,
+      "sat_closes": 0,
+      "wall_seconds": 27,
+      "oracle_branches": 10,
+      "default_sat_inferences": 33910447,
+      "ratio_vs_default": 5.97,
+      "human_correct": null,
+      "note": "zero-test fold connects word_join and word_or; c12 = 0"
+    }
+  ],
+  "not_closed": [
+    {
+      "task": "x86.bignum_add_p25519",
+      "status": "capped",
+      "in_closing_list": false,
+      "cap": "12G RLIMIT_AS",
+      "peak_rss_kb": 12305456,
+      "closed_branches": 1,
+      "diagnosis": "correction-plus-bit63 branch drives INT_ARITH past the cap; both aggregates and facts present, extra-eqs=0",
+      "reported_cost": null
+    },
+    {
+      "task": "arm.bignum_add_p256",
+      "status": "no theorem",
+      "in_closing_list": false,
+      "aggregates": 0,
+      "residual": 1,
+      "diagnosis": "accumulator equations do not present disjoint (outgoing B, incoming 1) carry paths; bridge_aggregates returns []",
+      "reported_cost": null
+    },
+    {
+      "task": "arm.bignum_add_p384",
+      "status": "not attempted",
+      "in_closing_list": false,
+      "diagnosis": "budget; expected same detector limit as p256",
+      "reported_cost": null
+    }
+  ],
+  "shared": [
+    "chain detection and directed-path check",
+    "base B and weights 1, B, B^2, ... read from the terms",
+    "weighted-sum proof (AP_TERM/MK_COMB + INT_RING) and flat normalisation",
+    "top-carry fact (aggregate-band) over all constructed aggregates",
+    "close set: aggregates + facts + non-equational bounds + every integer equality that is not a carry-chain row",
+    "bridge_sub_ref_core / bridge_neg_ref_core: SAT and algebraic routes differ only in finish"
+  ],
+  "instruction_specific": [
+    "subtraction: borrow chains with a subtractive constant, final word_and, c14 decided by both aggregates",
+    "top-bit mask: BRIDGE_AND_MASK_FACTS_TAC + BRIDGE_AND_TOP_MASK_LOW/HIGH from VAL_WORD_AND_MASK_WORD + MOD_CASES",
+    "zero test: WORD_JOIN_EQ_0, WORD_OR_EQ_0, VAL_WORD_OR_EQ_0, INT_VAL_WORD_OR_EQ_0; algebraic fold after the split",
+    "top-bit x86 test: BRIDGE_BIT_MSB_CONV from MSB_VAL (reduction on the num form)"
+  ],
+  "controls": {
+    "C1": "answer artefacts differ only in the BRIDGE_*_REF_(ALG)_TAC entry line; weaker check (identical goal and printed statement); strong equals_thm stands for add from IX.82",
+    "C2": ["ETA_AX", "SELECT_AX", "INFINITY_AX"],
+    "C3": "aggregates=[] in sub: 6 closes then ORACLE close failed, no theorem",
+    "C4": "cadical shim: 0 invocations, marker absent, same totals (5745767 / 9029510 / 5683733)",
+    "C5": "grep new_axiom|mk_thm|CHEAT_TAC|Obj.magic: one pre-existing comment only",
+    "C6": "default tactic byte-identical; totals move by a constant +21789 shared-library load"
+  },
+  "fixtures": {
+    "BRIDGE_DIGEST": {
+      "was": "65ced317f254a0122117e3800b07a331e03ed98d3efb1e0f4aa12bbceff9b6ca",
+      "now": "070ed5b4de5f2c42598c9cd9c5cc14a16603b2a80d10ce8c9e80c010b2885448"
+    },
+    "curve_check_statements": { "was": 86, "now": 91 },
+    "instrument_phrases": { "was": 232, "now": 249 },
+    "instrument_digest": {
+      "was": "fb1677dc3e7785cae102b118b6d8b4731c90951ef02d6fc8c5d9b9402ca2bcf5",
+      "now": "f84b7582f82f4ea43d4f2b40985f6f1779705dffd75d67367517ca05f2fb5715"
+    },
+    "inline_answer_phrases": { "was": 276, "now": 293 },
+    "inline_answer_digests": {
+      "add-ref": { "was": "a930a4e6466d3f4db7becfddbddb73b07e626fef546ea39406e5a89660137029", "now": "55920f3e4b9cc42d075c22be8d3ad156c20dd2ff191e7d49882a357c8984ee2c" },
+      "sub": { "was": "eb3215a8be9965309c357d98a4ccb57deb8efec65617bb62aa98c98d149eac71", "now": "78a05032259a798c035adb9a6b8bd5926bb11ade48835456025cbf891048b50c" },
+      "neg": { "was": "e957d506e1e2d8044d3b1f9b9df66e359b162059fbb5b6c956e1eb0c45833fdd", "now": "f67d0350a4f1ebab2af9e1c62e841a71d8d24188c3f91b8268c531b2dfb18cbe" },
+      "add-p384": { "was": "5fad9abe89f876e841404c414bb12110afd17f9c9042cda20c9e8eb6106bf5ee", "now": "a50237816f2236d585ae80e0a467d3f1e7eff927bc2d8118210e55c6072fbc6d" }
+    },
+    "answers": "tests/fixtures/answers/* re-recorded (27 ARM + 9 x86)",
+    "curve_check_fixture": "regenerated (91 statements, 0 hits)",
+    "bridge_min": "sub/neg anchors follow the shared cores"
+  },
+  "freeze_closure_v7": {
+    "files": 73,
+    "source_digest": "cde1f84f15d03da09b4a4ad3a3d328e32c0f63282a2273376111a68c807fe793",
+    "repo_commit": "e36dc58739dd05810b818c3e047a44a2cf43cb66",
+    "v6_tag_untouched": true
+  },
+  "environment": {
+    "free_g_head_2": "Mem: 125 total, 51 free, 58 buff/cache, 110 available",
+    "df": "/dev/nvme1n1p1 1.3T 902G 360G 72% /mnt/1tb_kingston",
+    "caps": "12G per proof build, -j1, one at a time; 20G cargo"
+  }
+}

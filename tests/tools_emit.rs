@@ -817,11 +817,33 @@ fn ix70_algebraic_close_is_opt_in_and_one_task_only() {
     let alg = emit::post_text_for(Some(task), true, "add", "s4", "p");
     assert!(alg.contains("BRIDGE_ADD_REF_ALG_TAC "));
     assert!(!alg.contains("BRIDGE_ADD_REF_TAC "));
-    // The switch cannot select the algebraic close for any other task.
-    let other = "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT";
-    let o = emit::post_text_for(Some(other), true, "add", "s4", "p");
-    assert!(o.contains("BRIDGE_ADD_REF_TAC "));
-    assert!(!o.contains("BRIDGE_ADD_REF_ALG_TAC"));
+    // IX.83: the two other instruction shapes whose aggregate close is measured.
+    let sub = emit::post_text_for(
+        Some("arm.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT"),
+        true,
+        "sub",
+        "s4",
+        "p",
+    );
+    assert!(sub.contains("BRIDGE_SUB_REF_ALG_TAC "));
+    let neg = emit::post_text_for(
+        Some("arm.bignum_neg_p25519.BIGNUM_NEG_P25519_CORRECT"),
+        true,
+        "neg",
+        "s4",
+        "p",
+    );
+    assert!(neg.contains("BRIDGE_NEG_REF_ALG_TAC "));
+    // The switch cannot select the algebraic close for a task that does not
+    // close (x86 add is capped; p256 emits no aggregate).
+    for other in [
+        "x86.bignum_add_p25519.BIGNUM_ADD_P25519_CORRECT",
+        "arm.bignum_add_p256.BIGNUM_ADD_P256_CORRECT",
+    ] {
+        let o = emit::post_text_for(Some(other), true, "add", "s4", "p");
+        assert!(o.contains("BRIDGE_ADD_REF_TAC "), "{other}");
+        assert!(!o.contains("BRIDGE_ADD_REF_ALG_TAC"), "{other}");
+    }
     // Unknown/None callers always get the SAT path.
     let none = emit::post_text_for(None, true, "add", "s4", "p");
     assert!(none.contains("BRIDGE_ADD_REF_TAC "));
