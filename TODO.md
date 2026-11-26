@@ -3818,3 +3818,119 @@ and emits the arithmetic as the proof. Passes, in order:
    the 27-task table.
 7. **`XX.E4`–`XX.E7`** — soundness proofs per rule, oracle-based backend equivalence, the TQL-1
    objective list.
+
+---
+
+# XXI — Intake 2026-11-26 (release 0.2.0): measurement, checker integrity, assurance case
+
+Nothing omitted. `XXI.F` supersedes `XX.F`.
+
+## XXI.A — Front page (done this turn)
+
+- [x] **XXI.A1.** The three numbers came from two runs. Re-ran `sub` and `neg` at `c6f5106`
+  (9,029,510 and 5,683,733 — unchanged), with `add` at 5,745,767 from `ix86` at `81f84db` (same
+  bridge). The README row now states all three, the ratios (19.4× / 9.7× / 6.0× vs sliced SAT, 3.1×
+  vs the human `add` body), and that totals are only comparable within a commit.
+- [x] **XXI.A2.** The README did not say the close is **opt-in**: now "opt-in and currently 3 of the
+  27 tasks (the other 24 still use the certified-SAT route)". Rule `XX.E2` removes the need for that
+  line once the compiler becomes the default.
+- [ ] **XXI.A3.** A docs-only `0.2.1` when the next substantive change lands: the *published* 0.2.0
+  artefact carries the superseded 5,233,638 / 2.83× figures in its packaged CHANGELOG.
+
+## XXI.B — The WIP checker's remaining defects (`wip/xix-i-frontier-bounded`, `9beb6ee`)
+
+The reviewer's source inspection, plus the distinction that matters most.
+
+- [ ] **XXI.B1. Time-of-check/time-of-use on the object file.** `scan_object(path)` checks the
+  digest; `replay_frontier()` then reopens the path via `NodeReader::open()`. If the file changes in
+  between, the replay consumes bytes the digest never described, and the reported derivation
+  identity no longer describes the evidence. Bind replay to the **same immutable bytes** (read once,
+  or hold an open descriptor plus re-verify on close).
+- [ ] **XXI.B2. All term and type tables remain resident.** Frontier-bounded *theorem* retention is
+  not frontier-bounded *total memory*. Say which one a number measures, and implement term-level
+  liveness or bounded storage before claiming scalability.
+- [ ] **XXI.B3.** Two consumer-count arrays retained — reduce or externalise.
+- [ ] **XXI.B4.** Node budget is enforced **after** the scan — enforce resource budgets throughout
+  parsing, so a hostile object cannot allocate before any limit applies.
+- [ ] **XXI.B5.** `ValidatedTheory` fields are publicly mutable while the digest is cached: make
+  authority-bearing fields private; every extension yields a new validated value with a new
+  identity.
+- [ ] **XXI.B6.** Type-definition halves still conflict on freshness — make theory extension one
+  atomic justified operation producing both theorems.
+
+## XXI.C — The measurement that would let the checker claim something new
+
+Export the three solver-free proof objects (add/sub/neg) in the format the Rust checker already
+consumes, then time anybody's checker on the same objects on the same machine:
+
+- [ ] **XXI.C1.** Export the three objects; publish bytes, node count, replayable-vs-recorded node
+  ratio.
+- [ ] **XXI.C2.** Time the Rust checker: wall clock, peak RSS, inferences/second, deterministic
+  across two runs.
+- [ ] **XXI.C3.** Run the **same objects** through an independent checker (HOLTrace's C checker, or
+  Candle's kernel replay) on the same machine, and report the three numbers side by side.
+- [ ] **XXI.C4.** If the Rust checker is faster or smaller while accepting the same objects, that is
+  a measurable checking result — the first one this project can make about checking rather than
+  producing. If it is not, **the baseline is the result** and it is published as such. Report
+  checker-versus-checker, never checker-versus-nothing.
+
+## XXI.D — Charter refinements (make the claims no stronger than the mathematics)
+
+- [ ] **XXI.D1.** Modular certificate: prove **`0 ≤ out < p`**, not merely `out < p`.
+- [ ] **XXI.D2.** Weighted multiplication columns: include the **carry, truncation and range**
+  obligations that column sums do not by themselves discharge.
+- [ ] **XXI.D3.** Montgomery identity: establish **divisibility, coprimality and the final residue
+  bounds**; `gcd(R,p)=1` is a premise that must be proved, not assumed.
+- [ ] **XXI.D4.** Backend equivalence must quantify over **memory, termination, exceptions and
+  observable behaviour**, not only the functional result.
+- [ ] **XXI.D5.** Integer-only normative universe: define **rounding, scaling, overflow and
+  conversion** precisely at every boundary, or the byte-exactness claim has holes.
+- [ ] **XXI.D6.** Do **not** assert `O(limbs²)` checking. Exact integer arithmetic has its own cost,
+  and the obligations exceed the multiplication identities. Complexity must come from a **theorem or
+  a measurement**, never an architectural assumption.
+- [ ] **XXI.D7.** The selector (`XX.B1`) is a **first-class object in ASC-IR**, not a tactic
+  optimisation: `s ∈ {0,1}`, `z = x − s·p`, and `s = [x ≥ p]` must be **proved** from the machine's
+  comparison flags. Expect some case distinctions to remain.
+
+## XXI.E — Assurance case
+
+- [x] **XXI.E1.** `research/09-TQL1-OBJECTIVES.md`: 13 objectives mapped to artefacts, gaps marked,
+  and the claim reworded to "develop an assurance case against the applicable DO-330 TQL-1
+  objectives, supplemented by formal kernel soundness, executable refinement and evidence
+  preservation" — explicitly **not** a qualification claim, and not an assertion that TQL-5 is the
+  applicable level.
+- [ ] **XXI.E2. Structural coverage of Tekmerion's own code** (objective #5, the large one).
+  Nothing exists today. Measure MC/DC-like coverage over the qualification-relevant modules (guard,
+  freeze, emit, proof_object) and publish the uncovered branches as the gap it is.
+- [ ] **XXI.E3. Executable-object verification** (objective #9): the charter's self-certification.
+  Prerequisites: Lean rules (`XVII.B5`), Aeneas refinement, then the machine-code pipeline.
+- [ ] **XXI.E4.** CI: two freeze-parser mutants survive (`freeze.rs:885` invalid environment-value
+  type, `freeze.rs:917` invalid slice configuration). Kill them or record them as equivalent with
+  evidence; the harness is right to refuse a pass.
+
+## XXI.F — Release engineering, honestly stated
+
+- [x] **XXI.F1.** Publication confirmed against the registry API: `tekmerion 0.2.0`,
+  `default_version 0.2.0`, checksum `05ffd58fbeb651e372da8fc8cd207446acd90467e0a4448fef2fa839d8b2e14e`,
+  published 2026-11-26T12:22:11Z, 24 binaries, and line counts showing Rust/OCaml/Lean/Shell only —
+  independently confirming no Python.
+- [ ] **XXI.F2.** No GitHub Release object exists for `v0.2.0`; the tag does. Create a release with
+  the CHANGELOG section, or state that tags are the release mechanism.
+- [ ] **XXI.F3.** Keep "27/27 per-file upstream build + whole-tree default `make` green" clearly
+  distinct from "the complete upstream proof suite was rebuilt" — it was not (452 ARM + 1758 x86
+  obligations).
+- [ ] **XXI.F4.** Proof-object checker remains **provisional** in every citation until `XXI.B` and
+  the soundness obligations are discharged.
+
+## XXI.G — Order of execution
+
+1. **`XXI.C`** — export the three objects and run the checker-versus-checker measurement. It is the
+   only item here that can produce a claim nobody else has, and it can fail informatively.
+2. **`XXI.B1`, `XXI.B4`, `XXI.B5`, `XXI.B6`** — integrity before the checker is used for numbers:
+   TOCTOU, budget-before-parse, immutable theory, atomic extension.
+3. **`XXI.E4`** — the two CI mutants; the harness is correct to block.
+4. **`XX.A2`/`XX.B`** — selector folding measured against 1,848,494, with the per-branch 49.3% as
+   the target, and `s = [x ≥ p]` proved.
+5. **`XXI.E2`** — structural coverage measurement, which will size the TQL-1 gap.
+6. **`XX.D7`/`XX.D2`** — certificate format frozen and checked in the kernel; then dataflow chain
+   discovery for p256.

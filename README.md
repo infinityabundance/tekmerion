@@ -12,10 +12,14 @@ externally adjudicated criteria — without overstating what has been establishe
 Published on crates.io as `tekmerion 0.2.0`. What is actually demonstrated, and
 what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
 
-- **Solver-free machine-code proofs** for ARM Curve25519 add, sub and neg: 5.23M,
-  9.03M and 5.68M primitive inferences, against 111.5M on the sliced SAT route and
-  1.85M for the human `add` proof. Zero solver invocations, checked with a failing
-  `cadical` shim on `PATH`.
+- **Solver-free machine-code proofs**, *opt-in and currently 3 of the 27 tasks* (the other 24
+  still use the certified-SAT route): ARM Curve25519 add 5,745,767, sub 9,029,510, neg
+  5,683,733 primitive inferences, against 111,523,776 / 87,971,295 / 33,910,447 on the sliced
+  SAT route (19.4×, 9.7×, 6.0×) and 1,848,494 for the human `add` proof (3.1×). Zero solver
+  invocations, checked with a failing `cadical` shim on `PATH`.
+  *Measured at `c6f5106` (`sub`/`neg` re-run today; `add` at `81f84db`, same bridge). Totals are
+  only comparable within a commit — the inlined support library grows, which shifts every answer
+  by a constant.*
 - **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
   upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,
   whole-tree `make` green).
