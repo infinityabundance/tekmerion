@@ -3627,3 +3627,39 @@ hostile-input rejection and explicit foundational dependencies, **then** scale.
 
 - [ ] **G5.1.** Weighted-sum aggregate on `arm/add_p25519`, measured against 1,848,494 (`XIX.C`).
 - [ ] **G5.2.** Proof-object export started in parallel, not after (`XIX.E1`).
+
+## XIX.H — Orchestrator verification and the cap decision (2026-11-25)
+
+Independently re-ran the newest closing task rather than accepting the transcript:
+
+```
+$ TEKMERION_ALG_CLOSE=arm.bignum_sub_p25519.BIGNUM_SUB_P25519_CORRECT \
+    tools/cap.sh 12G -- bash .bench/ix69/run_task.sh arm curve25519 sub p25519 .bench/ix83/verify-orch
+STAMP_INF_BEFORE 67670291
+STAMP_INFERENCES 9029510
+cap.sh: group=375677 rc=0 sampled_group_peak_rss_kb=63244
+
+$ grep -c "ORACLE close ok"  -> 24
+$ grep -c "bridge:sat-done"  -> 0
+```
+
+So `sub` reproduces at **9,029,510** inferences, solver-free. Three ARM linear tasks (add, sub, neg)
+now close without a solver.
+
+**Cap decision (recorded, `XIX.C4`).** `x86.bignum_add_p25519` fired the 12 G cap at **12.31 GB**
+after one branch closed. Per `AGENTS.md` §7a a fired cap is a result, not a retry. Raising it is a
+decision, and it is made here once, explicitly:
+
+- [ ] **XIX.H1.** Re-run `x86/add_p25519` under `tools/cap.sh 24G` **once**, with the memory
+  attribution recorded (which phase/close grows). If it closes, the number is reported with the cap
+  in the receipt; if it fires again, the mechanism is judged not to scale on x86 as written and the
+  finding is recorded rather than worked around.
+- [ ] **XIX.H2.** `arm/add_p256` finds **0 aggregates**: its accumulator presentation lacks disjoint
+  `(outgoing B, incoming 1)` carry paths, so the detector does not fire. That is a detector
+  limitation, not a mathematics limitation — record it against `XIX.D` (a certificate
+  representation the detector can be extended against).
+
+**Honest accounting note.** `ix83` reports the default-path totals moving by a constant `+21,789`
+across all tasks. That is the shared library text (bigger after the new entry points) inlined into
+every answer, not a changed proof: the tactic line is byte-identical. Totals from different commits
+are therefore **not** comparable at the last digit — always quote the commit.
