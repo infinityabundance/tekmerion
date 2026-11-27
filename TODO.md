@@ -4081,3 +4081,250 @@ hard-codes a development path and does not cap the independent runner.
 6. **`XXII.G`** — identity-bound comparison, once a reference checker produces rows.
 7. Then the ASC generality work (`XX.D2` dataflow chains for p256, `XX.D3` multiplication columns)
    and proof archaeology over the 10.5M reachable nodes.
+
+---
+
+# XXIII — Intake 2026-11-27: beat the human proofs
+
+The programme: a generated proof whose theorem is `equals_thm`-identical to the upstream human
+theorem, using **fewer primitive inferences and less wall time than the human proof body, under the
+same counter**, without weakening the specification or enlarging the unverified TCB. Then generalise
+across families, then against Metamath Zero on axes where the comparison is commensurable.
+
+Nothing omitted. `XXIII.O` supersedes `XXII.H`.
+
+## XXIII.0 — Accounting rules, fixed before any run
+
+1. **Same environment**: same s2n-bignum pin, same HOL Light build, same `STAMP_INFERENCES` counter,
+   same host. Wall time = median of 5 runs; raw series exported.
+2. **Same statement**: `equals_thm` against the upstream `_CORRECT` theorem, zero hypotheses,
+   `axioms()` unchanged. `_SUBROUTINE_CORRECT` is added only once `_CORRECT` wins.
+3. **Strict totals**: anything not upstream (step-theorem caches, numeral facts, normal-form
+   theorems, new lemmas) is counted **in full in every task that uses it**. An amortised figure may
+   sit beside it, never replace it.
+4. **Upstream lemmas are free to both sides** (`FLAG_FROM_CARRY_LE/LT`,
+   `EQUAL_FROM_CONGRUENT_REAL`, `EQUAL_FROM_CONGRUENT_MOD_MOD`, `MOD_ADD_CASES`, …), because the
+   human proof uses them free.
+5. **Pre-register and report everything**: freeze the task list and the method before running;
+   report every task including losses; a metric change after seeing numbers voids the claim.
+
+**Eight ledgers**, never merged: L1 generated inferences (including failed attempts) · L2 reachable
+inferences in the final proof · L3 generation CPU/wall · L4 independent checking time · L5 peak RSS
+(process and aggregate) · L6 certificate bytes (compressed and not) · L7 generic-library
+construction and replay · L8 total compute including failed attempts.
+
+**Four victories**, independently claimable: **V1** logical (identical theorem) · **V2** proof size
+(fewer primitive inferences, smaller reachable DAG) · **V3** computational (CPU, wall, memory
+including search) · **V4** generality (frozen compiler, unseen implementations, no per-task
+patches).
+
+**Three controls** that must be run with every claim: sensitivity (a mutated/leaky proof must
+**fail**), checker (a planted unsound rule must be caught by **both** kernels), cost (search cost
+reported even when it hurts).
+
+## XXIII.A — Step 1: measure where the human cost is (gates every lever)
+
+- [ ] **XXIII.A1.** Per-phase inference breakdown, human **and** generated, for ARM
+  Curve25519 add/sub/neg, with identical phase boundaries: (a) init + digitize; (b) simulation, per
+  instruction, accumulated vs plain separated; (c) carry/borrow characterisation
+  (`FLAG_FROM_CARRY_*` + its `BOUNDER_TAC` side goal); (d) final arithmetic split by tactic
+  (`ARITH_TAC`, `REAL_ARITH_TAC`, `INT_ARITH_TAC`, `REAL_INTEGER_TAC`, `NUM_REDUCE_CONV`,
+  `BOUNDER_TAC`).
+- [ ] **XXIII.A2.** Human `sub` and `neg` baselines are **not on record** (only add, 1,848,494).
+  Measure them. Without them no target is even defined.
+- [ ] **XXIII.A3.** Report the arithmetic-vs-simulation split, because it decides everything: if
+  simulation dominates, `XXIII.D` decides the race for every task; if arithmetic does, `XXIII.C`/`B`.
+- [ ] **XXIII.A4.** Publish the table in `research/receipts/ix89-human-phases.md` with the counter,
+  the build, and the phase boundaries written down.
+
+## XXIII.B — L3: pay only for the premises used (cheap, do first)
+
+- [ ] **XXIII.B1.** Fast path: hand each decision procedure only the aggregate(s) that mention its
+      carrier; fall back to all on failure. IX.86 measured 477,376 inferences (93.2% of the
+      512,129 regression) for **one logically inert premise**.
+- [ ] **XXIII.B2.** Normalise each aggregate **once** into canonical linear form and reuse that
+      theorem in every case.
+- [ ] **XXIII.B3.** Close each identity with a single normalisation of
+      `lhs − rhs − Σ kᵢ·premiseᵢ`, with fixed `kᵢ` from the ASC certificate — no search.
+- [ ] **XXIII.B4.** Correction of record: in HOL Light the coefficient search inside
+      `REAL_ARITH`/`INT_ARITH` is OCaml computation and costs **no** primitive inferences. The cost
+      is normalising every atom and premise handed to the procedure, plus replaying the
+      combination. "Skip the search" is not the lever; "hand over less" is.
+
+## XXIII.C — L2: the human skeleton, with decision procedures replaced by certificates
+
+The human proofs are **not clever arithmetic**; they are one simple skeleton plus general decision
+procedures.
+
+- [ ] **XXIII.C1.** add: one simulation over 19 instructions → characterise the top carry once
+  (`carry_s13 <=> p_25519 <= m + n` via `FLAG_FROM_CARRY_LE` + `BOUNDER_TAC`) → `MOD_ADD_CASES` →
+  **one** `COND_CASES_TAC` → `REAL_ARITH_TAC`. **Two cases, not twelve.**
+- [ ] **XXIII.C2.** sub and neg: the congruence-plus-range lemmas
+  (`EQUAL_FROM_CONGRUENT_REAL`, `EQUAL_FROM_CONGRUENT_MOD_MOD`) — the same structure as ASC pass 5 —
+  finished by `REAL_INTEGER_TAC`/`INT_ARITH_TAC`/`BOUNDER_TAC`.
+- [ ] **XXIII.C3.** Replace each decision-procedure **side goal** with a replay of a certificate the
+  compiler already holds. Keep the human skeleton; do not out-rewrite Harrison.
+- [ ] **XXIII.C4.** Selector as a first-class ASC-IR object: `s ∈ {0,1}`, `z = x − s·p`,
+  `s = [x ≥ p]` **proved** from the comparison flags. Sufficient linear encoding:
+  `p·s ≤ x` and `x ≤ p − 1 + p·s` ⟹ `0 ≤ x − p·s ≤ p − 1`. Do not split the whole proof.
+
+## XXIII.D — L1: simulation, the lever that reaches every task
+
+`ARM_CONV` re-expands the instruction semantics at every occurrence (through `ARM_EXEC_CONV` and
+~15 rewrite/conversion passes) and computes **every** component the instruction writes, including
+flags nothing reads. ARM `ADCS` writes N/Z/C/V; x86 `ADC` writes Z/S/P/C/O/A. **In a carry chain
+only C is ever read.**
+
+- [ ] **XXIII.D1. Step-theorem cache.** One parametric theorem per opcode schema (decode →
+  transition, result in canonical update form); each step becomes INST + MP + read-over-write on
+  the operands only. Prior art: Fox (ITP 2015) precomputed ~318 per-schema step theorems and
+  memoised specialisations; 1024-bit addition 20.3 s → 0.03 s **wall time in HOL4** — that locates
+  the waste, it does not measure our win. We must measure **inference counts**.
+- [ ] **XXIII.D2. Demand-driven components.** Keep each state as an unevaluated update term; resolve
+  `read c s'` only when a later instruction or the postcondition reads `c`. Dead flags are never
+  normalised. `MAYCHANGE SOME_FLAGS` already permits them to change, so nothing need be proved.
+- [ ] **XXIII.D3. x86 hypothesis.** Dead P/A/O/S/Z terms duplicated across contextual case splits
+  are the likely cause of the memory blow-up (Lean's symbolic-simulation framework documents the
+  same O(2ⁿ) failure mode from contextual if-then-else). **Test**: count DAG nodes owned by
+  dead-flag terms in the correction-plus-bit-63 branch that fired the cap.
+- [ ] **XXIII.D4.** L1 is routine-independent, so it carries to multiplication and Montgomery, where
+  human proofs are dominated by simulation.
+
+## XXIII.E — L4: numeral discipline
+
+HOL Light numerals are binary; expanding `p_25519` and `2^256` inside normalisation costs inferences
+proportional to bit length **every time**. Prove the few needed numeral facts once (counted under
+rule 3) and rewrite with them. Hypothesis: measure in `XXIII.A1(d)` before building anything.
+
+## XXIII.F — ASC generality: from detected chains to a solved linear system
+
+- [ ] **XXIII.F1.** Replace shape detection with **sparse elimination on the lifted system**:
+  `Aₑxₑ + Aᵢxᵢ = b`; find sparse integer `λ` with `λᵀAᵢ = 0`; then `λᵀAₑxₑ = λᵀb`. The weighted
+  carry-chain aggregation is the special case. The **multipliers are the certificate**; the checker
+  never trusts the elimination algorithm.
+- [ ] **XXIII.F2.** Cost-aware, not dense: objective includes **sparsity, coefficient bit length and
+  reconstruction cost**. Fraction-free arithmetic where appropriate; a coefficient blow-up can make
+  the certificate more expensive than the original proof.
+- [ ] **XXIII.F3.** Targets: `arm/add_p256` (currently `aggregates=0`), `arm/add_p384`, interleaved
+  x86 `ADCX`/`ADOX` (two chains on CF and OF — any pattern detector breaks there).
+- [ ] **XXIII.F4.** Then the families: multiplication (column sums
+  `c_k + Σ_{i+j=k} aᵢbⱼ = r_k + B·c_{k+1}`), squaring (exploit symmetry `a² = Σ aᵢ²B^{2i} + 2Σ_{i<j} aᵢaⱼB^{i+j}`),
+  modular reduction (congruence), Montgomery (`T + m·p = R·u`, `gcd(R,p)=1` **proved**), pseudo-Mersenne
+  (`2^k ≡ c`).
+
+## XXIII.G — A certificate language, and a deliberately simple checker
+
+- [ ] **XXIII.G1.** Typed steps: `LinearCombination { terms: [(FactId, BigInt)], expected }`,
+  `Range { lower, upper }`, `IntegerCut { premise, divisor, expected }`,
+  `Congruence { identity, modulus }`, `CanonicalResidue { congruence, range, modulus }`,
+  `PolynomialIdentity { certificate }`, `Conditional { selector, when_true, when_false }`.
+- [ ] **XXIII.G2.** Reconstruct these through derived HOL Light rules first; later the native
+  backend checks the **same** normative certificate. **Never add a trusted native arithmetic oracle
+  to obtain attractive inference counts.**
+- [ ] **XXIII.G3.** Coefficient search may stay in the producer; the checker only verifies. Report
+  same-kernel expanded costs separately from native certificate costs.
+
+## XXIII.H — ASC-IR
+
+- [ ] **XXIII.H1.** Architecture-independent typed IR, SSA, with: exact-width words and their
+  integer interpretations; carry/borrow polarity; ranges with their supporting proofs; sparse
+  linear and polynomial equations; modular equivalence; boolean selectors; instruction and theorem
+  provenance; memory footprints and aliasing. Frontend proves the lift; optimiser transforms;
+  backend proves the certificate. That is what lets ARM and x86 share the optimiser.
+
+## XXIII.I — Optimise proofs the way LLVM optimises programs
+
+- [ ] **XXIII.I1.** Catalogue with proof equivalents: dead-derivation elimination, CSE of proved
+  facts, constant folding of modulus/width, sparse conditional constant propagation (selectors and
+  carries early), specialisation of generic theorems, loop-invariant (inductive arithmetic summary),
+  register-allocation analogue (minimise live proof dependencies), rule selection by cost,
+  translation validation per transformation, profile-guided optimisation from measured
+  reconstruction costs.
+- [ ] **XXIII.I2.** Cost model `J(D) = αI + βT + γM + δS`, used **internally** to choose; publish
+  the individual metrics; keep a **Pareto frontier** rather than one scalar.
+- [ ] **XXIII.I3.** Move optimisation **upstream into construction**, so unnecessary inferences are
+  never generated. Prior art: *Small Proofs from Congruence Closure* (FMCAD 2022); OpenTheory's
+  sharing, dead-inference elimination and purging (`SYM(REFL)=REFL`, `TRANS(REFL,p)=p`,
+  `MKCOMB(REFL,REFL)=REFL`, `EQMP(REFL,p)=p`).
+
+## XXIII.J — Relational transfer, when it is cheaper
+
+- [ ] **XXIII.J1.** Prove a clean version once, prove equivalence once, transfer (CryptOpt / SLOTHY /
+  *Relational Hoare Logic for realistically modelled machine code*). Use only when
+  `C_equivalence + C_simple < C_direct`; the compiler must predict or measure which route is
+  cheaper, and **report the equivalence proof's cost**.
+- [ ] **XXIII.J2.** Scope warning: SLOTHY-optimised code invalidates the human proof, so "beat the
+  human on this routine" ≠ "beat any human on any optimised routine". Do not conflate.
+
+## XXIII.K — Compression levers with their own accounting
+
+- [ ] **XXIII.K1. Abbreviation discipline.** s2n-bignum's `SIMD_SIMPLIFY_ABBREV_TAC` reports
+  1.6×–4.3× in adjacent NTT proofs by avoiding re-traversal of large terms. Try it on add/sub/neg.
+- [ ] **XXIII.K2. Dead-inference pruning.** Feasible, but the metric must be **pre-registered**:
+  "replay-checked, pruned kernel steps" is a different number from "inferences generated during
+  search". Define it before measuring, or the win is an accounting change.
+- [ ] **XXIII.K3. Parametric library** (Fiat's lesson, inverted): prove add/sub/neg once,
+  parametric in width, modulus and offset `C` with `0 < C < 2^32` (Jolt's `Fp128` pattern), then
+  each concrete routine is an instantiation plus a bounds check. **Pre-register the library
+  boundary**: if it is in the frozen shared library before evaluation, count it once; if
+  regenerated per problem, count it per problem.
+
+## XXIII.L — The Metamath Zero arena (define the metric before competing)
+
+MM0 verifies `set.mm` in ~195 ms single-threaded (2019, i7 3.9 GHz) with a `.mmb` format designed so
+checking costs about what reading costs, and an `mm0-c` verifier under ~3,000 lines of C.
+
+- [ ] **XXIII.L1. Do not claim orders of magnitude on `set.mm`.** 200 ms → 2 ms needs ~14.6 GB/s
+      just to read a 28.5 MB proof; 1000× needs ~146 GB/s. The winnable claim is **parity
+      single-threaded, then a multicore speedup from independent theorem sections** — after
+      verifying whether `mm0-c` is single-threaded.
+- [ ] **XXIII.L2. Head-to-head A**: import MM0's own `.mmb` (`set.mm`, `peano`) and check them; time
+      `mm0-c` against the Tekmerion kernel, single- and multi-threaded, same host, same files. Their
+      corpus, their format, no translation. Also benchmark `metamath-knife`.
+- [ ] **XXIII.L3. Head-to-head B (the real differentiator)**: export the *same* theorem
+      (`arm/add_p25519`) twice — fully expanded, and certificate-using — and measure checking work
+      and wall time for the same statement.
+- [ ] **XXIII.L4. Incremental re-verification axis**: content-addressed DAGs plus typed revocation;
+      `T_incremental = T_change + T_revocation + T_affected`. State that reuse ≠ verification from
+      scratch, and give it its **own** leaderboard where competitors may reuse equally.
+- [ ] **XXIII.L5. Self-certification axis**: a machine-code correctness theorem for the Tekmerion
+      checker binary on AArch64 and x86. If MM0's remains open, **that is a categorical lead, not a
+      factor** — but check MM0's current status before claiming anything.
+- [ ] **XXIII.L6. TCB comparison, item by item**: logic, verifier, ISA spec, hardware assumptions,
+      and any computation rule. A speedup that comes from trusting more is not a speedup.
+
+## XXIII.M — Where we stand, stated honestly
+
+- Human `add` = 1,848,494; ours 5,745,767 (3.11×). Human `sub`/`neg` unmeasured. Negation's human
+  body is ~721,473, so ours is ~7.9× — the harder relative target and the best test, because the
+  mathematics is trivial.
+- The **preamble alone (2.527M) exceeds the entire human add budget**. Even a free close loses under
+  the current accounting, which is why `XXIII.D` is not optional.
+- `x86/add` is memory-exhausted at 24.9 GB; `arm/add_p256` emits no aggregate. Both are ASC-IR and
+  dataflow tasks (`XXIII.F`), not budget tasks.
+
+## XXIII.N — The reporting artefact
+
+- [ ] **XXIII.N1.** One table per commit: `task | human | generated (strict) | generated (amortised)
+  | ratio | wall human | wall generated | SAT closes | equals_thm`. **Losses stay in the table.**
+- [ ] **XXIII.N2.** Extend to all 27 once add/sub/neg win, then p256/p384/p521, then multiplication
+  and Montgomery. Do not scale before the pilot wins.
+- [ ] **XXIII.N3.** Statistics that mean something: medians and quartiles, Vargha–Delaney A12,
+  Mann–Whitney U, bootstrap intervals, Holm–Bonferroni across the family. Timing on bare metal with
+  counters; anything else is a scoped observation.
+- [ ] **XXIII.N4.** Contamination control: held-out split from obligations no model can have seen;
+  a memorisation probe per model; a contaminated arm is **withdrawn, not adjusted**.
+
+## XXIII.O — Order of execution
+
+1. **`XXIII.A`** — the human/generated phase table for add, sub and neg. It decides every later
+   lever, and two of the three human baselines do not exist yet.
+2. **`XXIII.B`** — premise fast path and normalise-once. Cheap, and it removes the inert-premise cost
+   already measured.
+3. **`XXIII.C`** — the human skeleton (two-way split, certificates for side goals).
+4. **`XXIII.D`** — step-theorem cache, then demand-driven components; retry x86 after.
+5. **`XXIII.F`** — sparse elimination, so p256 and x86 come into the same mechanism.
+6. **`XXIII.K3`** — parametric library with a pre-registered boundary.
+7. Re-measure under the frozen rules; publish the 27-task table; then families.
+8. **`XXIII.L`** — the MM0 arena, in the order A (their corpus), incremental, B (computational
+   theorem), self-certification — each only after the rule it needs has a Lean soundness proof.
