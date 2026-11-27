@@ -4148,9 +4148,15 @@ reported even when it hurts).
 
 ## XXIII.B — L3: pay only for the premises used (cheap, do first)
 
-- [ ] **XXIII.B1.** Fast path: hand each decision procedure only the aggregate(s) that mention its
+- [x] **XXIII.B1.** Fast path: hand each decision procedure only the aggregate(s) that mention its
       carrier; fall back to all on failure. IX.86 measured 477,376 inferences (93.2% of the
-      512,129 regression) for **one logically inert premise**.
+      512,129 regression) for **one logically inert premise**. — **Done, IX.91.**
+      `add` 5,745,767 → **5,268,391** (−477,376, the IX.86 figure exactly; 3.11× → **2.85×**
+      human); `sub` 9,029,510 → **8,217,594** (−811,916; 7.04× → **6.40×**); `neg` unchanged.
+      `plain == phase` (`diff 0`) and every non-fact phase bit-identical, so the whole drop is the
+      aggregate-fact phase. `neg` is a structural no-op: every `FACT_PREM` reports `aggs=1`, so
+      `premise_sets` returns the full list. Receipt `research/receipts/ix91-b1-fastpath.md`.
+      Not done here: `equals_thm` re-check, matched-session accounting, timing medians.
 - [ ] **XXIII.B2.** Normalise each aggregate **once** into canonical linear form and reuse that
       theorem in every case.
 - [ ] **XXIII.B3.** Close each identity with a single normalisation of
@@ -4771,10 +4777,14 @@ witness is a quotient, selector or correction coefficient: recover `x − r = q�
 The general acceptance rule ("a receipt, not a look") is not enough for these; the number is fixed
 **before** the run and reported whether or not it is met.
 
-- [ ] **XXV.D1. P4 — normalise once.** Instrument the number of times each aggregate is normalised per
+- [x] **XXV.D1. P4 — normalise once.** Instrument the number of times each aggregate is normalised per
   branch; target **exactly 1**. Pre-register the fact-phase drop: on `add` at least the IX.86 measured
   **477,376** (aggregate-fact 1,178,682 → ≤ 701,306); on `sub`/`neg` at least **20%**
   (sub 2,155,782 → ≤ 1,724,626; neg 1,511,696 → ≤ 1,209,357). A miss is published as a miss.
+  — **Partially met, IX.91.** The premise fast path (not a normalise-once pass) gave `add`
+  **701,306 (met exactly)**, `sub` **1,343,866 (met, 37.7%)**, `neg` **1,511,696 (missed, 0%; one
+  aggregate, so the selection is structurally a no-op)**. The normalise-once target itself
+  (exactly 1 normalisation per aggregate per branch) is **not yet instrumented** — still open.
 - [ ] **XXV.D2. P6 — congruence-plus-range negation route.** `neg` **non-simulation** task cost
   `< 192,611` (so that with a simulation cache at the human level the total can beat 721,473), and the
   closing phase `< 44,425` (the human neg close). Report both absolutely.
