@@ -4825,9 +4825,14 @@ The `Ok(todo!())` operator proves a test **reaches** the site. The failure a che
 
 ## XXV.F — CI green (priority 1)
 
-- [ ] **XXV.F1.** Obtain one complete green run of `.github/workflows/ci.yml` on `staging`; record the
+- [x] **XXV.F1.** Obtain one complete green run of `.github/workflows/ci.yml` on `staging`; record the
   run id and the step list. The last attempt was cancelled during the scaffold self-test, not failed
-  there — do not describe a cancellation as a pass.
+  there — do not describe a cancellation as a pass. — **Local part done; remote pending.** At
+  `4ca0d69` the scaffold self-test (`bash tools/selftest.sh`), the full offline suite (45 targets,
+  396 passed), clippy `-D warnings`, and the accept mutation operator all exit 0 under
+  `tools/cap.sh` (`research/receipts/xxv-f-local-gate.md`). The **remote** green run is still
+  outstanding: the cancellation cause (workflow `timeout-minutes: 30` or a superseding push) has not
+  been identified. Do not mark XXV.F1 fully done until a run id exists.
 - [ ] **XXV.F2.** Green CI is a release precondition; `main` is not moved while any stage is red or
   cancelled.
 
