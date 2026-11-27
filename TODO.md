@@ -4501,7 +4501,10 @@ The human proofs are cheap because the witnesses are hand-typed (`XXIII.C2`). Co
 
 - **P0 — restore fully green CI.** Two freeze-parser mutants survive (`src/tools/freeze.rs` env
   value-type, `:886`; slice flag, `:918`). Kill them or record as equivalent with evidence. Green CI
-  is a **release precondition** (`XXII.A1`/`A2`).
+  is a **release precondition** (`XXII.A1`/`A2`). — **Done locally, `fd627ec`.** Two tests added to
+  `tests/tools_freeze.rs`; `tools/cap.sh --timeout 3600 12G -- cargo run --offline --quiet --bin
+  mutate_guard` exits 0 with **101/101** sites killed, 0 survived, 0 invalid (guard 60/60, freeze
+  41/41). Receipt `research/receipts/xxiv-p0-ci-green.md`. Pending: the next full CI run confirms it.
 - **P1 — `XXIV.A3` matched-session runs.** Measure all three accounting modes; capture L7.
 - **P2 — dependency-minimal library linking.** `XXIII.K3`/`XXIV.F3`: compute the **indirect** closure
   of the 61 top-level `prove`s in `tools/bridge.ml` actually needed per theorem; construct only that.
