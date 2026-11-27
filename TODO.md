@@ -4993,10 +4993,13 @@ independent.
   11/1, 21/3, 10/0; slim antecedents 7–8 / 8–9 / 5–6 against full 53–54 / 57–59 / 31–34.
   **This is not the witness route:** the neg close is still 1,364,282 against the human 44,425
   (30.7×), and `equals_thm` was not re-run.
-- [ ] **XXVI.C7. Fix the phase anchors before any further D comparison.** `src/tools/emit.rs` anchors
+- [x] **XXVI.C7. Fix the phase anchors before any further D comparison.** `src/tools/emit.rs` anchors
   `bridge:pre-close`/`bridge:post-close` to the full-set line and `ORACLE close ok`, both now inside
   the `| None ->` fallback, so phase D bills only fallbacks (IX.92 §3). Move both to bracket the whole
-  close. Acceptance: D equals the close region on add/sub/neg and `diff 0` still holds.
+  close. Acceptance: D equals the close region on add/sub/neg and `diff 0` still holds. — **Done,
+  IX.94.** `bridge:close-enter` / `bridge:close-exit` bracket the whole close (one pair per branch:
+  add 12/12, sub 24/24, neg 10/10); the close cost is the enter→exit delta. The parse_gen D bucket
+  still bills only full-set fallbacks, so read the enter→exit delta, not D.
 
 ## XXVI.D — Simulation floor (second, not first)
 
@@ -5113,11 +5116,21 @@ level produces a kernel proof; a level that cannot prove inconsistency falls thr
 | 4 | sparse linear certificate | contradictory arithmetic constraints |
 | 5 | witness compilation | the substantive remaining obligations |
 
-- [ ] **XXVII.B1.** Levels 0–1 are proved (IX.93); implement them as a general fast path with
+- [x] **XXVII.B1.** Levels 0–1 are proved (IX.93); implement them as a general fast path with
   fallback (WIP branch `wip/xxiii-g-propref` already contains an unverified implementation to build
-  on).
-- [ ] **XXVII.B2.** Level 3 is a candidate from the dump (`XXVII.C`). Implement a range-contradiction
-  rule: from `0 ≤ a` and `a + k = 0` with `k > 0`, derive `⊥`.
+  on). — **Done, IX.94.** Propositional refutation integrated; **neg 5,469,909 → 5,289,824**
+  (−180,085; 7.33× human). Routes on neg: prop 3, range 2, slim 5, full 0. add/sub byte-identical
+  (the path is free on no-match).
+- [x] **XXVII.B2.** Level 3 is a candidate from the dump (`XXVII.C`). Implement a range-contradiction
+  rule: from `0 ≤ a` and `a + k = 0` with `k > 0`, derive `⊥`. — **Done, IX.94.** Hand chain, **170
+  inferences/branch**, no `INT_ARITH`.
+- [ ] **XXVII.B5. Match literal and richer AC complements.** The current prop path recognises only
+  `∧`-AC conjunctions. Extend it to (a) `P`/`~P` on any atom (`aconv`), and (b) `+`/`*`-AC terms and
+  their negations. IX.94 shows the missed neg branches cost 21,809 / 101,565 / 78,359 / 634,580; each
+  should fall to ~108.
+- [ ] **XXVII.B6. Linear-identity certificate for branch 3.** The classification says branch 3's goal
+  *is* `#0 + #1` (aggregate + fact), yet its close costs **333,122**. Build the combination with
+  `bridge_eq_scale`/`bridge_eq_add` and close in hundreds, not hundreds of thousands.
 - [ ] **XXVII.B3.** Move the check **as early as mathematically justified** (`XXVII.A2`), so the
   normalisation, split, bounds and mask work is never spent on a dead branch.
 - [ ] **XXVII.B4.** Do not pay for arithmetic reasoning until the compiler has established that
