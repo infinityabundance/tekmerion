@@ -4346,3 +4346,48 @@ preamble is 59.3% support-library arithmetic and 31.2% simulation.
 7. Re-measure under the frozen rules; publish the 27-task table; then families.
 8. **`XXIII.L`** — the MM0 arena, in the order A (their corpus), incremental, B (computational
    theorem), self-certification — each only after the rule it needs has a Lean soundness proof.
+
+## XXIII.P — What IX.89 changes (recorded 2026-11-27)
+
+Measured, with the ablation check at `diff 0` on all six totals:
+
+| side | task | simulation | named arithmetic | support library | total |
+|---|---|---:|---:|---:|---:|
+| human | add | 42.5% | 6.9% | 0.3% | 1,848,494 |
+| human | sub | 58.0% | 11.1% | 0.3% | **1,283,174** (new) |
+| human | neg | 73.2% | 6.2% | 0.3% | 721,473 |
+| ours | add | 13.7% | 49.3% | 26.1% | 5,745,767 |
+| ours | sub | 7.5% | 66.4% | 16.6% | 9,029,510 |
+| ours | neg | 9.3% | 58.1% | 26.3% | 5,683,733 |
+
+- [x] **XXIII.P1. The lever is not where I assumed.** The human proof is simulation-dominated
+  (42.5–73.2%); ours is certificate- and library-dominated (75.4–84.5%). Removing **all** of our
+  simulation leaves 2.68× / 6.51× / 7.15× human. `XXIII.D` (step-theorem cache) targets the human's
+  dominant cost and repays at most 7.5–13.7% of ours. It is worth doing for **generality**
+  (multiplication, Montgomery), not to win this race.
+- [x] **XXIII.P2. The decision in `XXIII.O` is `XXIII.B`/`XXIII.C` plus the support library**, and the
+  third item is new and large: **1.5M inferences per task of inlined support library**, 16.6–26.3%
+  of our total. Removing simulation *and* the library still leaves 1.87× / 5.34× / 5.07×.
+
+- [ ] **XXIII.P3. Accounting, before anyone quotes a ratio.** Our answer is **self-contained** (the
+  benchmark's syntax gate requires it), so we pay 1.5M per task for library construction; the human
+  proof runs in a session where `base.ml` is already loaded. That is not a like-for-like session.
+  Report **three** numbers per task and never conflate them:
+  1. **strict self-contained** (what we have today; rule 3, the default claim);
+  2. **matched session** (our library preloaded and kernel-checked before the counter starts, as
+     the human's is) with the library's own cost in **ledger L7**, counted once and published
+     separately;
+  3. **amortised** over N tasks, shown beside (1), never instead of it.
+  Under (2) the current numbers would be ≈4.25M / 7.53M / 4.19M — i.e. ≈2.3× / 5.9× / 5.8× — so
+  the size of the claim depends entirely on which accounting is used, and that must be stated in the
+  same sentence as any ratio.
+- [ ] **XXIII.P4. Where the remaining human-scale work is, in order**: (i) the support library's
+  1.5M (make it reusable and counted once, not eliminated from the ledger); (ii) our aggregate fact
+  proof (1.18M add / 2.16M sub / 1.51M neg) — the `XXIII.B` premise fast path targets exactly this,
+  and IX.86 measured 477,376 inferences for one inert premise; (iii) our linear close (1.13M / 2.79M
+  / 1.56M) — the `XXIII.C` certificate replay targets this. Those three sum to 3.8M of our 5.75M on
+  `add`.
+- [ ] **XXIII.P5. Human decomposition is the target map**: add is 42.5% simulation + 29.2%
+  carry/arithmetic; sub 58.0% + 29.9%; neg 73.2% + 6.2%. Our equivalent phases must eventually
+  match those *shares*, not merely the total — matching a total by over-spending elsewhere is not
+  the result we want.
