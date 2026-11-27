@@ -4976,10 +4976,27 @@ independent.
   link between the actual machine output, the input and the selector. Constructing the mathematically
   correct expected result does not verify that the machine computes it. Acceptance: the witness and
   the output word are related by a checked theorem from the instruction equations.
-- [ ] **XXVI.C5. Capture the pre-close goal and its facts first.** Instrument phase mode to dump, per
+- [x] **XXVI.C5. Capture the pre-close goal and its facts first.** Instrument phase mode to dump, per
   branch, the goal `w'`, the aggregates, the facts and the side hypotheses (to a file, not stdout), so
   the prototype is built against the real obligation. Acceptance: a dump for `arm/neg_p25519` that a
-  standalone HOL session can reload.
+  standalone HOL session can reload. — **Done, XXVI.C5.** 10 branches, two goal shapes
+  (`Σs = 0` and `0 = p − N`), **26 of 31–34 antecedents are direct bounds**, `aggregates = 1`
+  (receipt `research/receipts/xxvi-neg-preclose-goal.md`; scratch-only instrumentation, inference
+  count unchanged at 5,683,733).
+
+### XXVI.C6. First result from the dump: the slim close (IX.92, measured)
+
+- [x] **XXVI.C6.** The dump motivated dropping the direct bounds from the close, with a full-set
+  fallback. Measured at `6a32ee6` (receipt `research/receipts/ix92-slim-close.md`): **add 5,139,300**
+  (−129,091; 2.78× human), **sub 7,985,276** (−232,318; 6.22×), **neg 5,469,909** (−213,824;
+  **7.58× — `neg` moves for the first time**). `plain == phase`, `diff 0`; slim ok/failed
+  11/1, 21/3, 10/0; slim antecedents 7–8 / 8–9 / 5–6 against full 53–54 / 57–59 / 31–34.
+  **This is not the witness route:** the neg close is still 1,364,282 against the human 44,425
+  (30.7×), and `equals_thm` was not re-run.
+- [ ] **XXVI.C7. Fix the phase anchors before any further D comparison.** `src/tools/emit.rs` anchors
+  `bridge:pre-close`/`bridge:post-close` to the full-set line and `ORACLE close ok`, both now inside
+  the `| None ->` fallback, so phase D bills only fallbacks (IX.92 §3). Move both to bracket the whole
+  close. Acceptance: D equals the close region on add/sub/neg and `diff 0` still holds.
 
 ## XXVI.D — Simulation floor (second, not first)
 
