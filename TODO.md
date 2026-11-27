@@ -5124,13 +5124,33 @@ level produces a kernel proof; a level that cannot prove inconsistency falls thr
 - [x] **XXVII.B2.** Level 3 is a candidate from the dump (`XXVII.C`). Implement a range-contradiction
   rule: from `0 ≤ a` and `a + k = 0` with `k > 0`, derive `⊥`. — **Done, IX.94.** Hand chain, **170
   inferences/branch**, no `INT_ARITH`.
-- [ ] **XXVII.B5. Match literal and richer AC complements.** The current prop path recognises only
+- [x] **XXVII.B5. Match literal and richer AC complements.** The current prop path recognises only
   `∧`-AC conjunctions. Extend it to (a) `P`/`~P` on any atom (`aconv`), and (b) `+`/`*`-AC terms and
   their negations. IX.94 shows the missed neg branches cost 21,809 / 101,565 / 78,359 / 634,580; each
-  should fall to ~108.
-- [ ] **XXVII.B6. Linear-identity certificate for branch 3.** The classification says branch 3's goal
+  should fall to ~108. — **Done, IX.95.** Literal **15**/branch, polynomial-AC **113**/branch
+  (`INT_POLY_CONV`; no `INT_ACI` exists in this build). Neg: 21,809→15, 101,565→15, 78,359→15,
+  634,580→113.
+- [x] **XXVII.B6. Linear-identity certificate for branch 3.** The classification says branch 3's goal
   *is* `#0 + #1` (aggregate + fact), yet its close costs **333,122**. Build the combination with
-  `bridge_eq_scale`/`bridge_eq_add` and close in hundreds, not hundreds of thousands.
+  `bridge_eq_scale`/`bridge_eq_add` and close in hundreds, not hundreds of thousands. — **Done,
+  IX.95.** Certificate prints `premises=2 weights=[#0:1,#1:2^256]`; **333,122 → 1,235**. It also fires
+  on add (B5 1,842 vs 57,589; B7/B10 ≈2.4–2.6k vs 76–86k).
+
+### XXVII.B7 — IX.95 milestone and what remains
+
+- [x] **XXVII.B7.** An entire proof now benefits: **neg close 1,170,099 → 2,057** over all ten
+  branches, no slim, no `INT_ARITH` of the goal (receipt `ix95-complements-and-identity.md`). Neg
+  close is now **21.6× below** the human final-arithmetic phase (2,057 vs 44,425), with the boundary
+  caveat recorded.
+- [ ] **XXVII.B8. Reorder range after literal.** B8/B10 still take the range path (170); literal would
+  close each at 15. ≈310 inferences available. Cheap; do with the next close change.
+- [ ] **XXVII.B9. Generalise the certificates to `sub` and `add`.** `sub` is **untouched** (close
+  2,554,010, totals 7,985,276), and `add`'s close is 786,931 (full 1, slim 8, linear 3). Classify
+  the `sub`/`add` branches the way `xxvii-neg-branch-classification.md` did for `neg`, then apply the
+  matching certificate (the code is already general; the open question is which branches are
+  vacuous vs genuinely arithmetic/inequality). This is P7.
+- [ ] **XXVII.B10. `equals_thm` and `axioms()` inside the harness** (`XXVII.D`). Still outstanding and
+  mandatory before any victory claim; IX.95 says so explicitly.
 - [ ] **XXVII.B3.** Move the check **as early as mathematically justified** (`XXVII.A2`), so the
   normalisation, split, bounds and mask work is never spent on a dead branch.
 - [ ] **XXVII.B4.** Do not pay for arithmetic reasoning until the compiler has established that

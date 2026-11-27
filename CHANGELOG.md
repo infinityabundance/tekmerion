@@ -7,6 +7,20 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### IX.92–IX.95 — close certificates (`8576feb`)
+
+- **Slim close** (`ix92`): try the close without direct bounds, full-set fallback.
+  add 5,268,391 → 5,139,300; sub 8,217,594 → 7,985,276; neg 5,683,733 → 5,469,909.
+- **Propositional/range refutation** (`ix93`, `ix94`): a branch carrying `P` and `~Q` (AC-equivalent
+  conjunctions) closes in **108** inferences; `0 <= a` with `a + k = 0` in **170**. neg 5,469,909 →
+  5,289,824. Phase markers now bracket the whole close (`close-enter`/`close-exit`).
+- **Literal/AC complements and linear-identity certificate** (`ix95`): literal `P`/`~P` closes in
+  **15**; polynomial-AC in **113**; the branch whose goal is a linear combination of two antecedents
+  in **1,235**. **neg 5,289,824 → 4,121,086 (−22.1 %; 5.71× human), close 1,170,099 → 2,057.**
+  add 5,139,300 → 4,926,695 (2.67×). sub unchanged at 7,985,276.
+- Not established: `equals_thm`/`axioms()` re-checked in-run (no offline harness yet),
+  matched-session accounting, timing medians.
+
 ### XXIII.B1 — per-carrier aggregate premise fast path (`ix91`, `cdd673f`)
 
 - `bridge_aggregate_facts` now tries only the aggregate(s) that mention a carrier before
