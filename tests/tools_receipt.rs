@@ -45,8 +45,15 @@ use tekmerion::tools::{curve_check, dropin};
 /// next tries to refute a branch from `&0 <= &(val x)` and `&(val x) + &k = &0`
 /// (or `&(val x) = -- &k`) with numeral `k > 0`, by a hand chain of order rules;
 /// detection constructs nothing, so a no-match costs no inferences and falls
-/// through to the slim and full closes unchanged).
-const BRIDGE_DIGEST: &str = "47eee00aa0326b45aa48a17f983e23af8fefbfce163f4ff25cfe7eee8e9b00f9";
+/// through to the slim and full closes unchanged), `b9a19268…` (after
+/// XXVII.B5's complement and identity fast paths: the propositional matcher now
+/// also sees a literal complement `P` / `~P` and a polynomial-AC complement
+/// `P` / `~Q` decided by `INT_POLY_CONV`, and a branch whose goal is an exact
+/// integer combination of antecedent equations closes from a verified weight
+/// certificate instead of an `INT_ARITH` search.  All three are derived-rule
+/// only, so the phrase count and the `prove` count are unchanged; the inlined
+/// answer text moved because the library text did).
+const BRIDGE_DIGEST: &str = "b9a1926870f0f6c2fa01a4b56e49da9913f9c6efd5db6459ab05f094c48772ec";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -153,6 +160,11 @@ fn curve_check_reproduces_the_recorded_report() {
     // 92; only the recorded line numbers shift.  XXIII.G's range-refutation
     // fast path is likewise derived-rule only (no `prove`), so the count is
     // still 92; its inserted lines shift the recorded line numbers again.
+    // XXVII.B5's literal and polynomial-AC complement matchers and the
+    // linear-identity certificate call no new `prove` either (`INT_POLY_CONV`
+    // is a conversion, and the certificate's identity is a `TRANS` of two of
+    // its results), so the statement count is still 92 and hits are still 0;
+    // only the reported line numbers move.
     assert_eq!(statements, 92);
     assert_eq!(hits, 0);
     let expected =
@@ -206,10 +218,15 @@ fn instrument_reproduces_the_recorded_output() {
     // The first range-path draft digest was
     //   eada667fd90522825a62d90a154781396eb9239ac0d5e6f90141e9c49d5cabb0
     // (before the hand proof was completed; kept only as a boundary).
+    // XXVII.B5 boundary.  The XXIII.G range-path digest was
+    //   e3370c08e02a0f41a600b2f9351541aed36a612c5076859db0b7b44e5931ab90
+    // The literal/AC-complement and linear-certificate fast paths add only
+    // local `let ... in` bindings inside `BRIDGE_ORACLE_TAC` (no new `;;`
+    // phrase), so the phrase count is still 249.
     assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "e3370c08e02a0f41a600b2f9351541aed36a612c5076859db0b7b44e5931ab90"
+        "25b47f58b76f85857447c69da011efe402c45a1be845f76bca26af615f65a6be"
     );
 }
 
@@ -350,22 +367,26 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     //   add-p384  ed8397b94a58692856a00a65be9671ad5ae7be6d9d04840e5e2ba7afac3cc10b
     // The range-refutation fast path adds derived-rule-only lines inside
     // `BRIDGE_ORACLE_TAC`; the phrase count is unchanged (293).
+    // XXVII.B5 boundary.  The range-path digests were the four above.  The
+    // complement and certificate fast paths are locals inside the existing
+    // `BRIDGE_ORACLE_TAC` phrase, so the count is still 293 and only the
+    // inlined library text moved: every answer now carries the new close code.
     for (mode, digest) in [
         (
             "add-ref",
-            "313792811dae6b4e90decb6dd27a87f48d85d51a4dbd817905d2161278a7dd25",
+            "998220255386373e59c0dc6e3e5626dbd3e0f758ccb3bf48c790f2f757d55507",
         ),
         (
             "sub",
-            "058afa1a0eb7c473f5202722858e30070b4e1888a2f23351232779de753c2cad",
+            "6462a72959b48f45b84c1116bcc3b658e8d3aaa06c75a6aad7b892af5ff0c261",
         ),
         (
             "neg",
-            "61c67b59c01d84a75a1ba9f5e36f490bf95e14cd5c4af1f98ceb6c46912def73",
+            "b1411fce8ea5db874402ecb4aaff31ad595f752c043daedc570aaec11e2e8ca6",
         ),
         (
             "add-p384",
-            "a4a1996674e10eb29d7625e099ba426db0c1f913a8fc6e7bec54e5fa28cc7b9d",
+            "081870dd2cb1fc66414017a9c9e9468e6de2eb31f25222ddb798061ccd9f5c23",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

@@ -2702,6 +2702,334 @@ let BRIDGE_ORACLE_TAC : tactic =
           ACCEPT_TAC closed (asl,w)
       | None ->
       bridge_slice_note "ORACLE close range-nomatch ants=%d" (List.length ants);
+      (* XXVII.B5, Task 1: literal and polynomial-AC complements.
+
+         The `CONJ_ACI_RULE' matcher above only sees a contradiction whose two
+         sides are conjunction terms.  Two further shapes are left over from a
+         branch split, and both are still purely propositional:
+
+           (a) a *literal* complement, an antecedent `P' together with another
+               `~P'.  The same `MP (NOT_ELIM nth)' chain closes it with no
+               conversion at all; that is the `&0 <= &(val V)' against
+               `~(&0 <= &(val V))' pair of the `neg' profile.
+
+           (b) a *polynomial-AC* complement, `P' and `~Q' where `P' and `Q'
+               differ only in the association and order of `+' and `*' inside
+               their integer subterms.  The decision is `INT_POLY_CONV', the
+               ring module's canonical polynomial normaliser: it is a
+               *conversion*, not a search, every rewrite is a theorem, and its
+               normal form is a fixed function of the polynomial (`int.ml'
+               instantiates it with the total order on terms as the variable
+               order).  It is applied only after the cheap structural
+               prefilter below agrees, so a no-match costs no inferences.
+
+         Both results fold into `slim_closed' below and so return through the
+         slim close's `ACCEPT_TAC' line, which is the text the phase
+         instrumentation brackets with `bridge:close-exit'; the bracket stays
+         exactly one enter/exit pair per branch and the close cost stays its
+         difference.  The `ORACLE close prop-kind=...' line names the route. *)
+      let bridge_lf_sorted (xs,c) =
+        let tagged = List.map (fun (t,k) -> (string_of_term t, t, k)) xs in
+        let tagged = List.sort (fun (a,_,_) (b,_,_) -> compare a b) tagged in
+        (List.map (fun (_,t,k) -> (t,k)) tagged, c) in
+      let rec bridge_ac_norm tm =
+        if type_of tm = `:int` then
+          (match bridge_lf_of_term tm with
+           | Some lf -> bridge_lf_term (bridge_lf_sorted lf)
+           | None -> tm)
+        else if is_comb tm then
+          mk_comb(bridge_ac_norm (rator tm), bridge_ac_norm (rand tm))
+        else if is_abs tm then
+          mk_abs(fst (dest_abs tm), bridge_ac_norm (snd (dest_abs tm)))
+        else tm in
+      let rec bridge_ac_norm_conv tm =
+        if type_of tm = `:int` then INT_POLY_CONV tm
+        else if is_comb tm then
+          MK_COMB(bridge_ac_norm_conv (rator tm), bridge_ac_norm_conv (rand tm))
+        else if is_abs tm then
+          ABS (fst (dest_abs tm)) (bridge_ac_norm_conv (snd (dest_abs tm)))
+        else REFL tm in
+      let rec bridge_top_head t = if is_comb t then bridge_top_head (rator t) else t in
+      let prop_neg_ants =
+        List.filter_map (fun th ->
+            match concl th with
+            | Comb(Const("~",_), q) -> Some (th, q)
+            | _ -> None) ants in
+      let prop_pos_ants = List.map (fun th -> (th, concl th)) ants in
+      let literal_closed () =
+        let rec go = function
+          | [] -> None
+          | (nth, q) :: rest ->
+              (match List.find_opt (fun (_, p) -> aconv p q) prop_pos_ants with
+               | None -> go rest
+               | Some (pth, _) ->
+                   bridge_slice_note "ORACLE close prop-kind=literal ants=%d"
+                     (List.length ants);
+                   Some (EQ_MP (SYM w_eq) (CONTR w' (MP (NOT_ELIM nth) pth)))) in
+        go prop_neg_ants in
+      let ac_closed () =
+        if prop_neg_ants = [] then None else
+        let neg_heads = List.map (fun (_, q) -> bridge_top_head q) prop_neg_ants in
+        let positives =
+          List.filter_map (fun (th, p) ->
+              if List.exists (aconv (bridge_top_head p)) neg_heads
+              then Some (th, p, bridge_ac_norm p) else None) prop_pos_ants in
+        let rec go = function
+          | [] -> None
+          | (nth, q) :: rest ->
+              let qn = bridge_ac_norm q in
+              let rec pick = function
+                | [] -> go rest
+                | (pth, p, pn) :: ps ->
+                    if aconv pn qn && aconv (bridge_top_head p) (bridge_top_head q)
+                    then
+                      (try
+                         let pq = CONV_RULE bridge_ac_norm_conv pth
+                         and nq = NOT_ELIM (CONV_RULE bridge_ac_norm_conv nth) in
+                         (match concl nq with
+                          | Comb(Comb(Const("==>",_), qc), _)
+                            when aconv qc (concl pq) ->
+                              bridge_slice_note
+                                "ORACLE close prop-kind=ac ants=%d"
+                                (List.length ants);
+                              Some (EQ_MP (SYM w_eq) (CONTR w' (MP nq pq)))
+                          | _ -> go rest)
+                       with e ->
+                         bridge_slice_note "ORACLE close ac-conv failed: %s"
+                           (Printexc.to_string e);
+                         go rest)
+                    else pick ps in
+              pick positives in
+        go prop_neg_ants in
+      (* XXVII.B5, Task 2: the linear-identity certificate.  A branch whose
+         relational facts are all satisfiable can still have a goal that is an
+         exact integer combination of antecedent *equations* (the `neg'
+         profile's branch 3: the chain aggregate plus the decided top carry is
+         the goal, word for word, once the carry is substituted).  The weights
+         are found by exact rational solving over the sparse linear forms --
+         one premise, then two, then a greedy elimination -- and are then
+         *verified* as integers before any proof is built.  The proof is
+         `bridge_eq_scale'/`bridge_eq_add' over the flattened premises, and the
+         final identity `(l - r) = (lw - rw)' is a normalisation by
+         `INT_POLY_CONV', so the only arithmetic inference spent is that
+         normalisation.  Nothing is asserted; a certificate that does not
+         verify is a `None' and falls through to the slim and full closes.  The
+         search works on string-keyed linear forms (an atom is keyed by its
+         printed form, so no `aconv' walks are spent per lookup) and is forced
+         only after the two propositional routes miss. *)
+      let linear_certificate () =
+        let int_goal =
+          try is_eq w && type_of (lhand w) = `:int` with _ -> false in
+        if not int_goal then None else
+        let key_lf (xs,c) =
+          let tagged = List.map (fun (t,k) -> (string_of_term t, k)) xs in
+          (List.sort (fun (a,_) (b,_) -> compare a b) tagged, c) in
+        let rec k_same xs ys =
+          match xs, ys with
+          | [], [] -> true
+          | (a,k) :: xs', (b,j) :: ys' ->
+              a = b && Num.eq_num k j && k_same xs' ys'
+          | _ -> false in
+        let k_equal (fs,fc) (gs,gc) = Num.eq_num fc gc && k_same fs gs in
+        let rec k_merge xs ys =
+          match xs, ys with
+          | [], z -> z
+          | z, [] -> z
+          | (a,k) :: xs', (b,j) :: ys' ->
+              if a = b then
+                (let k' = Num.add_num k j in
+                 if Num.eq_num k' num_0 then k_merge xs' ys'
+                 else (a,k') :: k_merge xs' ys')
+              else if compare a b < 0 then (a,k) :: k_merge xs' ys
+              else (b,j) :: k_merge xs ys' in
+        let k_add (fs,fc) (gs,gc) = (k_merge fs gs, Num.add_num fc gc) in
+        let k_scale k (fs,fc) =
+          if Num.eq_num k num_0 then ([], num_0)
+          else (List.map (fun (a,j) -> (a, Num.mult_num k j)) fs,
+                Num.mult_num k fc) in
+        let k_at (fs,c) = function
+          | None -> c
+          | Some a -> (try List.assoc a fs with Not_found -> num_0) in
+        let k_zero (fs,c) = fs = [] && Num.eq_num c num_0 in
+        let k_int k = Num.eq_num k (Num.floor_num k) in
+        let k_keys f = List.map fst (fst f) in
+        let goal_key =
+          match bridge_lf_of_term (lhand w), bridge_lf_of_term (rand w) with
+          | Some a, Some b -> key_lf (bridge_lf_add a (bridge_lf_neg b))
+          | _ -> failwith "BRIDGE_ORACLE_TAC: goal is not linear" in
+        let gkeys = k_keys goal_key in
+        let rows =
+          List.filter_map (fun th ->
+              match bridge_lf_row_of_thm th with
+              | Some f -> let f' = key_lf f in
+                          if k_zero f' then None else Some (th, f')
+              | None -> None) ants in
+        (* the position in `ants', so the certificate can name its premises *)
+        let index_in_ants th =
+          let rec go i = function
+            | [] -> -1
+            | u :: rest -> if u == th then i else go (i + 1) rest in
+          go 0 ants in
+        (* necessary condition for `k1 * f1 + k2 * f2 = goal' with both
+           weights nonzero: an atom of one premise that the goal does not have
+           must be cancelled by the other premise, and the goal's atoms must be
+           covered.  A string-membership test, so the quadratic search below
+           only ever runs on plausible pairs. *)
+        let pair_viable f1 f2 =
+          let k1s = k_keys f1 and k2s = k_keys f2 in
+          List.for_all (fun a -> List.mem a gkeys || List.mem a k2s) k1s &&
+          List.for_all (fun a -> List.mem a gkeys || List.mem a k1s) k2s &&
+          List.for_all (fun a -> List.mem a k1s || List.mem a k2s) gkeys in
+        let solve_one f h =
+          match fst f with
+          | [] -> None
+          | (a, k0) :: _ ->
+              let k = Num.div_num (k_at h (Some a)) k0 in
+              if Num.eq_num k num_0 || not (k_int k) then None
+              else if k_equal (k_scale k f) h then Some k else None in
+        (* With the one-premise case already excluded, `k1' and `k2' are
+           uniquely determined as soon as one coordinate where `(f1,f2)' is
+           nonzero is combined with one where the 2x2 determinant is nonzero;
+           the anchor is fixed, so this is linear in the coordinates. *)
+        let solve_two f1 f2 h =
+          if not (pair_viable f1 f2) then None else
+          let coords =
+            List.map (fun (a,_) -> Some a) (fst f1) @
+            List.map (fun (a,_) -> Some a) (fst f2) @ [None] in
+          let rec anchor = function
+            | [] -> None
+            | c :: rest ->
+                let a1 = k_at f1 c and b1 = k_at f2 c in
+                if Num.eq_num a1 num_0 && Num.eq_num b1 num_0 then anchor rest
+                else Some (c, a1, b1) in
+          match anchor coords with
+          | None -> None
+          | Some (c, a1, b1) ->
+              let h1 = k_at h c in
+              let rec try_second = function
+                | [] -> None
+                | d :: ds ->
+                    let a2 = k_at f1 d and b2 = k_at f2 d and h2 = k_at h d in
+                    let det = Num.sub_num (Num.mult_num a1 b2)
+                                            (Num.mult_num a2 b1) in
+                    if Num.eq_num det num_0 then try_second ds else
+                    let k1 = Num.div_num
+                               (Num.sub_num (Num.mult_num h1 b2)
+                                            (Num.mult_num h2 b1)) det
+                    and k2 = Num.div_num
+                               (Num.sub_num (Num.mult_num a1 h2)
+                                            (Num.mult_num a2 h1)) det in
+                    if not (k_int k1) || not (k_int k2) then None
+                    else if k_equal
+                              (k_add (k_scale k1 f1) (k_scale k2 f2)) h
+                    then Some (k1, k2) else None in
+              try_second coords in
+        let rec first_one = function
+          | [] -> None
+          | (th, f) :: rest ->
+              (match solve_one f goal_key with
+               | Some k -> Some [(th, k)]
+               | None -> first_one rest) in
+        let rec first_two = function
+          | [] -> None
+          | (th, f) :: rest ->
+              let rec inner = function
+                | [] -> first_two rest
+                | (u, fu) :: us ->
+                    (match solve_two f fu goal_key with
+                     | Some (k1, k2) -> Some [(th, k1); (u, k2)]
+                     | None -> inner us) in
+              (match inner rest with
+               | Some ws -> Some ws
+               | None -> first_two rest) in
+        let greedy () =
+          let rec step acc res avail depth =
+            if k_zero res then Some (List.rev acc)
+            else if depth <= 0 then None
+            else
+              let rec exact = function
+                | [] -> None
+                | (th, f) :: rest ->
+                    (match solve_one f res with
+                     | Some k -> Some [(th, k)]
+                     | None -> exact rest) in
+              (match exact avail with
+               | Some ws -> Some (List.rev_append acc ws)
+               | None ->
+                   (match fst res with
+                    | [] -> None
+                    | (a, ka) :: _ ->
+                        let rec pick = function
+                          | [] -> None
+                          | (th, f) :: rest ->
+                              let k0 = k_at f (Some a) in
+                              if Num.eq_num k0 num_0 then pick rest else
+                              let k = Num.div_num ka k0 in
+                              if not (k_int k) || Num.eq_num k num_0
+                              then pick rest else
+                              let res' = k_add res (k_scale (Num.minus_num k) f) in
+                              if List.length (fst res') < List.length (fst res)
+                              then Some (th, k, res') else pick rest in
+                        (match pick avail with
+                         | None -> None
+                         | Some (th, k, res') ->
+                             step ((th, k) :: acc) res'
+                               (List.filter
+                                  (fun (u,_) -> not (aconv (concl u) (concl th)))
+                                  avail)
+                               (depth - 1)))) in
+          step [] goal_key rows 6 in
+        let cert =
+          match first_one rows with
+          | Some ws -> Some ws
+          | None ->
+              (match first_two rows with
+               | Some ws -> Some ws
+               | None -> greedy ()) in
+        match cert with
+        | None -> None
+        | Some weights ->
+            let weights =
+              List.filter (fun (_, k) -> not (Num.eq_num k num_0)) weights in
+            let scaled =
+              List.map (fun (th, k) -> (k, bridge_flat_th th)) weights in
+            (try
+               (match scaled with
+                | [] -> None
+                | (w0, fth0) :: frest ->
+                    let folded =
+                      List.fold_left (fun acc (w, th) ->
+                          bridge_eq_add acc (bridge_eq_scale th w))
+                        (bridge_eq_scale fth0 w0) frest in
+                    let sub = `(-):int->int->int` in
+                    let l = lhand (concl folded) and r = rand (concl folded) in
+                    let lw = lhand w and rw = rand w in
+                    let p_fold = INT_POLY_CONV (mk_binop sub l r)
+                    and p_goal = INT_POLY_CONV (mk_binop sub lw rw) in
+                    if not (aconv (rand (concl p_fold)) (rand (concl p_goal)))
+                    then None else
+                    let same_diff = TRANS p_goal (SYM p_fold) in
+                    let lr_zero =
+                      TRANS (AP_THM (AP_TERM sub folded) r)
+                        (ISPEC r INT_SUB_REFL) in
+                    let zero_th = TRANS same_diff lr_zero in
+                    let eq_rule =
+                      REWRITE_RULE [INT_ADD_LID]
+                        (ISPECL [lw; rw; bridge_int_lit num_0]
+                           INT_EQ_SUB_RADD) in
+                    bridge_slice_note
+                      "ORACLE close linear-cert premises=%d weights=[%s] ants=%d"
+                      (List.length weights)
+                      (String.concat ","
+                         (List.map (fun (th, k) ->
+                              Printf.sprintf "#%d:%s" (index_in_ants th)
+                                (Num.string_of_num k)) weights))
+                      (List.length ants);
+                    Some (EQ_MP eq_rule zero_th))
+             with e ->
+               bridge_slice_note "ORACLE close linear-cert failed: %s"
+                 (Printexc.to_string e);
+               None) in
       (* XXIII.B3 probe: the close still pays to normalise every direct bound
          (`&0 <= &(val w)', `&(bitval b) < &1', ...).  Those are the antecedents
          `bridge_close_hyps' was written to drop, but the oracle path never used
@@ -2713,6 +3041,19 @@ let BRIDGE_ORACLE_TAC : tactic =
         List.filter (fun th -> not (bridge_is_direct_bound th)) side_hyps @
         extra_eqs in
       let slim_closed =
+        match literal_closed () with
+        | Some closed -> Some closed
+        | None ->
+        bridge_slice_note "ORACLE close literal-nomatch ants=%d"
+          (List.length ants);
+        match ac_closed () with
+        | Some closed -> Some closed
+        | None ->
+        bridge_slice_note "ORACLE close ac-nomatch ants=%d" (List.length ants);
+        match linear_certificate () with
+        | Some closed -> Some closed
+        | None ->
+        bridge_slice_note "ORACLE close linear-nomatch ants=%d" (List.length ants);
         if List.length slim < List.length ants then
           (try
              let th = prove(bridge_mk_imps slim w', INT_ARITH_TAC) in
