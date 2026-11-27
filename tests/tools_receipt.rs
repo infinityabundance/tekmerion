@@ -61,8 +61,15 @@ use tekmerion::tools::{curve_check, dropin};
 /// masked atom to its raw form.  Both are derived-rule only; `prove` count and
 /// phrase count are unchanged, the inlined answer text moved.  `cae44c88…` is
 /// the lazy-negation/reordered final form (literal before order, so `neg`'s
-/// literal branches keep their 15-inference route).
-const BRIDGE_DIGEST: &str = "cae44c88ad46a740f1396ab5310c08158a8012fac331639becb6fbfb83c4a081";
+/// literal branches keep their 15-inference route).  `2182ef78…` (after
+/// XXVII.B11's sparse Farkas refutation: the oracle close detects a
+/// non-negative integer combination of at most three relational facts whose
+/// `&(val ..) >= &0` cancellation leaves a negative constant, and proves `F` by
+/// hand with `INT_LE_MUL`/`INT_LE_ADD` plus one `INT_RING` identity.  Detection
+/// is pure linear-form arithmetic, so a no-match spends no inference; the two
+/// new `prove` calls (the ring identity and the ground `&c < &0`) move the
+/// statement count 92 -> 94).
+const BRIDGE_DIGEST: &str = "ae942c74d63fbe1f3f450bc3ca3199c264960a7653c96a517de8312116fb42ae";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -173,8 +180,10 @@ fn curve_check_reproduces_the_recorded_report() {
     // linear-identity certificate call no new `prove` either (`INT_POLY_CONV`
     // is a conversion, and the certificate's identity is a `TRANS` of two of
     // its results), so the statement count is still 92 and hits are still 0;
-    // only the reported line numbers move.
-    assert_eq!(statements, 92);
+    // only the reported line numbers move.  XXVII.B11's sparse Farkas refutation
+    // adds two `prove` calls (the `INT_RING` sum identity and the ground
+    // `&c < &0`), so the count is 94 and hits remain 0.
+    assert_eq!(statements, 94);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -236,10 +245,14 @@ fn instrument_reproduces_the_recorded_output() {
     //   25b47f58b76f85857447c69da011efe402c45a1be845f76bca26af615f65a6be
     // The order-antisymmetry refutation and the mask-substitution search are
     // likewise locals inside the existing `BRIDGE_ORACLE_TAC` phrase.
-    assert_eq!(phrases, 249);
+    // XXVII.B11 adds ten top-level helper phrases for the sparse Farkas
+    // refutation (the shape parser, the positive-term builders, the scaling and
+    // addition rules, and the non-negativity rule), so 249 -> 260 and the output
+    // digest moved to `f95a579c...`.
+    assert_eq!(phrases, 260);
     assert_eq!(
         sha256(out.as_bytes()),
-        "12f972bd13d76f9a3519b8e8f7f6653787838975ffcce79246bbe75d52fddecb"
+        "f95a579cce4bb6586fa40b75287541e1696672e99c36e8edff7146fafa8abab4"
     );
 }
 
@@ -283,7 +296,9 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // bridge_bounds_of_terms): 261 -> 265.  XIX.C1 adds eleven `let` phrases to
     // bridge.ml (the aggregate builder, its chain/weight helpers, the
     // linear-combination proof, and the aggregate-band fact): 265 -> 276.
-    assert_eq!(parts.len(), 293);
+    // XXVII.B11 boundary.  The ten new top-level helper phrases in bridge.ml
+    // take the inlined count 293 -> 304; every answer carries the new text.
+    assert_eq!(parts.len(), 304);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -391,19 +406,19 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     for (mode, digest) in [
         (
             "add-ref",
-            "95e9f9a35469930a26d89af373d14fd6c8fd74848bd8e34151297f2b56066d2c",
+            "488314dbe8f2bdf47b60fa15f2928def64c7d6866253ee7be10dff3f41b42301",
         ),
         (
             "sub",
-            "e71fb1923d69559e14eed2b895286fa2731302ae967a10ee60d9991fdc62e864",
+            "d0ab40a788c028307b821937e4c752d0af071de652ba14f326d1c98021ea7dda",
         ),
         (
             "neg",
-            "5bdd2350ae44148d522b351e9bbd3b42dc8ed61e99eda0665a96bef19217eb55",
+            "b81df16e89f3472d3de9df11cf061a41cd675a8de7e78d3776cd3a66dab2b54b",
         ),
         (
             "add-p384",
-            "7b2b3b0bddf1f2d6c6dde0887b0ebf25bbd98d527abc5d4247b12199092bde31",
+            "6212ec641d5af3b684658b5a707a1187608c5acaf0b69f5f647c5f478a3bf580",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

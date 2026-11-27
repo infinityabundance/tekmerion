@@ -2477,6 +2477,105 @@ let bridge_close_hyps asl =
   List.filter (fun (_,th) -> not (bridge_is_direct_bound th))
     (bridge_int_hyps asl);;
 
+(* ------------------------------------------------------------------------- *)
+(* 6c.9 XXVII.B11: sparse Farkas refutation of the relational slice.          *)
+(*                                                                           *)
+(* The arithmetic branches left after the order/identity routes are still    *)
+(* *refutations*: the implicit non-negativity of every `&(val ...)' /          *)
+(* `&(bitval ...)' atom (a type fact, `INT_POS', which `INT_ARITH' also uses) *)
+(* is enough to make a handful of the relational hypotheses jointly          *)
+(* inconsistent.  `INT_ARITH' finds this but pays a rational elimination     *)
+(* over the two enormous chain aggregates; the certificate itself is a        *)
+(* non-negative integer combination of at most three relational facts that    *)
+(* reduces to a negative constant.  This block detects such a certificate on  *)
+(* the sparse linear forms alone (`Num' arithmetic), so a no-match spends no  *)
+(* kernel inference; the kernel rules run only for the support finally        *)
+(* chosen.  Everything is a derived rule and the final identity is an         *)
+(* `INT_RING' normalisation, so a wrong guess is a `None' that falls through   *)
+(* to the existing slim/full close -- never an unsound theorem.               *)
+(*                                                                           *)
+(* Strict comparisons are tightened to `x + &1 <= y' (`INT_LT_DISCRETE'), so  *)
+(* every premise becomes `&0 <= P' for a linear term `P'.  The `&(val ...)'   *)
+(* atoms are then cancelled with `&0 <= &(val ...)' (`INT_POS') scaled by the  *)
+(* negated residual coefficient.  A support is accepted only when the summed  *)
+(* constant `c' is negative, which refutes the branch.                        *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_int_sub_tm = `(-):int->int->int`
+and bridge_int_lt_tm = `(<):int->int->bool`
+and bridge_int_zero_tm = `&0:int`;;
+
+let bridge_is_val_atom t =
+  match t with
+  | Comb(Const("int_of_num",_), Comb(Const("val",_), _)) -> true
+  | _ -> false;;
+
+(* a relation is `(tag, a, b)' with tag 0=`a <= b', 1=`a < b',
+   2=`~(a <= b)', 3=`~(a < b)'; the positive term `P' with `&0 <= P' is
+   `b - a', `b - (a + &1)', `a - (b + &1)', `a - b' respectively *)
+let bridge_farkas_shape_of_thm th =
+  match concl th with
+  | Comb(Comb(Const("int_le",_),a),b) -> Some (0, a, b)
+  | Comb(Comb(Const("int_lt",_),a),b) -> Some (1, a, b)
+  | Comb(Const("~",_), p) ->
+      (match p with
+       | Comb(Comb(Const("int_le",_),a),b) -> Some (2, a, b)
+       | Comb(Comb(Const("int_lt",_),a),b) -> Some (3, a, b)
+       | _ -> None)
+  | _ -> None;;
+
+let bridge_int_succ a = mk_binop bridge_int_add_tm a (bridge_int_lit num_1);;
+
+(* the positive term `P' with `&0 <= P', built without spending an inference *)
+let bridge_farkas_pos_of_shape (tag, a, b) =
+  if tag = 0 then mk_binop bridge_int_sub_tm b a
+  else if tag = 1 then mk_binop bridge_int_sub_tm b (bridge_int_succ a)
+  else if tag = 2 then mk_binop bridge_int_sub_tm a (bridge_int_succ b)
+  else mk_binop bridge_int_sub_tm a b;;
+
+(* and the matching kernel theorem `|- &0 <= P' (built only for a chosen fact) *)
+let bridge_farkas_pos_thm th (tag, a, b) =
+  if tag = 0 then EQ_MP (SYM (ISPECL [b;a] INT_SUB_LE)) th
+  else if tag = 1 then
+    let th' = EQ_MP (ISPECL [a;b] INT_LT_DISCRETE) th in
+    EQ_MP (SYM (ISPECL [b; bridge_int_succ a] INT_SUB_LE)) th'
+  else if tag = 2 then
+    let th' = EQ_MP (ISPECL [a;b] INT_NOT_LE) th in
+    let th'' = EQ_MP (ISPECL [b;a] INT_LT_DISCRETE) th' in
+    EQ_MP (SYM (ISPECL [a; bridge_int_succ b] INT_SUB_LE)) th''
+  else
+    let th' = EQ_MP (ISPECL [a;b] INT_NOT_LT) th in
+    EQ_MP (SYM (ISPECL [a;b] INT_SUB_LE)) th';;
+
+let bridge_pos_of_num k =
+  ISPEC (mk_numeral (Num.abs_num k)) INT_POS;;
+
+(* scale `&0 <= P' by a positive integer `k' *)
+let bridge_farkas_scale_le th k pos =
+  if Num.eq_num k num_1 then (th, pos)
+  else
+    let ktm = bridge_int_lit k in
+    let prod = mk_binop bridge_int_mul_tm ktm pos in
+    (MP (ISPECL [ktm;pos] INT_LE_MUL) (CONJ (bridge_pos_of_num k) th), prod);;
+
+(* `&0 <= &k * atom' for a `&(val ..)' / `&(bitval ..)' atom *)
+let bridge_nonneg_atom_thm k atom =
+  let ktm = bridge_int_lit k in
+  let posatom =
+    match atom with
+    | Comb(Const("int_of_num",_), nm) -> ISPEC nm INT_POS
+    | _ -> failwith "farkas: atom is not int_of_num" in
+  let prod = mk_binop bridge_int_mul_tm ktm atom in
+  (MP (ISPECL [ktm;atom] INT_LE_MUL) (CONJ (bridge_pos_of_num k) posatom), prod);;
+
+let bridge_add_le th1 t1 th2 t2 =
+  (MP (ISPECL [t1;t2] INT_LE_ADD) (CONJ th1 th2),
+   mk_binop bridge_int_add_tm t1 t2);;
+
+let bridge_close_hyps asl =
+  List.filter (fun (_,th) -> not (bridge_is_direct_bound th))
+    (bridge_int_hyps asl);;
+
 let BRIDGE_ORACLE_TAC : tactic =
   fun (asl,w) ->
     try
@@ -3150,6 +3249,131 @@ let BRIDGE_ORACLE_TAC : tactic =
         aggregates @ facts' @
         List.filter (fun th -> not (bridge_is_direct_bound th)) side_hyps @
         extra_eqs in
+      (* XXVII.B11: sparse Farkas refutation of the relational slice.  The
+         support search below is pure `Num' arithmetic over the sparse linear
+         forms; no kernel inference is spent on a no-match. *)
+      let farkas_closed () =
+        try
+          let facts =
+            List.filter_map (fun (th) ->
+                match bridge_farkas_shape_of_thm th with
+                | None -> None
+                | Some shape ->
+                    let pos = bridge_farkas_pos_of_shape shape in
+                    (match bridge_lf_of_term pos with
+                     | Some lf -> Some (th, shape, pos, lf)
+                     | None -> None))
+              ants in
+          let nf = List.length facts in
+          if nf = 0 then None else
+          let arr = Array.of_list facts in
+          (* cancel every residual atom with a `&(val ..) >= &0' fact; its
+             coefficient must be a non-positive integer *)
+          let cancel r =
+            let rec go acc = function
+              | [] -> Some (List.rev acc)
+              | (a,k) :: rest ->
+                  if (bridge_is_val_atom a || bridge_is_bitval_atom a) &&
+                     Num.le_num k num_0 &&
+                     Num.eq_num k (Num.floor_num k)
+                  then go ((a, Num.minus_num k) :: acc) rest
+                  else None in
+            (match go [] (fst r) with
+             | Some ms -> Some (snd r, ms)
+             | None -> None) in
+          let combine idxs ks =
+            let r = List.fold_left2 (fun acc i k ->
+                let (_,_,_,lf) = arr.(i) in
+                bridge_lf_add acc (bridge_lf_scale (Num.num_of_int k) lf))
+                ([], num_0) idxs ks in
+            cancel r in
+          let rec idx_subsets k = function
+            | _ when k = 0 -> [[]]
+            | [] -> []
+            | i :: rest ->
+                List.map (fun c -> i :: c) (idx_subsets (k-1) rest) @
+                idx_subsets k rest in
+          let rec bridge_iota n =
+            if n <= 0 then [] else bridge_iota (n-1) @ [n-1] in
+          let all_subsets =
+            List.concat
+              (List.map (fun k -> idx_subsets k (bridge_iota nf)) [1;2;3]) in
+          let result = ref None in
+          let try_support idxs ks =
+            match combine idxs ks with
+            | Some (c, ms) when Num.lt_num c num_0 ->
+                result := Some (idxs, ks, c, ms)
+            | _ -> () in
+          (* pass A: supports of size <= 3 with unit multipliers *)
+          List.iter (fun idxs ->
+              if !result = None then
+                try_support idxs (List.map (fun _ -> 1) idxs)) all_subsets;
+          (* pass B: small multipliers 1..3, bounded to 300 trials *)
+          (if !result = None then begin
+             let budget = ref 0 in
+             let rec products s =
+               if s = 0 then [[]]
+               else List.concat (List.map (fun k ->
+                     List.map (fun c -> k :: c) (products (s-1))) [1;2;3]) in
+             List.iter (fun idxs ->
+                 let s = List.length idxs in
+                 List.iter (fun ks ->
+                     if !result = None && !budget < 300 then begin
+                       incr budget; try_support idxs ks end)
+                   (products s)) all_subsets
+           end);
+          match !result with
+          | None -> None
+          | Some (idxs, ks, c, ms) ->
+              let stage = ref "start" in
+              (try
+                 let parts = ref [] in
+                 List.iter2 (fun i k ->
+                     stage := Printf.sprintf "pos%d" i;
+                     let (th, shape, pos, _) = arr.(i) in
+                     let h0 = bridge_farkas_pos_thm th shape in
+                     stage := Printf.sprintf "scale%d" i;
+                     parts := bridge_farkas_scale_le h0 (Num.num_of_int k) pos
+                              :: !parts)
+                   idxs ks;
+                 List.iter (fun (a,m) ->
+                     stage := "nonneg";
+                     parts := bridge_nonneg_atom_thm m a :: !parts) ms;
+                 (match !parts with
+                  | [] -> None
+                  | (h0,t0) :: rest ->
+                      stage := "add";
+                      let (hsum, sum) =
+                        List.fold_left (fun (h,t) (h',t') ->
+                            bridge_add_le h t h' t') (h0,t0) rest in
+                      stage := "ring";
+                      let lit = bridge_int_lit c in
+                      let hid = prove(mk_eq(sum, lit), CONV_TAC INT_RING) in
+                      stage := "ground";
+                      let hlt =
+                        prove(mk_binop bridge_int_lt_tm lit bridge_int_zero_tm,
+                              INT_ARITH_TAC) in
+                      stage := "rewrite";
+                      let hneg = REWRITE_RULE [SYM hid] hlt in
+                      stage := "close";
+                      let fth =
+                        MP (NOT_ELIM
+                              (ISPECL [bridge_int_zero_tm; sum] INT_LET_ANTISYM))
+                           (CONJ hsum hneg) in
+                      bridge_slice_note
+                        "ORACLE close farkas support=%d const=%s"
+                        (List.length idxs) (Num.string_of_num c);
+                      Some (EQ_MP (SYM w_eq) (CONTR w' fth)))
+               with e ->
+                 bridge_slice_note
+                   "ORACLE close farkas-build failed stage=%s support=[%s]: %s"
+                   !stage (String.concat "," (List.map string_of_int idxs))
+                   (Printexc.to_string e);
+                 None)
+        with e ->
+          bridge_slice_note "ORACLE close farkas-error: %s"
+            (Printexc.to_string e);
+          None in
       let slim_closed =
         match literal_closed () with
         | Some closed -> Some closed
@@ -3172,6 +3396,10 @@ let BRIDGE_ORACLE_TAC : tactic =
         | Some closed -> Some closed
         | None ->
         bridge_slice_note "ORACLE close linear-nomatch ants=%d" (List.length ants);
+        match farkas_closed () with
+        | Some closed -> Some closed
+        | None ->
+        bridge_slice_note "ORACLE close farkas-nomatch ants=%d" (List.length ants);
         if List.length slim < List.length ants then
           (try
              let th = prove(bridge_mk_imps slim w', INT_ARITH_TAC) in
