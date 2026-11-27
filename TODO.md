@@ -4881,3 +4881,144 @@ scheduled experiment and logged before any novelty wording (`XXIV.I2`, `XXIV.I3`
   **[reviewer]** and are not measurements; do not cite them as evidence.
 - [ ] **XXV.I4.** Native checker soundness, independent checker comparison, and human-proof
   outperformance remain **unestablished**. No document may imply otherwise.
+
+---
+
+# XXVI — Intake 2026-11-27 (fourth): regenerated thresholds, neg witness first, CI duplication
+
+Nothing omitted. Records the fourth review of `189eaed` and the follow-up corrections. `XXVI.0`
+supersedes the **numbers** in `XXIV.A4` (the rule stands; the figures are stale); `XXV.C` step 3 gains
+a pre-registered target; `XXV.E` gains coverage accounting and two operators.
+
+## XXVI.0 — Corrections of record (append-only)
+
+- [ ] **XXVI.0.1. The strict-win thresholds in `XXIV.A4` are stale.** IX.91 changed `T` for `add` and
+  `sub`, so `X = H − T − 1` must be regenerated from the same commit as the totals or the table
+  contradicts itself. Measured at `cdd673f` / `189eaed` **[derived]**:
+
+  | task | `T` (total − library) | `X = H − T − 1` | `X₈₀ = 0.8H − T` |
+  |---|---:|---:|---:|
+  | add | 3,770,330 | **−1,921,837** | −2,291,535 |
+  | sub | 6,719,615 | **−5,436,442** | −5,693,076 |
+  | neg | 4,186,381 | **−3,464,909** | −3,609,203 |
+
+  All still negative, so the conclusion is unchanged; `add` is substantially closer. Supersedes the
+  `XXIV.A4` figures (add −2,399,212 · sub −6,248,357 · neg −3,464,908; the last differs by the `−1`).
+- [ ] **XXVI.0.2. Derived matched-session ratios at this commit** **[derived]**: subtract the
+  per-task library cost (1,498,061 / 1,497,979 / 1,497,352): **add 3,770,330 = 2.04×**, **sub
+  6,719,615 = 5.24×**, **neg 4,186,381 = 5.80×** human. Further task-specific reduction required to
+  match: **51.0 % / 80.9 % / 82.8 %**. These are derived, not measured; `XXV.C` step 2 measures them.
+- [ ] **XXVI.0.3. "Accept 61/61" is 61/101 sites covered**, not full coverage. 40 sites have an `Ok`
+  payload with no `Default`, so they have no valid accept mutant. Every published mention says
+  **"61/101 sites covered at accept strength"** until `XXVI.E2` closes the gap.
+- [ ] **XXVI.0.4. CI cancellation is the 30-minute workflow timeout.** The reviewer's logs show four
+  consecutive runs cancelled at 30:18–30:20 (initial steps green) and `selftest.sh` repeating the
+  cargo test and mutation harnesses already run earlier in the job. Treat timeout exhaustion as the
+  working cause (the log does not state it); fix by restructuring (`XXVI.F`), not by raising the
+  timeout alone.
+- [ ] **XXVI.0.5. The Fox correction is accepted.** Fox ITP 2015 reports inference counts in its
+  "decompilation time (and inferences)" tables (`XXV.H3`). This is prior-art evidence for the
+  mechanism, **not** a transferable performance forecast for Tekmerion.
+
+## XXVI.A — New engineering objectives with their own criteria
+
+- [ ] **XXVI.A1. Budget controller reads the latest receipt.** Replace hand-maintained `X`/matched
+  figures in prose with a tool that computes `T`, `X`, `X₈₀` and the matched-session ratio from the
+  committed JSON/receipt for a named commit, and prints the commit it used. Acceptance: a test feeds
+  a synthetic receipt and asserts the four derived values.
+- [ ] **XXVI.A2. Failed fast-path attempts are counted in cost, not just inferences.** Record the
+  number and wall/CPU cost of failed slim/fast attempts (a failed search can be expensive without
+  producing inferences). Report it next to the phase table.
+- [ ] **XXVI.A3. Distinguish expected proof failure from unexpected implementation error.** Replace
+  the blanket `try ... with _ ->` in the fast paths with a classifier so a genuine bug is not
+  silently treated as "fast path inapplicable". Acceptance: an injected non-proof exception is
+  re-raised, not swallowed.
+
+## XXVI.B — Certificate-directed dependency selection (the general form of the fast path)
+
+The current fast path selects the aggregate that *mentions* the carrier. The reviewer's correction:
+a mentioning equation need not be needed, and a non-mentioning one may establish a required bound.
+
+- [ ] **XXVI.B1.** Select premises from the **certificate's own coefficient support**: for
+  `g = Σ λᵢ·eᵢ` keep premise `eᵢ` iff `λᵢ ≠ 0`; for inequalities keep those used by the certified
+  non-negative combination, its rounding steps and supporting bounds. `XXIV.I3`/`XXIII.B3`.
+- [ ] **XXVI.B2. Cache normalised rows** — extract each premise's linear form once per branch and
+  reuse it, instead of re-extracting per attempt (`XXVI.A2` measures the attempts).
+- [ ] **XXVI.B3.** Acceptance: the fact phase drops further on `sub`/`neg` with `equals_thm`
+  unchanged; a failed attempt count is published.
+
+## XXVI.C — Negation witness compiler (pre-registered, the next decisive experiment)
+
+**Order:** neg witness first. The matched-session baseline (`XXV.C` step 2) runs afterwards, because
+AGENTS §2 and §7a forbid two proof builds at once; the battery is sequential even when the tasks look
+independent.
+
+- [ ] **XXVI.C1. Pre-registered target (write before the first run).** From IX.89 the human neg
+  **closing phase (d) is 44,425** and the human total is 721,473. Pre-register:
+  (i) **generated neg closing phase < 44,425**;
+  (ii) aggregate-fact + linear close together **(currently 1,511,696 + 1,563,214 = 3,074,910)**
+  strictly lower, with the amount recorded;
+  (iii) **matched-session total < 721,473**, stretch **≤ 577,178**;
+  (iv) **`equals_thm` mandatory** (IX.91 did not rerun it);
+  (v) **SAT closes = 0**.
+  The phase-level result is published even if the full proof still loses.
+- [ ] **XXVI.C2. The mathematics.** For `0 ≤ a ≤ p`, `p > 0`: `q = [a > 0]`, `r = q·p − a`. Prove
+  `a + r = q·p`, `0 ≤ r`, `r < p`; that is `r` is the canonical residue of `−a mod p`. Sufficient
+  linear encoding: `q ∈ {0,1}` and `q ≤ a ≤ p·q`; with `r = p·q − a` these give `0 ≤ r < p`.
+  Prove the generic selector lemma **once**, then instantiate it.
+- [ ] **XXVI.C3. The selector comes from an OR-reduction zero test, not a carry.** In `add`/`sub` the
+  selector is a carry/borrow; in `neg` the code ORs the limbs and tests the result. `q = [a > 0]`
+  needs the bridge from the OR-reduction result to `q`. **Add "selector from OR-reduction zero test"
+  as a selector kind in ASC pass 4, alongside carry and borrow**, proved via
+  `BIGNUM_OF_WORDLIST_EQ_0`, `VAL_EQ_0`, `WORD_SUB_EQ_0`, `WORD_OR_EQ_0`. Build it generally: every
+  negation and conditional-zero routine among the 27 needs it.
+- [ ] **XXVI.C4. The machine connection must be proved, not assumed.** ASC must recover and prove the
+  link between the actual machine output, the input and the selector. Constructing the mathematically
+  correct expected result does not verify that the machine computes it. Acceptance: the witness and
+  the output word are related by a checked theorem from the instruction equations.
+- [ ] **XXVI.C5. Capture the pre-close goal and its facts first.** Instrument phase mode to dump, per
+  branch, the goal `w'`, the aggregates, the facts and the side hypotheses (to a file, not stdout), so
+  the prototype is built against the real obligation. Acceptance: a dump for `arm/neg_p25519` that a
+  standalone HOL session can reload.
+
+## XXVI.D — Simulation floor (second, not first)
+
+The current neg simulation is 528,862 — 73.3 % of the **human's entire budget**. Remaining budget to
+beat human: **192,610**; for a 20 % win: **48,316** (includes every other phase and any chargeable
+library cost).
+
+- [ ] **XXVI.D1.** Sequence stays **witness first, simulation compression second** (`XXIII.D`/`XXV.D3`).
+  Fox's HOL4 inference counts are prior-art evidence for the mechanism, not a forecast for Tekmerion.
+
+## XXVI.E — Mutation testing: close the 40-site gap and add operator 3
+
+- [ ] **XXVI.E1.** Report **reachability** and **accept** separately and, for accept, always the
+  **coverage** (`61/101`) next to the score.
+- [ ] **XXVI.E2. Cover the 40 `Default`-less sites.** Provide a test-only plausible constructor for
+  each `Ok` payload type (`Json`, `SealedManifest`, `GuardPolicy`, `Closure`, `&BTreeMap<..>`,
+  `&Json`, `std::process::Output`, `EffectiveConfig`) behind `#[cfg(test)]` or the mutation feature,
+  so every one of the 101 sites gets a valid accept mutant. Acceptance: `accept 101/101` (or a
+  recorded equivalent for any site that genuinely cannot be modelled).
+- [ ] **XXVI.E3. Operator 3: plausible, structurally valid, semantically unauthorised.** E.g. a
+  malformed manifest mutated into a well-formed one that silently ignores the malformed field. Tests
+  whether invalid evidence propagates through the whole acceptance pipeline. Acceptance: at least one
+  such mutant per pipeline stage, with the outcome classified.
+- [ ] **XXVI.E4. Classify outcomes, not just killed/survived**: `correct refusal` ·
+  `incorrect acceptance` · `downstream panic` · `timeout` · `infrastructure failure`. These are not
+  equal evidence; report counts per class.
+
+## XXVI.F — CI: restructure, do not just raise the timeout
+
+- [ ] **XXVI.F1.** Split into independent jobs: ordinary tests + clippy; mutation (reachability and
+  accept) with its own timeout and recorded cost; scaffold integration. Remove the duplicate heavy
+  work (`selftest.sh` re-runs `cargo test` and both mutation harnesses already run as separate steps).
+- [ ] **XXVI.F2.** Add a `SELFTEST_SKIP_HEAVY=1` mode to `tools/selftest.sh` so CI can run its distinct
+  checks without repeating the full suite and mutation stages, while retaining every distinct
+  validation.
+- [ ] **XXVI.F3.** Require every job green before release; record the run id. A cancellation is still
+  not a pass.
+
+## XXVI.G — No further backlog expansion
+
+- [ ] **XXVI.G1.** No new programme documents until the neg witness result (or a recorded stop).
+  `XXV.G` stands. The next artefact is a measurement, not a plan.
