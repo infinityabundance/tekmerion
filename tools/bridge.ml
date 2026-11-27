@@ -2364,32 +2364,55 @@ let bridge_aggregate_facts aggregates all_hyps =
   bridge_slice_note "ORACLE aggregate-carriers=%d [%s]"
     (List.length carriers)
     (String.concat "," (List.map (fun (v,_) -> string_of_term v) carriers));
+  (* XXIII.B1: a carrier's fact is implied by the aggregate(s) that mention it;
+     the rest are logically inert.  IX.86 measured 477,376 inferences on `add'
+     (93.2% of the 512,129 regression) from handing one inert aggregate to this
+     proof.  `sub''s correction borrow is decided by both the raw and the
+     corrected aggregate, so a failed fast path retries the full list and the
+     result is unchanged whenever the fast path is wrong. *)
+  let aggs_mentioning v =
+    List.filter (fun th ->
+        match bridge_lf_row_of_thm th with
+        | Some f -> List.exists (fun (t,_) -> aconv t v) (bridge_lf_vars f)
+        | None -> false) aggregates in
+  let premise_sets v =
+    let local = aggs_mentioning v in
+    if local = [] || List.length local >= List.length aggregates then
+      [aggregates @ side_hyps]
+    else [local @ side_hyps; aggregates @ side_hyps] in
   let prove_zero_lt v =
-    let premises = aggregates @ side_hyps in
-    let band () =
-      let th = prove(bridge_mk_imps premises
-                       (mk_binop lt_tm v (bridge_int_lit num_1)),
-                     INT_ARITH_TAC) in
-      List.fold_left (fun acc h -> MP acc h) th premises in
-    let finish th =
-      let b = rand (rand v) in
-      let th2 = prove(mk_imp (concl th, mk_eq(v, bridge_int_lit num_0)),
-                      ASM_CASES_TAC b THEN
-                      ASM_REWRITE_TAC[BITVAL_CLAUSES] THEN
-                      CONV_TAC INT_REDUCE_CONV) in
-      Some(MP th2 th) in
-    try finish (band ())
-    with e ->
-      bridge_slice_note "ORACLE agg-band %s failed: %s"
-        (string_of_term v) (Printexc.to_string e);
-      None in
+    let attempt premises =
+      let band () =
+        let th = prove(bridge_mk_imps premises
+                         (mk_binop lt_tm v (bridge_int_lit num_1)),
+                       INT_ARITH_TAC) in
+        List.fold_left (fun acc h -> MP acc h) th premises in
+      let finish th =
+        let b = rand (rand v) in
+        let th2 = prove(mk_imp (concl th, mk_eq(v, bridge_int_lit num_0)),
+                        ASM_CASES_TAC b THEN
+                        ASM_REWRITE_TAC[BITVAL_CLAUSES] THEN
+                        CONV_TAC INT_REDUCE_CONV) in
+        MP th2 th in
+      finish (band ()) in
+    let rec go = function
+      | [] -> None
+      | p :: rest ->
+          (try Some (attempt p)
+           with e ->
+             bridge_slice_note "ORACLE agg-band %s failed (%d premises): %s"
+               (string_of_term v) (List.length p) (Printexc.to_string e);
+             go rest) in
+    go (premise_sets v) in
   let prove_fact v k =
-    let premises = aggregates @ side_hyps in
-    try
+    let attempt premises =
       let th = prove(bridge_mk_imps premises (mk_eq(v, bridge_int_lit k)),
                      INT_ARITH_TAC) in
-      Some(List.fold_left (fun acc h -> MP acc h) th premises)
-    with _ -> None in
+      List.fold_left (fun acc h -> MP acc h) th premises in
+    let rec go = function
+      | [] -> None
+      | p :: rest -> (try Some (attempt p) with _ -> go rest) in
+    go (premise_sets v) in
   List.filter_map (fun carrier ->
       let v = fst carrier in
       match prove_zero_lt v with
