@@ -87,3 +87,38 @@ and M-F, whose *constituents* are known but whose stated compositions are not pu
   without a kernel-accepted result at a pinned version.
 - Where a row rests on secondary coverage, it is marked `[2°]`; where no dedicated search was
   run, it is marked `[†]`. Those rows are the first to re-check before any external claim.
+
+---
+
+## Table C — XXV extraction (2026-11-27)
+
+Evidence: `research/receipts/xxv-literature.md` and `research/receipts/xxv-search-log.md`.
+This table is deliberately more conservative than the review that prompted it. Classifications
+follow the discipline above; `PLAUSIBLY_NOVEL` is used only where the logged search found nothing
+close, and is marked weak where the search was narrow.
+
+### Correction of record
+
+- **"Replay a certificate through the LCF kernel" is `EXISTING`.** Harrison's SOS work builds
+  Positivstellensatz/ideal-cofactor certificates externally and replays them in HOL Light; the
+  kernel checks each step. The mechanism is not new and must never be claimed as such. What may be
+  unclaimed is the *application* to instruction-derived machine-code arithmetic (§ probe 1).
+- **de Bruijn factor is not proof amplification.** It is text-bytes ÷ text-bytes; it has no
+  certificate-operation denominator. Do not conflate them.
+
+| Mechanism | Nearest neighbour(s), with evidence | What remains unclaimed | Class | The single experiment that settles it |
+|---|---|---|---|---|
+| **W1** Derive canonical-residue witnesses `q`, `r` (`x − r = q·p`, `0 ≤ r < p`) from the instruction-derived equations and replay them in HOL Light | CoqCryptoLine hand-writes the assembly model and supplies carry/flag hints, then checks CAS-produced ideal cofactors in Coq **[P]**; Fiat computes the Montgomery quotient as a compile-time constant of a hand-written algorithm **[P]**; Harrison SOS replays cofactor certificates in HOL Light **[P]** | Deriving `q`/`r` **from the lifted machine-code equations** (not from a human model) and closing the canonical-residue obligation by kernel replay | **UNVERIFIED_COMBINATION** | The negation prototype (`XXV.C` step 3): produce `q = [a>0]`, `r = q·p − a` from the instruction equations; `equals_thm`; human proof text not read |
+| **W2** Premise selection by a certificate's own coefficient support (`λᵢ ≠ 0`) inside an LCF proof search | Sparse linear-combination/Farkas practice; CoqCryptoLine's "elimination of ideal generators through variable substitution" **[P]**; no support-driven selection inside an LCF search found | Selecting the *antecedents* of a kernel arithmetic close from the certificate's non-zero coefficients, so unneeded normalisations never happen | **UNVERIFIED_COMBINATION** | Instrument the close's premise set; ablate `λᵢ ≠ 0` selection vs the current set; endpoint is the close phase in absolute inferences |
+| **W3** Proof amplification `A = I_expanded / N_certificate_operations` | de Bruijn factor (different units) **[P]**; proof-compression work reports nodes/bytes, not certificate ops; `all:"proof amplification"` = 357 term-colliding hits | A reported ratio whose denominator is certificate steps, beside the expanded-inference count | **PLAUSIBLY_NOVEL (weak)** | Only after a certificate backend exists; report `A` with `I_expanded`, `N_ops`, checking time and bytes together |
+| **W4** Silent-acceptance mutation of a verified checker's refusal sites | PIT `TRUE_RETURNS`/`RETURN_VALS` operators **[P]**; Carcara ships `tests/regression/invalid` with the rule "cases in `invalid/` must be rejected. No case may panic." **[P]** | Applying the *operator* (refusal → plausible `Ok`) to a verified checker's refusal sites and reporting an **assertion-strength** score separate from reachability | **UNVERIFIED_COMBINATION** | `XXV.E`: run operator 2 on `guard.rs`/`freeze.rs`/`lib.rs`/`wire.rs`; a mutant survives unless a test asserts the refusal; report two scores |
+| **W5** Column-wise polynomial reduction (AMulet) over machine-instruction partial products, replayed in an LCF kernel | AMulet2 column-wise over circuits/C source with Coq/Frama-C **[P]**; Fiat associational→columns in Coq **[P]**; CryptOpt asm + Coq equivalence **[P]** | The three-way composition over *machine-code* partial products with kernel replay | **UNVERIFIED_COMBINATION** | A multiplication prototype (`XXIII.F4`): recover `c_k + Σ_{i+j=k} aᵢbⱼ = r_k + B·c_{k+1}` from the instructions; replay in HOL Light |
+
+### Negative results worth keeping
+
+- **No prior art found** that derives modular witnesses from an implementation's arithmetic
+  structure (Q1), recognises the conditional-subtract/conditional-add idiom automatically (Q6), or
+  reports primitive inference counts for machine-code verification other than Fox ITP 2015 (Q7).
+  Each is "not found after query X", not "does not exist"; the search log names the queries.
+- **No published inference-count comparison** of `INT_ARITH_TAC` vs a hand-built linear combination
+  in HOL Light exists (Q8). The Isabelle reflection ratio (1–2 orders) is the only nearby number.
