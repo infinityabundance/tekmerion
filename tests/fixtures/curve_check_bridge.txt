@@ -96,88 +96,90 @@ line 2230: CLEAN
   :int
 line 2246: CLEAN
   :int
-line 2373: CLEAN
+line 2381: CLEAN
   (<):num->num->bool
-line 2486: CLEAN
+line 2394: CLEAN
+  (<):num->num->bool
+line 2507: CLEAN
   (MOD):num->num->num
-line 2487: CLEAN
+line 2508: CLEAN
   (MOD):num->num->num
-line 2518: CLEAN
+line 2539: CLEAN
   (rem):int->int->int
-line 2519: CLEAN
+line 2540: CLEAN
   (rem):int->int->int
-line 2591: CLEAN
+line 2612: CLEAN
   !a p:num. (a + p) MOD p = a MOD p
-line 2596: CLEAN
+line 2617: CLEAN
   !m n p:num. n <= p ==> (m + p) - n = m + (p - n)
-line 2601: CLEAN
+line 2622: CLEAN
   !a b p:num. b <= a /\ a < p ==> a - b = (a + p - b) MOD p
-line 2610: CLEAN
+line 2631: CLEAN
   !a b p t s:num.
-line 2623: CLEAN
+line 2644: CLEAN
   !(pw:W word) (x:W word) (y:W word).
-line 2647: CLEAN
+line 2668: CLEAN
   !p (x:W word) (y:W word).
-line 2665: CLEAN
+line 2686: CLEAN
   !(pw:W word) (x:W word).
-line 2680: CLEAN
+line 2701: CLEAN
   !p (x:W word).
-line 2694: CLEAN
+line 2715: CLEAN
   !p m n:num. 0 < p /\ m < p /\ n < p
-line 2736: CLEAN
+line 2757: CLEAN
   (<):num->num->bool
-line 2750: CLEAN
+line 2771: CLEAN
   (rem):int->int->int
-line 2751: CLEAN
+line 2772: CLEAN
   (rem):int->int->int
-line 2773: CLEAN
+line 2794: CLEAN
   :W
-line 2841: CLEAN
+line 2862: CLEAN
   !n:num. 2 EXP (64 * SUC n) = 2 EXP 64 * 2 EXP (64 * n)
-line 2847: CLEAN
+line 2868: CLEAN
   !(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
-line 2860: CLEAN
+line 2881: CLEAN
   !(c:bool) (cf:bool).
-line 2872: CLEAN
+line 2893: CLEAN
   !(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
-line 2885: CLEAN
+line 2906: CLEAN
   !(c:bool) (cf:bool).
-line 2897: CLEAN
-  !A B S E:num (cf:bool).
-line 2904: CLEAN
-  !(xs:int64 list) (ys:int64 list) (ss:int64 list) (cf:bool).
 line 2918: CLEAN
-  !l:int64 list k. LENGTH l = k ==> bignum_of_wordlist l < 2 EXP (64 * k)
+  !A B S E:num (cf:bool).
 line 2925: CLEAN
-  !b:bool A B:num. (~b <=> A < B) ==> (b <=> B <= A)
-line 2930: CLEAN
-  !(x:int64) (y:int64) (z:int64) (c:bool).
+  !(xs:int64 list) (ys:int64 list) (ss:int64 list) (cf:bool).
 line 2939: CLEAN
-  !(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
-line 2949: CLEAN
+  !l:int64 list k. LENGTH l = k ==> bignum_of_wordlist l < 2 EXP (64 * k)
+line 2946: CLEAN
+  !b:bool A B:num. (~b <=> A < B) ==> (b <=> B <= A)
+line 2951: CLEAN
   !(x:int64) (y:int64) (z:int64) (c:bool).
-line 2959: CLEAN
+line 2960: CLEAN
   !(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
-line 2969: CLEAN
-  !(x:int64) (z:int64) (b:bool) (c:bool).
-line 2979: CLEAN
-  !b:bool. &(bitval(~b)):real = &1 - &(bitval b)
-line 2984: CLEAN
-  &(2 EXP 64 - 1):real = &2 pow 64 - &1
+line 2970: CLEAN
+  !(x:int64) (y:int64) (z:int64) (c:bool).
+line 2980: CLEAN
+  !(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
 line 2990: CLEAN
-  val(word (2 EXP 64 - 1):int64) = 2 EXP 64 - 1
-line 2997: CLEAN
   !(x:int64) (z:int64) (b:bool) (c:bool).
-line 3010: CLEAN
+line 3000: CLEAN
+  !b:bool. &(bitval(~b)):real = &1 - &(bitval b)
+line 3005: CLEAN
+  &(2 EXP 64 - 1):real = &2 pow 64 - &1
+line 3011: CLEAN
+  val(word (2 EXP 64 - 1):int64) = 2 EXP 64 - 1
+line 3018: CLEAN
+  !(x:int64) (z:int64) (b:bool) (c:bool).
+line 3031: CLEAN
   !a b:bool.
-line 3021: CLEAN
+line 3042: CLEAN
   !a b:bool. bitval a + bitval b = 0 <=> ~a /\ ~b
-line 3028: CLEAN
+line 3049: CLEAN
   !p:bool. (if p then (word 0:int64) else word (2 EXP 64 - 1)) =
-line 3201: CLEAN
+line 3222: CLEAN
   bignum_of_wordlist
-line 3204: CLEAN
+line 3225: CLEAN
   ll:int64 list
-line 3237: CLEAN
+line 3258: CLEAN
   (MOD):num->num->num
-statements=91 hits=0
+statements=92 hits=0

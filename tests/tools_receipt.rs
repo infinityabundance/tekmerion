@@ -35,8 +35,10 @@ use tekmerion::tools::{curve_check, dropin};
 /// per-carrier aggregate premise fast path (bridge.ml)), `895a5105…` (after
 /// XXIII.B1's per-carrier aggregate premise fast path with `bridge_lf_vars`
 /// returning a term list and the band/finish proof shapes restored to the IX.89
-/// anchors).
-const BRIDGE_DIGEST: &str = "895a51057fa1fe1f0def697ae4a60bcb34851507b7f533e49e09073b71be93f6";
+/// anchors), `a37b4f1c…` (after XXIII.B3's direct-bound slim close: the oracle
+/// close first tries the antecedent set without the `bridge_is_direct_bound`
+/// members, then falls back to the exact full-set close).
+const BRIDGE_DIGEST: &str = "a37b4f1c8b65b3486d58d446ca8fbd41b37bbb5e8f6e811ef3a8a46a562ad9ff";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -135,7 +137,11 @@ fn curve_check_reproduces_the_recorded_report() {
     // count was silently pinned to 33.  XIX.B4 fixes the scanner (quotations
     // and strings are opaque), so the honest count is 81 again.  XIX.C1's
     // aggregate block adds five `prove` calls: 81 -> 86, hits still 0.
-    assert_eq!(statements, 91);
+    // XXIII.B3's direct-bound slim close adds one `prove` call (the slim
+    // attempt; the full-set close below it is the fallback and was already
+    // there): 91 -> 92, hits still 0.  (The library's `prove` word-boundary
+    // occurrences go 95 -> 96.)
+    assert_eq!(statements, 92);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -177,11 +183,13 @@ fn instrument_reproduces_the_recorded_output() {
     // weight helpers, the linear-combination proof and the aggregate-band fact).
     // 249 after XXIII.B1's per-carrier aggregate premise fast path in
     // `bridge_aggregate_facts` (the phrase count is unchanged; only the body of
-    // the two fact provers moved).
+    // the two fact provers moved).  Still 249 after XXIII.B3's direct-bound
+    // slim close, which adds phrases inside the existing `BRIDGE_ORACLE_TAC`
+    // phrase.
     assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "b9138fa4e05cf1273c629d378f834de51f2652c71a4579f850934d11110480e8"
+        "9314cf8ed4cb37aa0fe2f110a0bd49f5b6df14597bd83649769b20b096d53aa6"
     );
 }
 
@@ -297,22 +305,31 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXIII.B1 changed `bridge_aggregate_facts` to try only the aggregate(s) that
     // mention a carrier before falling back to the full list. The library text
     // moved, so every inlined answer moved; the tactics are unchanged.
+    // XXIII.B3 boundary. The XXIII.B1 digests were:
+    //   add-ref   813e6af7ed2827139b6e1ba714878bd035bf34ad56c7a605f48f91db6480ec3c
+    //   sub       9ca6b923b95771c1f8e1b671af6f73b4f20f90c59108f1db8aeb39ddb9ef7409
+    //   neg       e2d676a2c22e6222dfcf0180239ccccd73e7275f85058ff9a836538c436ec802
+    //   add-p384  788472d9279b48fb27a615a45f0b1b41fa9db7e1ab343df6563d0e053c3a31a8
+    // XXIII.B3's direct-bound slim close adds the slim/fallback attempt pair
+    // inside `BRIDGE_ORACLE_TAC`, so every inlined answer carries the new
+    // library text. The phrase count is unchanged (249); the tactics are
+    // unchanged.
     for (mode, digest) in [
         (
             "add-ref",
-            "813e6af7ed2827139b6e1ba714878bd035bf34ad56c7a605f48f91db6480ec3c",
+            "b4c7b1f990cf397d360f5da6711fa4e2e0da7c7ed7d81f9a0cbd44da59a4c7db",
         ),
         (
             "sub",
-            "9ca6b923b95771c1f8e1b671af6f73b4f20f90c59108f1db8aeb39ddb9ef7409",
+            "cd64fbf28cf41ad258fb9424802e2a3df7f0e1d4e41ef768989e0d930956d88d",
         ),
         (
             "neg",
-            "e2d676a2c22e6222dfcf0180239ccccd73e7275f85058ff9a836538c436ec802",
+            "57e3fb43d6e105bac6e95a221afcf5c0857311f372f3ce1c315398018f2542a3",
         ),
         (
             "add-p384",
-            "788472d9279b48fb27a615a45f0b1b41fa9db7e1ab343df6563d0e053c3a31a8",
+            "2693d797a0ff8b9497e92f14e828a7b6b27000ad56c661e627f9bc602b8a33a9",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

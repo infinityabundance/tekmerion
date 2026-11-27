@@ -3354,6 +3354,32 @@ let BRIDGE_ORACLE_TAC : tactic =
       bridge_slice_note "ORACLE close ants=%d size=%d"
         (List.length ants)
         (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 ants);
+      (* XXIII.B3 probe: the close still pays to normalise every direct bound
+         (`&0 <= &(val w)', `&(bitval b) < &1', ...).  Those are the antecedents
+         `bridge_close_hyps' was written to drop, but the oracle path never used
+         it.  Try the set without them first; the anchor line below is the exact
+         full-set close and the fallback, so a wrong guess costs one failed
+         attempt and cannot change the result. *)
+      let slim =
+        aggregates @ facts' @
+        List.filter (fun th -> not (bridge_is_direct_bound th)) side_hyps @
+        extra_eqs in
+      let slim_closed =
+        if List.length slim < List.length ants then
+          (try
+             let th = prove(bridge_mk_imps slim w', INT_ARITH_TAC) in
+             bridge_slice_note "ORACLE close slim ok ants=%d (full %d)"
+               (List.length slim) (List.length ants);
+             Some (EQ_MP (SYM w_eq)
+                     (List.fold_left (fun acc h -> MP acc h) th slim))
+           with _ ->
+             bridge_slice_note "ORACLE close slim failed ants=%d (full %d)"
+               (List.length slim) (List.length ants);
+             None)
+        else None in
+      match slim_closed with
+      | Some closed -> ACCEPT_TAC closed (asl,w)
+      | None ->
       let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in
       let closed = List.fold_left (fun acc h -> MP acc h) th ants in
       let closed = EQ_MP (SYM w_eq) closed in
