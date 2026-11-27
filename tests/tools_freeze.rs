@@ -739,9 +739,7 @@ fn a_malformed_behaviour_flag_is_refused() {
 // recorded configuration.
 #[test]
 fn a_configuration_env_value_of_the_wrong_type_is_refused() {
-    let extra = format!(
-        "\"configuration\":{{\"env\":{{\"TEKMERION_ALG_CLOSE\":\"unset\",\"TEKMERION_FAULT\":3,\"TEKMERION_PROBLEMS\":\"unset\",\"TEKMERION_RECORD_ANSWERS\":\"unset\",\"TEKMERION_SLICE_CONTROL\":\"unset\",\"TEKMERION_SLICE_DEBUG\":\"unset\"}},\"flags\":{{\"mode\":\"answer\",\"stamp\":\"unspecified\",\"force\":\"unspecified\",\"slice\":\"off\"}}}}"
-    );
+    let extra = "\"configuration\":{\"env\":{\"TEKMERION_ALG_CLOSE\":\"unset\",\"TEKMERION_FAULT\":3,\"TEKMERION_PROBLEMS\":\"unset\",\"TEKMERION_RECORD_ANSWERS\":\"unset\",\"TEKMERION_SLICE_CONTROL\":\"unset\",\"TEKMERION_SLICE_DEBUG\":\"unset\"},\"flags\":{\"mode\":\"answer\",\"stamp\":\"unspecified\",\"force\":\"unspecified\",\"slice\":\"off\"}}";
     let doc = base_doc().replace("\"runtime\":null", &format!("{extra},\"runtime\":null"));
     expect_refused(
         freeze::parse(doc.as_bytes(), Path::new("m.json")),
