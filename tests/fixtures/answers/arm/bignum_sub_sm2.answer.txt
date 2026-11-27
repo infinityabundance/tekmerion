@@ -3182,7 +3182,7 @@ let bridge_aggregate_facts aggregates all_hyps =
   let aggs_mentioning v =
     List.filter (fun th ->
         match bridge_lf_row_of_thm th with
-        | Some f -> List.exists (fun (t,_) -> aconv t v) (bridge_lf_vars f)
+        | Some f -> List.exists (fun t -> aconv t v) (bridge_lf_vars f)
         | None -> false) aggregates in
   let premise_sets v =
     let local = aggs_mentioning v in
@@ -3191,19 +3191,16 @@ let bridge_aggregate_facts aggregates all_hyps =
     else [local @ side_hyps; aggregates @ side_hyps] in
   let prove_zero_lt v =
     let attempt premises =
-      let band () =
-        let th = prove(bridge_mk_imps premises
-                         (mk_binop lt_tm v (bridge_int_lit num_1)),
-                       INT_ARITH_TAC) in
-        List.fold_left (fun acc h -> MP acc h) th premises in
-      let finish th =
-        let b = rand (rand v) in
-        let th2 = prove(mk_imp (concl th, mk_eq(v, bridge_int_lit num_0)),
-                        ASM_CASES_TAC b THEN
-                        ASM_REWRITE_TAC[BITVAL_CLAUSES] THEN
-                        CONV_TAC INT_REDUCE_CONV) in
-        MP th2 th in
-      finish (band ()) in
+      let th = prove(bridge_mk_imps premises
+                       (mk_binop lt_tm v (bridge_int_lit num_1)),
+                     INT_ARITH_TAC) in
+      let th = List.fold_left (fun acc h -> MP acc h) th premises in
+      let b = rand (rand v) in
+      let th2 = prove(mk_imp (concl th, mk_eq(v, bridge_int_lit num_0)),
+                      ASM_CASES_TAC b THEN
+                      ASM_REWRITE_TAC[BITVAL_CLAUSES] THEN
+                      CONV_TAC INT_REDUCE_CONV) in
+      MP th2 th in
     let rec go = function
       | [] -> None
       | p :: rest ->

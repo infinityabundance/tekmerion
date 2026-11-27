@@ -32,8 +32,11 @@ use tekmerion::tools::{curve_check, dropin};
 /// `070ed5b4…` (after IX.83's generalisation: the top-bit mask split, the
 /// zero-test/OR fold, the x86 `bit` bound, the shared sub/neg entry points,
 /// and the non-chain-equality close set), `6c5bc534…` (after XXIII.B1's
-/// per-carrier aggregate premise fast path (bridge.ml)).
-const BRIDGE_DIGEST: &str = "6c5bc534db3c035c32a5bc1414ebd8c0457d0f92d3160dea4ecf1f059ad515fa";
+/// per-carrier aggregate premise fast path (bridge.ml)), `895a5105…` (after
+/// XXIII.B1's per-carrier aggregate premise fast path with `bridge_lf_vars`
+/// returning a term list and the band/finish proof shapes restored to the IX.89
+/// anchors).
+const BRIDGE_DIGEST: &str = "895a51057fa1fe1f0def697ae4a60bcb34851507b7f533e49e09073b71be93f6";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -178,7 +181,7 @@ fn instrument_reproduces_the_recorded_output() {
     assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "6146cf4e168ff00b84db2d5007b076dbf06e1f638c979d8363ecafbc7471ecaf"
+        "b9138fa4e05cf1273c629d378f834de51f2652c71a4579f850934d11110480e8"
     );
 }
 
@@ -297,7 +300,7 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     for (mode, digest) in [
         (
             "add-ref",
-            "a5438cd259f62c3c86a971657500dfe53f39b8d40048c59364704bb53ec55cf6",
+            "813e6af7ed2827139b6e1ba714878bd035bf34ad56c7a605f48f91db6480ec3c",
         ),
         (
             "sub",
