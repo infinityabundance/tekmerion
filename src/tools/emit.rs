@@ -1119,13 +1119,37 @@ const BRIDGE_EDITS: &[MarkerEdit] = &[
         plain: "  let side_hyps =\n    List.filter\n      (fun th -> conjunctive th &&\n                 (not (is_int_eq th) || not (bridge_int_eq_has_carry th)))\n      all_hyps in",
         marked: "  let side_hyps =\n    List.filter\n      (fun th -> conjunctive th &&\n                 (not (is_int_eq th) || not (bridge_int_eq_has_carry th)))\n      all_hyps in\n  (if !csat_mark_enabled then\n     Printf.printf \"FACT_PREM hyps=%d size=%d aggs=%d\\n%!\"\n       (List.length side_hyps)\n       (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 side_hyps)\n       (List.length aggregates));",
     },
+    // XXVI.C7 / IX.92 §3: the phase output must bracket the *whole* close, not
+    // only the full-set fallback.  `bridge:close-enter` is emitted once, right
+    // after the close set is fixed and before the propositional attempt, and
+    // `bridge:close-exit` once on every branch that returns a closed theorem
+    // (prop, range, slim, full-set).  The legacy `bridge:pre-close` /
+    // `bridge:post-close` marks stay: `instr_gen.pl` anchors the per-tactic
+    // `G:INT_ARITH:close-*` markers on the `bridge:pre-close` line and the
+    // full-set `prove` line, so those two must keep their exact text.
+    MarkerEdit {
+        plain: "      bridge_slice_note \"ORACLE close ants=%d size=%d\"\n        (List.length ants)\n        (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 ants);",
+        marked: "      bridge_slice_note \"ORACLE close ants=%d size=%d\"\n        (List.length ants)\n        (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 ants);\n      csat_mark_at \"bridge:close-enter\";",
+    },
+    MarkerEdit {
+        plain: "          bridge_slice_note \"ORACLE close prop-refutation ants=%d\"\n            (List.length ants);\n          ACCEPT_TAC closed (asl,w)",
+        marked: "          bridge_slice_note \"ORACLE close prop-refutation ants=%d\"\n            (List.length ants);\n          csat_mark_at \"bridge:close-exit\";\n          ACCEPT_TAC closed (asl,w)",
+    },
+    MarkerEdit {
+        plain: "          bridge_slice_note \"ORACLE close range-refutation ants=%d\"\n            (List.length ants);\n          ACCEPT_TAC closed (asl,w)",
+        marked: "          bridge_slice_note \"ORACLE close range-refutation ants=%d\"\n            (List.length ants);\n          csat_mark_at \"bridge:close-exit\";\n          ACCEPT_TAC closed (asl,w)",
+    },
+    MarkerEdit {
+        plain: "      match slim_closed with\n      | Some closed -> ACCEPT_TAC closed (asl,w)",
+        marked: "      match slim_closed with\n      | Some closed ->\n          csat_mark_at \"bridge:close-exit\";\n          ACCEPT_TAC closed (asl,w)",
+    },
     MarkerEdit {
         plain: "      let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in",
         marked: "      csat_mark_at \"bridge:pre-close\";\n      let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in",
     },
     MarkerEdit {
-        plain: "      bridge_slice_note \"ORACLE close ok\";",
-        marked: "      csat_mark_at \"bridge:post-close\";\n      bridge_slice_note \"ORACLE close ok\";",
+        plain: "      bridge_slice_note \"ORACLE close ok\";\n      ACCEPT_TAC closed (asl,w)",
+        marked: "      csat_mark_at \"bridge:post-close\";\n      bridge_slice_note \"ORACLE close ok\";\n      csat_mark_at \"bridge:close-exit\";\n      ACCEPT_TAC closed (asl,w)",
     },
 ];
 

@@ -66,6 +66,24 @@ let BRIDGE_ORACLE_TAC : tactic =
       let aggregates = bridge_aggregates eqs in
       let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in
       let agg_facts = bridge_aggregate_facts aggregates all_hyps in
+      bridge_slice_note "ORACLE close ants=%d size=%d"
+        (List.length ants)
+        (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 ants);
+      match prop_closed with
+      | Some closed ->
+          bridge_slice_note "ORACLE close prop-refutation ants=%d"
+            (List.length ants);
+          ACCEPT_TAC closed (asl,w)
+      | None ->
+      match range_closed with
+      | Some closed ->
+          bridge_slice_note "ORACLE close range-refutation ants=%d"
+            (List.length ants);
+          ACCEPT_TAC closed (asl,w)
+      | None ->
+      match slim_closed with
+      | Some closed -> ACCEPT_TAC closed (asl,w)
+      | None ->
       let th = prove(bridge_mk_imps ants w', INT_ARITH_TAC) in
       bridge_slice_note "ORACLE close ok";
-      ACCEPT_TAC th (asl,w);;
+      ACCEPT_TAC closed (asl,w);;

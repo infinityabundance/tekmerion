@@ -3408,6 +3408,110 @@ let BRIDGE_ORACLE_TAC : tactic =
           ACCEPT_TAC closed (asl,w)
       | None ->
       bridge_slice_note "ORACLE close prop-nomatch ants=%d" (List.length ants);
+      (* XXIII.G: range-refutation fast path.  A branch can carry both a
+         non-negativity bound `&0 <= &(val x)' and an equation that pins the
+         same atom below zero, `&(val x) + &k = &0' (or `&(val x) = -- &k')
+         with numeral `k > 0'.  The pair is unsatisfiable over the integers and
+         the whole arithmetic close is unnecessary.  The proof is a hand chain
+         of order rules, not a fresh `INT_ARITH' call: the equation is oriented
+         to `v = -- &k' (`INT_EQ_SUB_LADD' plus `INT_SUB_LZERO'), rewriting the
+         bound gives `&0 <= -- &k', `INT_REDUCE_CONV' proves the literal
+         `-- &k < &0' (the numeral `k' is positive, so its negation is strictly
+         negative), and `INT_LET_ANTISYM' closes that pair to `F'.  A failed structural match is a `None', not an
+         error; anything that raises inside the proof is an implementation
+         error and is re-raised (XXVI.A3). *)
+      let is_zero_int t =
+        match bridge_lf_num t with
+        | Some k -> Num.eq_num k num_0
+        | None -> false in
+      let val_atom t =
+        match t with
+        | Comb(Const("int_of_num",_), Comb(Const("val",_), x)) -> Some x
+        | _ -> None in
+      let range_bounds =
+        List.filter_map (fun th ->
+            match concl th with
+            | Comb(Comb(Const("int_le",_), a), b) when is_zero_int a ->
+                (match val_atom b with Some x -> Some (x, th) | None -> None)
+            | _ -> None) ants in
+      (* Detection must not build proofs: it runs on every branch, and a
+         derived theorem constructed here would be paid for even when no
+         `&0 <= &(val x)' pairs with the equation.  The normalisation to
+         `v = -- &k' is therefore deferred to `refute'. *)
+      (* A detected equation is `(atom, k, is_add, add_atom, thm, swap)'.
+         `raw = if swap then SYM thm else thm' is `u + &k = &0' when `is_add'
+         and `v = -- &k' otherwise; nothing is constructed until a
+         non-negativity bound on the same atom is found. *)
+      let range_eqs =
+        List.filter_map (fun th ->
+            let t = concl th in
+            if not (is_eq t) || type_of (lhand t) <> `:int` then None else
+            let add_of a b swap =
+              match a with
+              | Comb(Comb(Const("int_add",_), u), kt) ->
+                  (match val_atom u, bridge_lf_num kt with
+                   | Some x, Some k when Num.lt_num num_0 k && is_zero_int b ->
+                       Some (x, k, true, Some u, th, swap)
+                   | _ -> None)
+              | _ -> None in
+            let neg_of a b swap =
+              match a with
+              | Comb(Const("int_neg",_), kt) ->
+                  (match bridge_lf_num kt, val_atom b with
+                   | Some k, Some x when Num.lt_num num_0 k ->
+                       Some (x, k, false, None, th, swap)
+                   | _ -> None)
+              | _ -> None in
+            let cands =
+              [add_of (lhand t) (rand t) false;
+               add_of (rand t) (lhand t) true;
+               neg_of (lhand t) (rand t) true;
+               neg_of (rand t) (lhand t) false] in
+            List.fold_left
+              (fun acc c -> match acc with Some _ -> acc | None -> c)
+              None cands) ants in
+      let range_closed =
+        let refute bth k is_add uopt th swap =
+          let k_tm = bridge_int_lit k and z = bridge_int_lit num_0 in
+          let raw = if swap then SYM th else th in
+          let eth =
+            if is_add then
+              (match uopt with
+               | Some u ->
+                   let h1 =
+                     EQ_MP (SYM (ISPECL [u; z; k_tm] INT_EQ_SUB_LADD)) raw in
+                   REWRITE_RULE [INT_SUB_LZERO] h1
+               | None -> failwith "BRIDGE_ORACLE_TAC: add shape without atom")
+            else raw in
+          let negk = mk_comb (bridge_int_neg_tm, k_tm) in
+          let hb = REWRITE_RULE [eth] bth in
+          let hneg =
+            EQT_ELIM (INT_REDUCE_CONV
+              (mk_binop `(<):int->int->bool` negk z)) in
+          (* `INT_LET_ANTISYM' is `~(x <= y /\ y < x)', a negated
+             conjunction; `MP' needs an implication, so `NOT_ELIM' turns it
+             into `(x <= y /\ y < x) ==> F' before the pair is applied. *)
+          let fth =
+            MP (NOT_ELIM (ISPECL [z; negk] INT_LET_ANTISYM))
+               (CONJ hb hneg) in
+          EQ_MP (SYM w_eq) (CONTR w' fth) in
+        let rec go bs =
+          match bs with
+          | [] -> None
+          | (x, bth) :: rest ->
+              (match List.find_opt
+                       (fun (x',_,_,_,_,_) -> aconv x x') range_eqs with
+               | Some (_, k, is_add, uopt, th, swap) ->
+                   Some (refute bth k is_add uopt th swap)
+               | None -> go rest) in
+        go range_bounds in
+      match range_closed with
+      | Some closed ->
+          bridge_slice_note "ORACLE close range-refutation ants=%d"
+            (List.length ants);
+          ACCEPT_TAC closed (asl,w)
+      | None ->
+      bridge_slice_note "ORACLE close range-nomatch ants=%d" (List.length ants);
       (* XXIII.B3 probe: the close still pays to normalise every direct bound
          (`&0 <= &(val w)', `&(bitval b) < &1', ...).  Those are the antecedents
          `bridge_close_hyps' was written to drop, but the oracle path never used
