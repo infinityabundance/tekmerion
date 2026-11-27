@@ -5228,3 +5228,163 @@ unsatisfiable: `val` is non-negative, so `val(x) + 2^64 ≠ 0`.
   range-contradiction certificates, and selector-driven case splitting. Log queries and hits in
   `research/receipts/xxvii-search-log.md`; add rows to the novelty register only with a class.
 - [ ] **XXVII.H2.** No new programme documents. The next artefact is a measurement.
+
+---
+
+# XXVIII — Intake 2026-11-27 (sixth): statement integrity, the facts phase, and normalise-once
+
+Nothing omitted. Records the reviews of `d3c7184`, `c760f1a` and `77f1fa8` plus the follow-up note.
+The backlog stays frozen (`XXV.G`); this intake reorders work, it does not add a programme.
+
+## XXVIII.0 — Corrections and blocks (append-only)
+
+- [ ] **XXVIII.0.1. Statement and axiom checks now block publication.** IX.94, IX.95 and IX.96 all
+  say `equals_thm`/`axioms()` were not re-run; IX.97 inherits the gap. No new ratio goes into README,
+  CHANGELOG or a receipt until the check is in the run (`XXVIII.A`). The proofs pass through new
+  derived-rule routes on every branch and the totals have fallen 25–35 %; the ratios rest on a
+  statement nobody has re-checked since IX.89.
+- [ ] **XXVIII.0.2. Zero primitive inferences ≠ zero cost.** The matching paths add no inferences on
+  a no-match, but scanning/comparing terms costs CPU and time, growing with the corpus. Measure
+  unsuccessful-matching wall/CPU cost (`XXVIII.F3`).
+- [ ] **XXVIII.0.3. An OCaml-side consistency test cannot justify dropping a branch.** A structural
+  matcher may **nominate** a branch, but elimination must be justified by a **kernel-checked**
+  contradiction or a verified simplification (`XXVII.A2`, `XXVIII.D3`). Discovering is not
+  establishing.
+- [ ] **XXVIII.0.4. `parse_gen.awk` still attributes phase D to the old fallback.** The
+  `close-enter`/`close-exit` region is valid as a separately measured interval, but the parser's D
+  bucket is stale (`XXVIII.H`).
+- [ ] **XXVIII.0.5. The Farkas search budget has a real defect.** `all_subsets` materialises all
+  subsets of size 1–3; at n = 54 eligible rows that is **26,289** subsets, and the 300-trial cap
+  applies only to Pass B. Replace with a **lazy, terminating enumeration and one explicit work
+  budget** covering both passes; never iterate a pre-materialised list after the budget is spent.
+- [ ] **XXVIII.0.6. The failed aggregate-row experiment is about replay efficiency.** Exposing an
+  equation as two inequalities and `INT_RING`-ing over it cost ≈100K because the aggregate is
+  renormalised inside every branch. The lesson is not "certificates do not scale", it is "replay the
+  canonical row; do not renormalise it" (`XXVIII.B`).
+- [ ] **XXVIII.0.7. The mask-identity search may be paying the kernel for its search.** A candidate is
+  accepted only after `INT_POLY_CONV`; if that runs per candidate, failed candidates' inferences are
+  in the total. Count the `INT_POLY_CONV` calls on the two branches that cost 3,322 and 2,177
+  (`XXVIII.F2`). Search in `Num`; replay only the winner.
+- [ ] **XXVIII.0.8. Status at intake** **[derived]**: strict totals add 4,396,406 · sub 6,259,618 ·
+  neg 4,121,086; matched-session estimates **1.57× / 3.71× / 3.64×**; strict thresholds
+  `X = H − T − 1` = **−1,049,852 / −3,478,466 / −1,902,262** (all negative). Neg's aggregate-fact
+  phase is **1,511,696** (unchanged since IX.89) and is now its largest identifiable lever.
+
+## XXVIII.A — P0: `equals_thm` and `axioms()` inside every run (blocking)
+
+- [ ] **XXVIII.A1.** In the **same session** that produces the theorem, check
+  `aconv (concl th) stmt` against the benchmark's statement term, `hyp th = []`, and that `axioms()`
+  is exactly the three permitted axioms. Emit a machine-readable verdict line (e.g.
+  `STATEMENT_OK aconv=1 hyps=0 axioms=3`) into the `.correct` log.
+- [ ] **XXVIII.A2.** Obtain `stmt` without needing the human proof text at measurement time: extract
+  the upstream `_CORRECT` conclusion once into a re-parseable form (same HOL Light + s2n-bignum base),
+  and parse/`aconv` it in the generated session. Document the extraction command in the receipt.
+- [ ] **XXVIII.A3.** Wire the verdict into the measurement harness so every receipt carries it
+  automatically; a run without it is not a victory claim. No receipt may say "inherited" again.
+- [ ] **XXVIII.A4.** Re-run `add`, `sub`, `neg` and publish the statement/axiom verdict **before** the
+  next ratio in README/CHANGELOG.
+
+## XXVIII.B — P1: normalise once, replay canonical rows (P4, never run)
+
+- [ ] **XXVIII.B1.** Normalise the **aggregate row once, before branching**, and keep it as a
+  canonical-form theorem shared by every branch.
+- [ ] **XXVIII.B2.** Inside a branch, build the certificate as `k·(aggregate) + small rows`
+  **by merging canonical forms** (the normaliser's add and constant-multiply conversions), not by a
+  full `INT_RING` over the whole expression. Check which semiring components HOL Light exports
+  (`REAL_POLY_ADD_CONV`-style); if the integer ones are not exported, use the real-valued route the
+  human proofs take.
+- [ ] **XXVIII.B3.** Precompute the large-coefficient products (`2^64`, `2^128`, `2^192`, `2^256`) as
+  numeral facts once per task and rewrite with them; multiplying by a 256-bit binary numeral costs
+  inferences proportional to bit length every time.
+- [ ] **XXVIII.B4.** Target: the four remaining slim branches (`sub` #15/#16/#22, `add` #11) and the
+  three `sub` full branches close by a canonical-row certificate, with the aggregate normalised
+  **once**. Measure the replay cost (this is the experiment that decides the native certificate
+  format).
+
+## XXVIII.C — P2: certificate-based carry/borrow facts (the new dominant cost)
+
+Neg's aggregate-fact phase is **1,511,696**, the largest identifiable item after the library.
+
+- [ ] **XXVIII.C1.** Apply the certificate methodology to `bridge_aggregate_facts` itself: derive the
+  final carry/borrow fact from the aggregate identity and the input range, not by a general
+  arithmetic proof.
+- [ ] **XXVIII.C2.** Derive the repeated "final carry = 0" theorem **once, before case splitting**,
+  from the aggregate and the range, and reuse the checked theorem in every branch.
+- [ ] **XXVIII.C3.** Measure: aggregate-fact phase per task (add 701,306 · sub 1,343,866 · neg
+  1,511,696) before/after, with the derivation count (once vs per branch).
+- [ ] **XXVIII.C4. Measure the pre-close cost per branch, all 10 neg branches.** The receipt reports
+  how each branch closes but not what it cost before the close. If most of the ~2.1M non-close cost is
+  spread across the nine vacuous branches, **pruning at creation beats refuting afterwards** and is a
+  larger lever than every close optimisation combined.
+
+## XXVIII.D — P3: canonicalise selectors before the first split
+
+The OR-fold trace is right: no bit was mis-folded. The cause is a missing `WORD_SUB_EQ_0` step that
+turns an impossible wrap case into a hypothesis.
+
+- [ ] **XXVIII.D1.** Add `VAL_EQ_0; WORD_SUB_EQ_0` (the human rewrite chain) so
+  `val(word_sub V 0) = 0` becomes `val V = 0`, and `val V = 0 ⇔ ∧ᵢ nᵢ = 0` via
+  `BIGNUM_OF_WORDLIST_EQ_0`/`WORD_OR_EQ_0`.
+- [ ] **XXVIII.D2. Ordering matters.** `BRIDGE_FINISH_KEEP_ALG_TAC` runs
+  `BRIDGE_SPLIT_CONDITIONS_KEEP_TAC` **before** `BRIDGE_ZERO_TEST_TAC`, so adding lemmas to the latter
+  may not prevent the initial splits. Canonicalise selectors **before the first conditional splitter**
+  and before arithmetic normalisation. This is the general rule: **simplify before expanding.**
+- [ ] **XXVIII.D3.** Any branch elimination must carry a **kernel-checked** contradiction or verified
+  simplification; an OCaml structural check may only nominate (`XXVIII.0.3`).
+- [ ] **XXVIII.D4.** Acceptance: neg's branch count falls (target 2, the human structure); record
+  branches avoided, pre-close work avoided, and that `equals_thm`/`axioms` still pass.
+
+## XXVIII.E — P4: certificate engine extensions
+
+- [ ] **XXVIII.E1.** Equality premises may take **signed** multipliers; inequality premises require
+  **non-negative** multipliers; strict integer inequalities convert exactly (`x<y ⇔ x ≤ y−1`).
+- [ ] **XXVIII.E2.** Replace the Farkas replay's ground `INT_ARITH` with a **targeted numeral
+  reduction**; it is a much narrower obligation than general linear arithmetic.
+- [ ] **XXVIII.E3.** Do **not** extend to integer cuts/divisibility/congruence until a real obligation
+  demonstrates the need (ordinary Farkas does not cover every integer-infeasible system).
+- [ ] **XXVIII.E4.** Aggregate-row certificates without `INT_RING` (`XXVIII.B`); the remaining 8
+  general arithmetic closures (add 1 slim + 1 full, sub 3 slim + 3 full) are the targets.
+
+## XXVIII.F — P5: engine scalability (CPU, not just inferences)
+
+- [ ] **XXVIII.F1.** Interned, typed structural **atom IDs** instead of printed term strings as keys;
+  a shared sparse constraint representation instead of several sequential searches.
+- [ ] **XXVIII.F2.** Mask-identity search: run on polynomials in OCaml, replay only the winning
+  candidate; count `INT_POLY_CONV` calls on the 3,322 and 2,177 branches.
+- [ ] **XXVIII.F3.** Lazy subset enumeration with one explicit work budget (`XXVIII.0.5`); measure
+  unsuccessful-matching CPU/wall/time, not only inferences.
+- [ ] **XXVIII.F4.** Deterministic elimination and explicit work budgets; do not let certificate
+  discovery become another expensive theorem search. Where possible, recover the certificate
+  **directly from the instruction dataflow**.
+
+## XXVIII.G — P6/P7: library, step cache, matched session
+
+- [ ] **XXVIII.G1.** Dependency-minimal library linking (`XXIII.K3`/`XXV.C` step 6): the indirect
+  closure per theorem, strict-accounted; the route to a strict win once `T < H`.
+- [ ] **XXVIII.G2.** Step-theorem caching (`XXIII.D`/`XXV.D3`): the simulation floor (add 787,891 ·
+  sub 674,249 · neg 528,862).
+- [ ] **XXVIII.G3.** Measured matched-session baselines (`XXV.C` step 2): library built and
+  kernel-checked before the counter, cost in L7.
+
+## XXVIII.H — Parser and reporting hygiene
+
+- [ ] **XXVIII.H1.** Update `tests/ix89/parse_gen.awk` so the close bucket is the
+  `close-enter`→`close-exit` interval, not the stale fallback D (`XXVIII.0.4`).
+- [ ] **XXVIII.H2.** Every competitive receipt binds: statement check, assumptions, axioms,
+  implementation revision, and measured costs (`XXVIII.A`).
+- [ ] **XXVIII.H3.** Keep per-branch close costs and per-branch pre-close costs in separate columns;
+  no cross-experiment subtraction.
+
+## XXVIII.I — One certificate engine, not four
+
+- [ ] **XXVIII.I1.** The long-term design is **one reusable arithmetic certificate engine** serving
+  aggregate construction, carry/borrow decisions, branch feasibility and final witnesses — not
+  independent reasoning engines (`XXVIII.C`, `XXVIII.D`, `XXVIII.E`).
+
+## XXVIII.J — Targeted literature (backlog frozen)
+
+- [ ] **XXVIII.J1.** Search only for what `XXVIII.B`/`XXVIII.D`/`XXVIII.E` need: canonical-row /
+  semiring-normaliser replay in LCF kernels (e.g. `REAL_POLY_*_CONV`-style components), proof-producing
+  branch-feasibility pruning, OR-reduction/zero-test canonicalisation, and numeral-product caching.
+  Log queries in `research/receipts/xxviii-search-log.md`; add novelty rows only with a class.
+- [ ] **XXVIII.J2.** No new programme documents; the next artefact is a measurement.
