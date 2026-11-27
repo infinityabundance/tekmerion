@@ -2,9 +2,17 @@ name: CI
 
 # Offline checks only. This workflow never runs HOL Light, never touches the
 # 20 GB s2n-bignum bench, and never needs a model API key. The steps that use
-# the network are image provisioning (the two apt installs below) and "Prime
-# crate cache", which populates the local cargo registry so that every check
-# can run with --offline.
+# the network are image provisioning (the apt installs) and "Prime crate
+# cache", which populates the local cargo registry so that every check can run
+# with --offline.
+#
+# XXVI.F: this was one job with a single 30-minute timeout, and it repeated the
+# heavy work — `tools/selftest.sh` re-ran `cargo test` and both mutation
+# harnesses that earlier steps had already run — so runs were cancelled at the
+# timeout with the initial steps green. It is now three independent jobs, each
+# with its own timeout, and the scaffold job runs selftest.sh with
+# SELFTEST_SKIP_HEAVY=1 so nothing heavy runs twice. No job uses
+# continue-on-error: the workflow fails if any job fails.
 
 on:
   push:
@@ -15,13 +23,15 @@ permissions:
   contents: read
 
 jobs:
-  offline-checks:
-    name: Offline checks (no key, no bench)
+  # Ordinary tests, the two explicitly-logged gates, and the lint. This is the
+  # job that gates correctness of the library itself.
+  tests:
+    name: Tests + clippy (no key, no bench)
     # Pinned image: `ocaml-nox` has no installation candidate on the current
     # ubuntu-latest (24.04) runner, which made both CI runs fail before any
     # check executed. 22.04 carries it and its ocamlc supports -stop-after.
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
       - name: Check out
@@ -42,9 +52,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      # tools/selftest.sh syntax-checks an OCaml module; it needs ocamlc but does
-      # not load HOL Light or the bench.
-      - name: Install OCaml (syntax check only)
+      # The answer-elaboration gate below drives the real OCaml front end; it
+      # needs ocamlc but does not load HOL Light or the bench.
+      - name: Install OCaml (front end for the elaboration gate)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ocaml-nox
@@ -94,7 +104,30 @@ jobs:
       # is no pytest-collectable Python test left to run here. The write-through
       # harness is now `tests/write_through.rs`, which compiles the OCaml module
       # against stubs and is exercised by both `cargo test` and
-      # `tools/selftest.sh` below.
+      # `tools/selftest.sh` in the `selftest` job.
+
+  # The mutation harnesses. They are the most expensive checks, so they get
+  # their own job and timeout. Both operators are run: reachability (the
+  # default) and accept, with the accept score printed to the log by the
+  # harness itself.
+  mutation:
+    name: Mutation harnesses (reachability + accept, offline)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.98.0
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup default 1.98.0
+          rustc --version
+          cargo --version
+
+      - name: Prime crate cache
+        run: cargo fetch --locked
 
       - name: Refusal-site mutation harness (offline)
         run: cargo run --offline --quiet --bin mutate
@@ -105,10 +138,48 @@ jobs:
       # The guard now lives in src/tools/guard.rs. The Rust harness mutates every
       # Err(Refused::new(..)) site in it and requires tests/tools_guard.rs to
       # notice; it restores the file in Drop.
-      - name: Guard refusal-site mutation harness (Rust, offline)
+      - name: Guard refusal-site mutation harness (reachability, offline)
         run: cargo run --offline --quiet --bin mutate_guard
 
-      # selftest.sh re-runs cargo test and both mutation harnesses as part of its
-      # 7 sections; it does not require HOL Light.
-      - name: Scaffold self-test (offline)
-        run: bash tools/selftest.sh
+      # Operator 2 (accept). The harness prints the accept score (today 61/61
+      # valid mutants, 0 survived) to the log. No continue-on-error: a non-zero
+      # exit fails this job, which fails the workflow.
+      - name: Guard refusal-site mutation harness (accept, offline)
+        env:
+          MUTATE_GUARD_OPERATOR: accept
+        run: cargo run --offline --quiet --bin mutate_guard
+
+  # Scaffold integration: the checks that are unique to tools/selftest.sh
+  # (OCaml syntax, the binary self-tests, run_traces.sh argument parsing, the
+  # write-through harness). SELFTEST_SKIP_HEAVY=1 omits sections 6/7a, 6/7b
+  # and 7/7, which the `tests` and `mutation` jobs already run, so nothing
+  # heavy is duplicated; the skip is printed in the log.
+  selftest:
+    name: Scaffold self-test (offline, heavy stages skipped)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.98.0
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup default 1.98.0
+          rustc --version
+          cargo --version
+
+      # Section 1 syntax-checks an OCaml module; it needs ocamlc but does not
+      # load HOL Light or the bench.
+      - name: Install OCaml (syntax check only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ocaml-nox
+          ocamlc -version
+
+      - name: Prime crate cache
+        run: cargo fetch --locked
+
+      - name: Scaffold self-test (offline, SELFTEST_SKIP_HEAVY=1)
+        run: SELFTEST_SKIP_HEAVY=1 bash tools/selftest.sh

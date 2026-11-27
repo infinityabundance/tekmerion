@@ -118,25 +118,37 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-section "6/7a existing Rust suite (cargo test --offline)"
-if cargo test --offline; then
-  printf 'OK: cargo test --offline passed\n'
+# Sections 6 and 7 are the heavy, duplicated checks: CI runs `cargo test` and
+# each mutation harness as its own job/step. SELFTEST_SKIP_HEAVY=1 lets the
+# scaffold job run only the checks that are unique to this script (1-5). The
+# skip is explicit in the log and counted as neither a pass nor a failure; the
+# heavy checks are still required, just elsewhere.
+if [ "${SELFTEST_SKIP_HEAVY:-0}" = "1" ]; then
+  section "6/7 heavy checks skipped (SELFTEST_SKIP_HEAVY=1)"
+  printf 'SKIP: cargo test --offline (run as its own CI job)\n'
+  printf 'SKIP: cargo run --bin mutate (run as its own CI job)\n'
+  printf 'SKIP: cargo run --bin mutate_lifecycle (run as its own CI job)\n'
 else
-  fail "cargo test --offline failed"
-fi
+  section "6/7a existing Rust suite (cargo test --offline)"
+  if cargo test --offline; then
+    printf 'OK: cargo test --offline passed\n'
+  else
+    fail "cargo test --offline failed"
+  fi
 
-section "6/7b existing mutation harness (cargo run --bin mutate)"
-if cargo run --offline --quiet --bin mutate; then
-  printf 'OK: cargo run --bin mutate passed\n'
-else
-  fail "cargo run --bin mutate failed"
-fi
+  section "6/7b existing mutation harness (cargo run --bin mutate)"
+  if cargo run --offline --quiet --bin mutate; then
+    printf 'OK: cargo run --bin mutate passed\n'
+  else
+    fail "cargo run --bin mutate failed"
+  fi
 
-section "7/7 lifecycle mutation harness (cargo run --bin mutate_lifecycle)"
-if cargo run --offline --quiet --bin mutate_lifecycle; then
-  printf 'OK: cargo run --bin mutate_lifecycle passed\n'
-else
-  fail "cargo run --bin mutate_lifecycle failed"
+  section "7/7 lifecycle mutation harness (cargo run --bin mutate_lifecycle)"
+  if cargo run --offline --quiet --bin mutate_lifecycle; then
+    printf 'OK: cargo run --bin mutate_lifecycle passed\n'
+  else
+    fail "cargo run --bin mutate_lifecycle failed"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
