@@ -4391,3 +4391,276 @@ Measured, with the ablation check at `diff 0` on all six totals:
   carry/arithmetic; sub 58.0% + 29.9%; neg 73.2% + 6.2%. Our equivalent phases must eventually
   match those *shares*, not merely the total — matching a total by over-spending elsewhere is not
   the result we want.
+
+---
+
+# XXIV — Intake 2026-11-27 (second): the phase table governs, witness compilation, and the strict-win threshold
+
+Nothing omitted. This section records the second external review (three briefs plus a correction),
+the derived figures that follow from IX.89, and the execution order that supersedes `XXIII.O` where
+they differ. `XXIII` text is kept unchanged; corrections are appended here. Items already carried in
+`XXIII` are named, not duplicated.
+
+Provenance tags: **[measured]** = a committed receipt; **[derived]** = arithmetic over a measured
+receipt (the derivation is shown); **[reviewer]** = supplied by the external review and not yet
+independently reproduced here; **[plan]** = a proposal with no measurement yet.
+
+## XXIV.0 — Corrections of record (append-only)
+
+- [ ] **XXIV.0.1. Supersede `XXIII.P5` (match the human *shares*).** Matching a cost distribution is
+  the wrong constraint: a proof that is cheaper on arithmetic and equal on simulation *must* have a
+  different distribution, and that is the wanted result. Replace with **per-phase absolute dominance**
+  (`XXIV.A1`): report every phase in absolute inferences beside the human's and claim a phase win only
+  where ours is lower. A total win obtained by overspending another phase is not a win, but neither is
+  a proof that wins on total and loses on a share.
+- [ ] **XXIV.0.2. Record that the human phase decomposition is a diagnostic reference, not a spec.**
+  The human proof is the competitor, not the architecture. Prefer Pareto improvements; do not require
+  the generated derivation to resemble the human one.
+- [ ] **XXIV.0.3. `neg` is the hardest race, not `add`.** Human `neg` spends only **193,307 [derived]**
+  outside simulation (721,473 − 528,166), against ours 3,657,519 (5,683,733 − 528,862 − 1,497,352).
+  That is the tightest budget on all three tasks. `add` is the quickest candidate for a first win; `neg`
+  is the architectural stress test. Use `neg` as the primary gate for `XXIII.B`/`XXIII.C`.
+- [ ] **XXIV.0.4. Step-theorem caching is part of winning add/sub/neg, not only a generality play.**
+  `XXIII.P1` measured that removing *all* our simulation still leaves 2.68×/6.51×/7.15× human, so the
+  cache alone cannot win. But the cache raises the *arithmetic* allowance: cutting `neg` simulation
+  ≈529K→≈100K raises the closing budget from ≈190K to ≈620K under the human target. Order stays
+  certificates-first; the cache is then required to close `neg`, and it is the lever that reaches
+  multiplication/Montgomery (`XXIII.D`).
+- [ ] **XXIV.0.5. Instrumentation reconciles; attribution is separate.** Identical instrumented and
+  uninstrumented totals prove the *instrument preserved* the count; a phase table summing to `diff 0`
+  proves *partition completeness*, not *correct attribution*. The harness must additionally validate
+  marker order and pairing (`XXIV.D`).
+
+## XXIV.A — Accounting: absolute-phase dominance, and the strict-win threshold
+
+### XXIV.A1. Per-phase absolute dominance (replaces `XXIII.P5`)
+
+- [ ] **XXIV.A1.** Report, for each task and each phase (a) init+digitise, (b) simulation,
+  (c) carry/aggregate facts, (d) final arithmetic, (e) other, the absolute inference count on **both**
+  sides. Claim a phase win only where ours < human's. **Acceptance:** the published table has both
+  absolute columns and a per-phase win/loss cell; no ratio is quoted without the accounting label
+  (`XXIII.P3`).
+
+### XXIV.A2. The three-number rule, enforced by tooling
+
+- [ ] **XXIV.A2.** `XXIII.P3` names three accountings. Enforce them mechanically: every emitted
+  report prints **strict self-contained**, **matched session**, **amortised over N** in that order,
+  and a report that omits any of the three fails `cargo test`. **Acceptance:** a test that feeds a
+  synthetic report missing a column and asserts rejection.
+- [ ] **XXIV.A3. Matched-session numbers are measured, not estimated.** Today they are the `XXIII.P3`
+  estimate ≈4,247,706 / 7,531,531 / 4,186,381 **[derived]**. Run the session where the support library
+  is built and kernel-checked *before* the counter starts, with the library cost captured once in
+  ledger **L7**. **Acceptance:** a receipt with the three measured matched-session totals and the L7
+  library construction cost, per task.
+
+### XXIV.A4. The strict-win library threshold `X` (the user's requested line)
+
+Strict total = library `L` + task-specific `T`. A strict win at the human total `H` requires
+`L ≤ H − T`; a 20 % win requires `L ≤ 0.8·H − T`. With IX.89 measured values **[derived]**:
+
+| task | `T` (total − library) | `X` = `H − T` | `X₈₀` = `0.8H − T` |
+|---|---:|---:|---:|
+| add | 4,247,706 | **−2,399,212** | −2,768,911 |
+| sub | 7,531,531 | **−6,248,357** | −6,504,992 |
+| neg | 4,186,381 | **−3,464,908** | −3,609,203 |
+
+Every `X` is **negative today**: *no* library size produces a strict win until `T` itself drops below
+`H`. This is the sharp form of the `XXIII.P3` point and it is the reason `XXIII.B`/`C` come before
+library linking in the race. After a pass reduces `T` to `T'`, the budget becomes `X' = H − T'` and
+the support library must be linked down to that. **Acceptance:** the reporting tool computes `X` and
+`X₈₀` per task from measured inputs, and `XXIV.A2`'s report prints them.
+
+- [ ] **XXIV.A5. State the precondition explicitly, every time:** "a strict win requires task-specific
+  cost below the human total, then the support library below `H − T`; neither holds yet". The
+  matched-session number is the honest first competitive claim.
+
+## XXIV.B — Witness compilation: the human skeleton with ASC-computed witnesses
+
+The human proofs are cheap because the witnesses are hand-typed (`XXIII.C2`). Compile them.
+
+- [ ] **XXIV.B1. `neg` first (least room).** Mirror the upstream skeleton exactly:
+  `EQUAL_FROM_CONGRUENT_MOD_MOD` with witness `if n = 0 then &0 else &p_25519 − &n`. The ASC computes
+  the witness, the theorem's congruence side goal, and the canonical-range side goal. Close each side
+  goal by **replay of a constructed certificate**, not by `REAL_INTEGER_TAC`/`INT_ARITH_TAC` over the
+  whole premise set. **Acceptance:** same `equals_thm` theorem; `equals_thm` check recorded; per-phase
+  table shows `neg` closing phase strictly below the human closing phase.
+- [ ] **XXIV.B2. `sub` next.** Witness `if m < n then --(&1) else &0` to `INT_REM_UNIQ`; same
+  construction. **Acceptance:** as `B1`, for `sub`.
+- [ ] **XXIV.B3. `add`.** One simulation, characterise the top carry once
+  (`FLAG_FROM_CARRY_LE` + `BOUNDER_TAC`→certificate), `MOD_ADD_CASES`, **one** `COND_CASES_TAC`
+  (two cases, not twelve), close by certificate replay. `XXIII.C1`. **Acceptance:** two-case proof,
+  `equals_thm`, closing phase below human's 49,680.
+- [ ] **XXIV.B4. Selector as a first-class object.** `s ∈ {0,1}`, `z = x − s·p`, `s = [x ≥ p]`
+  **proved** from comparison flags; encode with `p·s ≤ x` and `x ≤ p − 1 + p·s` ⟹
+  `0 ≤ x − p·s ≤ p − 1`; no global split. `XXIII.C4`. **Acceptance:** selector facts proved from
+  flags, not assumed; the aggregate close needs no oracle branch on that selector.
+- [ ] **XXIV.B5. Do not out-rewrite Harrison.** Keep the upstream lemma skeleton; replace only the
+  decision-procedure *calls* with certificate replay. `XXIII.C3`.
+
+## XXIV.C — Execution order (supersedes `XXIII.O` where they differ)
+
+- **P0 — restore fully green CI.** Two freeze-parser mutants survive (`src/tools/freeze.rs` env
+  value-type, `:886`; slice flag, `:918`). Kill them or record as equivalent with evidence. Green CI
+  is a **release precondition** (`XXII.A1`/`A2`).
+- **P1 — `XXIV.A3` matched-session runs.** Measure all three accounting modes; capture L7.
+- **P2 — dependency-minimal library linking.** `XXIII.K3`/`XXIV.F3`: compute the **indirect** closure
+  of the 61 top-level `prove`s in `tools/bridge.ml` actually needed per theorem; construct only that.
+  This is the route to a strict win (`XXIV.A4`) once `T < H`.
+- **P3 — `XXIII.B` sparse premise selection.** Select premises from the certificate's own coefficients
+  (`λᵢ ≠ 0`), not "mentions the carrier". [measured] IX.86: 477,376 inferences (93.2 % of the 512,129
+  regression) for **one logically inert premise**.
+- **P4 — normalise once, before branching.** `XXIII.B2`.
+- **P5 — `XXIII.C`/`XXIV.B` direct certificate replay**, `neg` first, then `sub`, then `add`.
+- **P6 — congruence-plus-range negation route.** `XXIII.C2` + `XXIV.B1`.
+- **P7 — step-theorem caching.** `XXIII.D1`/`D2`, then retry `x86/add`.
+- **P8 — sparse arithmetic IR.** `XXIII.F`/`H`: p256, x86 `ADCX`/`ADOX`, multiplication.
+
+**Acceptance for the order:** each step has a receipt; no step is marked done by "it looks faster".
+
+## XXIV.D — Instrumentation hardening (the review's §8)
+
+None of these invalidate IX.89; they make the instrument hard to fool and externally reproducible.
+
+- [ ] **XXIV.D1. Marker order and pairing.** Reject missing markers, out-of-order markers, and
+  non-monotonic counters; require explicit start/end pairing for every instrumented arithmetic op.
+- [ ] **XXIV.D2. Hard failure on any reconciliation or ablation `diff ≠ 0`.** The receipt generator
+  must assert zero *before* publishing JSON, not merely print the difference.
+- [ ] **XXIV.D3. Mutation tests for the analyser itself.** Remove a marker, misplace one, duplicate
+  one; each must be rejected with a non-zero exit. (The "who watches the watchmen" control.)
+- [ ] **XXIV.D4. Portable paths.** Replace hard-coded local filesystem paths in `tests/ix89/*` with
+  repository-relative paths. **Acceptance:** the IX.89 harness runs from a clean checkout under
+  `cargo test` with no absolute path.
+
+## XXIV.E — Phase budget controller
+
+- [ ] **XXIV.E1.** A tool that, for a given target `τ` (default `0.8·H`) and accounting mode, prints
+  for each phase the **remaining allowance** `τ − Σ_{q≠p} current(q)`. This answers "can the remaining
+  architecture still hit the target?" The key number for `neg`: with simulation at 528,862 and
+  `τ = 577,178`, **everything else must fit in 48,316**; hence `XXIV.B` (replace the closing
+  `INT_ARITH_TAC` calls) and `XXIII.D` (cut simulation) are both load-bearing.
+- [ ] **XXIV.E2.** The controller refuses to propose a target that is not `0.8·H` or better without
+  an explicit recorded decision.
+- [ ] **XXIV.E3.** The effort-allocation percentages in the review (preamble/library 25 %, direct
+  certificates 25 %, selectors/shared reasoning 20 %, IR/lifting 15 %, checker assurance 10 %, DAG
+  optimisation 5 %) are **[reviewer] priorities, not measured returns**; record them as such, and let
+  the controller's outputs reorder them.
+
+## XXIV.F — The ASC experiment series (with an ablation each)
+
+Every experiment carries an ablation; simultaneous multi-mechanism changes are not a result.
+
+| id | intervention | primary endpoint | ablation |
+|---|---|---|---|
+| **ASC-00** | separate library cost from task cost (A: self-contained, B: preloaded kernel-checked library, C: minimal dependency-selected library) | complete phase accounting, `L` vs `T`, `X` | A vs B vs C on the same task |
+| **ASC-01** | select only necessary arithmetic premises | aggregate-fact + close inferences | gate on/off, per-task |
+| **ASC-02** | reuse normalised expressions/derived facts | repeated-derivation count | single-use vs shared |
+| **ASC-03** | fold selectors before global case splitting | branch count, close inferences | fold vs no-fold |
+| **ASC-04** | sparse dataflow aggregation (`XXIII.F1`) | `add_p256` aggregates ≠ 0, x86 generality | chain-detect vs sparse-eliminate |
+| **ASC-05** | direct linear certificates (Farkas-style, `XXIII.G`) | `INT_ARITH`-replacement cost | certificate vs tactic |
+| **ASC-06** | verified instruction summaries (`XXIII.D1`) | per-step inference count | cache on/off |
+| **ASC-07** | cost-aware proof extraction (`XXIII.I2`) | reachable DAG size | objective weights |
+| **ASC-08** | column-wise polynomial compiler (`XXIII.F4`) | multiplication correctness, cost | general vs column-wise |
+| **ASC-09** | native certified arithmetic backend (`XXIII.G2`) | soundness + checking cost | derived-rule vs native, same certificate |
+| **ASC-10** | frozen held-out evaluation | V1–V4 on unseen implementations | none (the gate) |
+
+- [ ] **XXIV.F1.** Pre-register each experiment's inputs and endpoint **before** running; report the
+  cost ledger too (L1 includes failed attempts).
+- [ ] **XXIV.F2.** ASC-00 first: it decides whether the gap is algorithmic or packaging.
+- [ ] **XXIV.F3.** Dependency-directed linking (P2) is a distinct mechanism with its own ablation:
+  *all lemmas linked* vs *needed closure linked*, both strict-accounted.
+
+## XXIV.G — The arithmetic family roadmap (`XXIII.F4`, expanded)
+
+| family | principal certificate technique | priority | status |
+|---|---|---|---|
+| addition | sparse linear combinations | immediate | `XXIII.C1` |
+| subtraction | borrow + selector constraints | immediate | `XXIII.C2` |
+| negation | canonical-residue identity | immediate | `XXIV.B1` |
+| comparison | lexicographic range reasoning | very high | — |
+| shifts and masks | local word-to-integer lemmas | very high | — |
+| multiplication | column-wise polynomial certificates (`c_k + Σ_{i+j=k} aᵢbⱼ = r_k + B·c_{k+1}`) | high | `XXIII.F4` |
+| squaring | symmetry-aware coefficients (`a² = Σ aᵢ²B^{2i} + 2Σ_{i<j}aᵢaⱼB^{i+j}`) | high | `XXIII.F4` |
+| modular reduction | congruence transformations | high | — |
+| Montgomery | divisibility/quotient witnesses (`T + m·p = R·u`, `gcd(R,p)=1` **proved**) | high | — |
+| pseudo-Mersenne | `2^k ≡ c (mod p)` structural rewrite | high | — |
+| division | quotient/remainder invariants | later | — |
+| modular inversion | extended-GCD or exponentiation invariants | later | — |
+| elliptic-curve ops | compositional field certificates | later | — |
+| NTT arithmetic | polynomial + range certificates | later | — |
+
+Build a general pass per family; never a bespoke tactic per routine.
+
+## XXIV.H — Cost model, competition levels, financial accounting
+
+- [ ] **XXIV.H1.** `J(D) = αI + βT + γM + δS` (`XXIII.I2`) used **internally**; publish `I,T,M,S`
+  separately; keep a **Pareto frontier** of certificates, not one scalar score. A slightly larger but
+  much faster-to-check proof may win for some workload; another may win for archival audit.
+- [ ] **XXIV.H2. Four evaluation levels:** I = Curve25519 ARM add/sub/neg vs each human proof;
+  II = all 27 verified routines vs their baselines; III = additional families with general passes;
+  IV = frozen unseen implementations. `XXIII.N2`/`N4` carry the held-out rules.
+- [ ] **XXIV.H3. Held-out integrity:** freeze compiler, lemma bank, cost model, search budget and
+  corpus before the IV run; the human evaluator may inspect the human proofs; a contaminated arm is
+  **withdrawn, not adjusted**.
+- [ ] **XXIV.H4. Financial model** `C_total = C_setup + C_generation + N·C_verification + C_storage`,
+  with infrastructure prices stated and replaced by measured values; engineering effort reported
+  separately and never substituted for a computational victory. **[plan]** — the review's 100k-run
+  simulator is illustrative, not a result.
+- [ ] **XXIV.H5. Target thresholds (proposed, historical-human based, not forecasts):** beat each
+  human proof by 20 %. `add` ≤ 1,478,795; `sub` ≤ 1,026,539 **[derived; the human baseline now
+  exists]**; `neg` ≤ 577,178. Wall-time targets ≈0.399 s (`add`) and ≈0.142 s (`neg`), subject to
+  remeasurement on the same host.
+
+## XXIV.I — Literature and the novelty register
+
+- [ ] **XXIV.I1.** Read, in order: Fiat Cryptography (2019); CoqCryptoLine (2023); Myreen
+  *Decompilation into Logic*; *Proof Synthesis and Reflection for Linear Arithmetic*; *Checking LIA
+  Proofs in Lambdapi* (2024); VeriPB/CakePB (2025); CryptOpt (2023); AMulet2 (2022); *Small Proofs
+  from Congruence Closure* (2022); Carcara (2023); Candle extended (2025); *Fast, Verified Computation
+  for Candle* (2023).
+- [ ] **XXIV.I2. Add every claimed mechanism to `research/04-NOVELTY-REGISTER.md` with a class and the
+  single experiment that would settle it.** The classification discipline stands: a known
+  constituent caps a row at `UNVERIFIED_COMBINATION`; `PLAUSIBLY_NOVEL` requires a logged search.
+  Do **not** claim sparse elimination, proof reflection, carry telescoping or proof compression as
+  individually novel. The contribution to defend is their **integration into a machine-code arithmetic
+  proof compiler** and the measured capabilities of that compiler.
+- [ ] **XXIV.I3. Research combinations that have not been combined or inverted before** (deep-search
+  brief, recorded with receipts and search logs): see `research/receipts/xxiv-literature.md` and
+  `research/receipts/xxiv-search-log.md`. Candidate inversions to test, each requiring a logged
+  search before any novelty wording: (i) Fiat's specialisation **inverted** — recover the mathematical
+  structure from the implementation and specialise generic proofs to it; (ii) CryptoLine's
+  algebra/range split applied to **carry chains** with quotient/witness certificates rather than
+  bit-blasting; (iii) Myreen's decompilation **composed with** a linear-dataflow certificate so the
+  lifted functional model is the *proof input*, not a re-simulation; (iv) AMulet's column-wise
+  polynomial reduction driven by **machine-instruction-derived** partial products; (v) VeriPB
+  cutting-planes used for **selector/flag** constraints inside a HOL Light kernel proof; (vi) Carcara-style
+  elaboration in Rust feeding a **verified native checker** that validates the *same* certificate the
+  HOL Light derived rules replay (`XXIII.G3`); (vii) congruence-closure proof minimisation applied to
+  the **reachable DAG** of an exported object proof (`XXIII.I3`); (viii) LLVM-style **translation
+  validation** of each proof transformation. For each: nearest neighbour named, search logged, class
+  assigned before any claim.
+
+## XXIV.J — What is explicitly rejected
+
+- [ ] **XXIV.J1. No trusted native arithmetic oracle** to obtain attractive inference counts
+  (`XXIII.G2`). Same-kernel expanded cost and native-certificate cost are reported separately.
+- [ ] **XXIV.J2. No "victory by moving cost outside the counter."** Strict accounting is the default
+  claim; amortised sits beside it.
+- [ ] **XXIV.J3. No reframed null.** If no arm clears the published bar, record "stop" and why; do not
+  redefine the bar after seeing numbers (`XXIII.0` rule 5).
+- [ ] **XXIV.J4. No neural proof search / SAT tuning / generic tactic prediction as the immediate
+  lever.** The mathematical structure is sufficient for deterministic certifying compilation; those
+  techniques may return later on their own merits.
+- [ ] **XXIV.J5. No claim that Tekmerion beats every human proof.** An expert could invoke an optimal
+  certifying algorithm. Define a rigorous competition against **actual published expert proofs** and
+  refuse a misleading victory.
+
+## XXIV.K — State at intake (verified here, not assumed)
+
+- [ ] **XXIV.K1.** `staging` = `458ab05`, tree clean at intake. 45 local suites green is *reported*;
+  green CI is **not yet** established (P0).
+- [ ] **XXIV.K2.** The three human baselines are measured (IX.89): 1,848,494 / 1,283,174 / 721,473.
+- [ ] **XXIV.K3.** The counterfactual "all named arithmetic free" leaves 1,416,195 / 1,535,777 /
+  882,943 **[derived]**: `add` would beat human (0.766×), `sub` still loses (1.197×), `neg` still
+  loses (1.224×). This is not a lower bound, only a statement about the current architecture.
+- [ ] **XXIV.K4.** The review's subjective score table (vision 9.5, methodology 9.5, …) is **[reviewer]**
+  and is not a measurement; do not cite it as evidence.
