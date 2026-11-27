@@ -1,0 +1,1232 @@
+{
+  "schema": "ix89-human-phases/1",
+  "date": "2026-11-27",
+  "branch": "staging",
+  "commit": "a58618d5d14450a9c91001bff743bf53ee391ebc",
+  "kernel": ".bench/hol-light-stamp2",
+  "s2n_bignum_pin": "5e0fc782",
+  "cap": "12G per proof build, 20G per cargo, one process at a time",
+  "phase_definitions": {
+    "A": "init + digitise (quantiier/assumption setup, ENSURES_INIT_TAC, BIGNUM_*DIGITIZE_TAC)",
+    "B": "simulation, one ARM_ACCSTEPS_TAC per instruction; accumulated vs plain separated",
+    "C": "carry/borrow characterisation (FLAG_FROM_CARRY_* + its BOUNDER_TAC side goal; generated: aggregate fact proof)",
+    "D": "final arithmetic, split by tactic (ARITH/REAL_ARITH/INT_ARITH/REAL_INTEGER/NUM_REDUCE/BOUNDER)",
+    "E": "everything else, itemised (state finalisation, rewrites/expansions, DECARRY/normalisation, assembly, returns, support library)"
+  },
+  "human": {
+    "add": {
+      "before": 67646907,
+      "after": 69495401,
+      "inf": 1848494,
+      "computed": 1848494,
+      "diff": 0,
+      "phases": {
+        "PRE": 4978,
+        "A": 1791,
+        "B": 786151,
+        "C": 490962,
+        "D": 49680,
+        "E": 514932
+      },
+      "tactics": {
+        "ARITH_TAC": 15058,
+        "REAL_ARITH_TAC": 49670,
+        "NUM_REDUCE_CONV": 349,
+        "BOUNDER_TAC": 62568
+      },
+      "items": {},
+      "segments": [
+        {
+          "label": "PRE:construct",
+          "phase": "PRE",
+          "tactic": "",
+          "inferences": 4978
+        },
+        {
+          "label": "A:init",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 969
+        },
+        {
+          "label": "A:digitize_m",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 359
+        },
+        {
+          "label": "A:digitize_n",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 463
+        },
+        {
+          "label": "B:start",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "B:step01:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 27974
+        },
+        {
+          "label": "B:step02:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 35786
+        },
+        {
+          "label": "B:step03:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 60245
+        },
+        {
+          "label": "B:step04:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 51082
+        },
+        {
+          "label": "B:step05:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 51427
+        },
+        {
+          "label": "B:step06:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 41357
+        },
+        {
+          "label": "B:step07:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 48055
+        },
+        {
+          "label": "B:step08:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 17807
+        },
+        {
+          "label": "B:step09:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 28802
+        },
+        {
+          "label": "B:step10:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 51701
+        },
+        {
+          "label": "B:step11:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 50620
+        },
+        {
+          "label": "B:step12:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 64463
+        },
+        {
+          "label": "B:step13:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 50036
+        },
+        {
+          "label": "B:step14:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 23589
+        },
+        {
+          "label": "B:step15:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 21468
+        },
+        {
+          "label": "B:step16:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 18256
+        },
+        {
+          "label": "B:step17:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 18153
+        },
+        {
+          "label": "B:step18:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 59963
+        },
+        {
+          "label": "B:step19:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 65367
+        },
+        {
+          "label": "E:finalise_state",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 187224
+        },
+        {
+          "label": "E:prep_bound",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1
+        },
+        {
+          "label": "E:pb1:pre",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 44
+        },
+        {
+          "label": "E:pb1:ARITH_TAC",
+          "phase": "E",
+          "tactic": "ARITH_TAC",
+          "inferences": 15058
+        },
+        {
+          "label": "E:pb2:expand",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 854
+        },
+        {
+          "label": "E:pb2:NUM_REDUCE_CONV",
+          "phase": "E",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 329
+        },
+        {
+          "label": "E:post_bound",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "C:flag",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 679
+        },
+        {
+          "label": "C:flag:pre",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 581
+        },
+        {
+          "label": "C:flag:NUM_REDUCE_CONV",
+          "phase": "C",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 10
+        },
+        {
+          "label": "C:flag:decarrry",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 427124
+        },
+        {
+          "label": "C:flag:BOUNDER_TAC",
+          "phase": "C",
+          "tactic": "BOUNDER_TAC",
+          "inferences": 62568
+        },
+        {
+          "label": "C:flag:cont",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "C:post_flag",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "E:final:expand",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 331
+        },
+        {
+          "label": "E:final:rewrite1",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 84
+        },
+        {
+          "label": "E:final:modadd",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 105
+        },
+        {
+          "label": "E:final:rewrite2",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1716
+        },
+        {
+          "label": "E:final:abbrev",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1318
+        },
+        {
+          "label": "D:final:NUM_REDUCE_CONV",
+          "phase": "D",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 10
+        },
+        {
+          "label": "E:final:cond",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 534
+        },
+        {
+          "label": "E:final:decarrry",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 307097
+        },
+        {
+          "label": "E:final:condcases",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 237
+        },
+        {
+          "label": "D:final:REAL_ARITH_TAC",
+          "phase": "D",
+          "tactic": "REAL_ARITH_TAC",
+          "inferences": 0
+        },
+        {
+          "label": "D:final:REAL_ARITH_TAC",
+          "phase": "D",
+          "tactic": "REAL_ARITH_TAC",
+          "inferences": 49670
+        }
+      ]
+    },
+    "sub": {
+      "before": 67670291,
+      "after": 68953465,
+      "inf": 1283174,
+      "computed": 1283174,
+      "diff": 0,
+      "phases": {
+        "PRE": 4214,
+        "A": 1805,
+        "B": 744158,
+        "C": 293773,
+        "D": 90227,
+        "E": 148997
+      },
+      "tactics": {
+        "REAL_ARITH_TAC": 7963,
+        "INT_ARITH_TAC": 21215,
+        "REAL_INTEGER_TAC": 33135,
+        "NUM_REDUCE_CONV": 3227,
+        "BOUNDER_TAC": 76299
+      },
+      "items": {},
+      "segments": [
+        {
+          "label": "PRE:construct",
+          "phase": "PRE",
+          "tactic": "",
+          "inferences": 4214
+        },
+        {
+          "label": "A:init",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 979
+        },
+        {
+          "label": "A:digitize_m",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 361
+        },
+        {
+          "label": "A:digitize_n",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 465
+        },
+        {
+          "label": "B:start",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "B:step01:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 40748
+        },
+        {
+          "label": "B:step02:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 50360
+        },
+        {
+          "label": "B:step03:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 57875
+        },
+        {
+          "label": "B:step04:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 49200
+        },
+        {
+          "label": "B:step05:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 71172
+        },
+        {
+          "label": "B:step06:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 61551
+        },
+        {
+          "label": "B:step07:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 45980
+        },
+        {
+          "label": "B:step08:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 41846
+        },
+        {
+          "label": "C:flag",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 615
+        },
+        {
+          "label": "C:flag:pre",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 241546
+        },
+        {
+          "label": "C:flag:BOUNDER_TAC",
+          "phase": "C",
+          "tactic": "BOUNDER_TAC",
+          "inferences": 51612
+        },
+        {
+          "label": "C:flag:cont",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "C:post_flag",
+          "phase": "C",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "B:step09:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 16949
+        },
+        {
+          "label": "B:step10:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 16055
+        },
+        {
+          "label": "B:step11:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 46747
+        },
+        {
+          "label": "B:step12:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 47388
+        },
+        {
+          "label": "B:step13:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 44210
+        },
+        {
+          "label": "B:step14:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 19477
+        },
+        {
+          "label": "B:step15:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 17281
+        },
+        {
+          "label": "B:step16:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 55424
+        },
+        {
+          "label": "B:step17:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 61895
+        },
+        {
+          "label": "E:finalise_state",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 142582
+        },
+        {
+          "label": "E:final:expand",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 401
+        },
+        {
+          "label": "E:final:trans",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 157
+        },
+        {
+          "label": "E:final:rewrite1",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1129
+        },
+        {
+          "label": "D:final:INT_ARITH_TAC",
+          "phase": "D",
+          "tactic": "INT_ARITH_TAC",
+          "inferences": 21215
+        },
+        {
+          "label": "E:final:cong",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 5
+        },
+        {
+          "label": "D:final:BOUNDER_TAC",
+          "phase": "D",
+          "tactic": "BOUNDER_TAC",
+          "inferences": 24687
+        },
+        {
+          "label": "E:final:cong:cont",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "E:final:numreduce",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 106
+        },
+        {
+          "label": "D:final:NUM_REDUCE_CONV",
+          "phase": "D",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 18
+        },
+        {
+          "label": "D:final:REAL_ARITH_TAC",
+          "phase": "D",
+          "tactic": "REAL_ARITH_TAC",
+          "inferences": 7963
+        },
+        {
+          "label": "E:final:integer_closed",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 24
+        },
+        {
+          "label": "E:final:abbrev",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1577
+        },
+        {
+          "label": "D:final:NUM_REDUCE_CONV.2",
+          "phase": "D",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 3209
+        },
+        {
+          "label": "E:final:rewrite2",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1164
+        },
+        {
+          "label": "E:final:condcases",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1852
+        },
+        {
+          "label": "D:final:REAL_INTEGER_TAC",
+          "phase": "D",
+          "tactic": "REAL_INTEGER_TAC",
+          "inferences": 0
+        },
+        {
+          "label": "D:final:REAL_INTEGER_TAC",
+          "phase": "D",
+          "tactic": "REAL_INTEGER_TAC",
+          "inferences": 33135
+        }
+      ]
+    },
+    "neg": {
+      "before": 67649313,
+      "after": 68370786,
+      "inf": 721473,
+      "computed": 721473,
+      "diff": 0,
+      "phases": {
+        "PRE": 1951,
+        "A": 1074,
+        "B": 528166,
+        "D": 44425,
+        "E": 145857
+      },
+      "tactics": {
+        "ARITH_TAC": 701,
+        "REAL_INTEGER_TAC": 16290,
+        "ASM_ARITH_TAC": 11216,
+        "NUM_REDUCE_CONV": 3038,
+        "BOUNDER_TAC": 13180
+      },
+      "items": {},
+      "segments": [
+        {
+          "label": "PRE:construct",
+          "phase": "PRE",
+          "tactic": "",
+          "inferences": 1951
+        },
+        {
+          "label": "A:init",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 767
+        },
+        {
+          "label": "A:digitize_n",
+          "phase": "A",
+          "tactic": "",
+          "inferences": 307
+        },
+        {
+          "label": "B:start",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "B:step01:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 22358
+        },
+        {
+          "label": "B:step02:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 16901
+        },
+        {
+          "label": "B:step03:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 15162
+        },
+        {
+          "label": "B:step04:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 53034
+        },
+        {
+          "label": "B:step05:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 20219
+        },
+        {
+          "label": "B:step06:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 43761
+        },
+        {
+          "label": "B:step07:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 47102
+        },
+        {
+          "label": "B:step08:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 18518
+        },
+        {
+          "label": "B:step09:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 42448
+        },
+        {
+          "label": "B:step10:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 18487
+        },
+        {
+          "label": "B:step11:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 13334
+        },
+        {
+          "label": "B:step12:acc",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 16665
+        },
+        {
+          "label": "B:step13:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 27808
+        },
+        {
+          "label": "B:step14:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 18598
+        },
+        {
+          "label": "B:step15:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 16481
+        },
+        {
+          "label": "B:step16:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 13269
+        },
+        {
+          "label": "B:step17:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 13231
+        },
+        {
+          "label": "B:step18:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 49926
+        },
+        {
+          "label": "B:step19:plain",
+          "phase": "B",
+          "tactic": "",
+          "inferences": 60864
+        },
+        {
+          "label": "E:finalise_state",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 142572
+        },
+        {
+          "label": "E:final:expand",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 411
+        },
+        {
+          "label": "E:final:sym",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 23
+        },
+        {
+          "label": "E:final:conj",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "D:final:BOUNDER_TAC",
+          "phase": "D",
+          "tactic": "BOUNDER_TAC",
+          "inferences": 13180
+        },
+        {
+          "label": "D:final:ARITH_TAC.1",
+          "phase": "D",
+          "tactic": "ARITH_TAC",
+          "inferences": 556
+        },
+        {
+          "label": "D:final:ARITH_TAC.2",
+          "phase": "D",
+          "tactic": "ARITH_TAC",
+          "inferences": 145
+        },
+        {
+          "label": "E:final:b4_all",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "E:final:b5_setup",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 554
+        },
+        {
+          "label": "D:final:ASM_ARITH_TAC",
+          "phase": "D",
+          "tactic": "ASM_ARITH_TAC",
+          "inferences": 11216
+        },
+        {
+          "label": "E:final:rewrite1",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 1586
+        },
+        {
+          "label": "E:final:condcases",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 265
+        },
+        {
+          "label": "D:final:NUM_REDUCE_CONV",
+          "phase": "D",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 0
+        },
+        {
+          "label": "D:final:NUM_REDUCE_CONV",
+          "phase": "D",
+          "tactic": "NUM_REDUCE_CONV",
+          "inferences": 3038
+        },
+        {
+          "label": "E:final:rewrite2",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 0
+        },
+        {
+          "label": "E:final:rewrite2",
+          "phase": "E",
+          "tactic": "",
+          "inferences": 446
+        },
+        {
+          "label": "D:final:REAL_INTEGER_TAC",
+          "phase": "D",
+          "tactic": "REAL_INTEGER_TAC",
+          "inferences": 16290
+        }
+      ]
+    }
+  },
+  "generated_algebraic": {
+    "add": {
+      "before": 67646907,
+      "after": 73392674,
+      "inf": 5745767,
+      "computed": 5745767,
+      "diff": 0,
+      "phases": {
+        "PRE": 1498061,
+        "A": 1795,
+        "B": 787891,
+        "C": 1178682,
+        "D": 1128617,
+        "E": 1150721
+      },
+      "tactics": {
+        "INT_ARITH": 2304599,
+        "INT_RING": 524212,
+        "INT_REDUCE": 2700
+      },
+      "items": {
+        "PRE:lib": 1498061,
+        "00": 0,
+        "01": 0,
+        "02": 0,
+        "03": 0,
+        "init": 0,
+        "04": 0,
+        "05": 0,
+        "06": 0,
+        "B:step01:plain": 28148,
+        "B:step02:plain": 35960,
+        "B:step03:acc": 60245,
+        "B:step04:acc": 51082,
+        "B:step05:plain": 51601,
+        "B:step06:plain": 41531,
+        "B:step07:acc": 48055,
+        "B:step08:acc": 17807,
+        "B:step09:plain": 28802,
+        "B:step10:acc": 51701,
+        "B:step11:acc": 50620,
+        "B:step12:acc": 64463,
+        "B:step13:acc": 50036,
+        "B:step14:plain": 23589,
+        "B:step15:plain": 21468,
+        "B:step16:plain": 18256,
+        "B:step17:plain": 18153,
+        "B:step18:plain": 60485,
+        "B:step19:plain": 65889,
+        "07": 0,
+        "08": 0,
+        "09": 0,
+        "10": 0,
+        "11": 0,
+        "bridge:algebra": 357572,
+        "bridge:algebra-arith": 0,
+        "bridge:pre-agg": 12,
+        "G:INT_RING:flat-start": 357666,
+        "G:INT_RING:flat-end": 1540,
+        "G:INT_RING:agg-start": 162570,
+        "G:INT_RING:agg-end": 2436,
+        "bridge:post-agg": 3316,
+        "bridge:post-flat": 0,
+        "G:INT_ARITH:band-start": 1173470,
+        "G:INT_ARITH:band-end": 2512,
+        "G:INT_REDUCE:finish-start": 2652,
+        "G:INT_REDUCE:finish-end": 48,
+        "bridge:post-facts": 0,
+        "bridge:pre-close": 0,
+        "G:INT_ARITH:close-start": 1125985,
+        "G:INT_ARITH:close-end": 2632,
+        "bridge:post-close": 25866,
+        "preamble": 2527490
+      },
+      "segments": []
+    },
+    "sub": {
+      "before": 67670291,
+      "after": 76699801,
+      "inf": 9029510,
+      "computed": 9029510,
+      "diff": 0,
+      "phases": {
+        "PRE": 1497979,
+        "A": 1805,
+        "B": 674249,
+        "C": 2155782,
+        "D": 2786328,
+        "E": 1913367
+      },
+      "tactics": {
+        "INT_ARITH": 4936710,
+        "INT_RING": 1053644,
+        "INT_REDUCE": 5400
+      },
+      "items": {
+        "PRE:lib": 1497979,
+        "00": 0,
+        "01": 0,
+        "02": 0,
+        "03": 0,
+        "init": 0,
+        "04": 0,
+        "05": 0,
+        "06": 0,
+        "B:step01:plain": 28148,
+        "B:step02:plain": 35960,
+        "B:step03:acc": 57875,
+        "B:step04:acc": 49200,
+        "B:step05:plain": 51601,
+        "B:step06:plain": 41531,
+        "B:step07:acc": 46173,
+        "B:step08:acc": 41329,
+        "B:step09:plain": 16776,
+        "B:step10:plain": 15869,
+        "B:step11:acc": 46206,
+        "B:step12:acc": 46871,
+        "B:step13:acc": 43693,
+        "B:step14:acc": 19220,
+        "B:step15:plain": 17108,
+        "B:step16:plain": 55109,
+        "B:step17:plain": 61580,
+        "07": 0,
+        "08": 0,
+        "09": 0,
+        "10": 0,
+        "bridge:algebra": 363112,
+        "bridge:algebra-arith": 276768,
+        "bridge:pre-agg": 12,
+        "G:INT_RING:flat-start": 734336,
+        "G:INT_RING:flat-end": 2892,
+        "G:INT_RING:agg-start": 311568,
+        "G:INT_RING:agg-end": 4848,
+        "bridge:post-agg": 7216,
+        "bridge:post-flat": 0,
+        "G:INT_ARITH:band-start": 2144942,
+        "G:INT_ARITH:band-end": 5440,
+        "G:INT_REDUCE:finish-start": 5304,
+        "G:INT_REDUCE:finish-end": 96,
+        "bridge:post-facts": 0,
+        "bridge:pre-close": 0,
+        "G:INT_ARITH:close-start": 2780600,
+        "G:INT_ARITH:close-end": 5728,
+        "bridge:post-close": 24680,
+        "preamble": 2361968
+      },
+      "segments": []
+    },
+    "neg": {
+      "before": 67649313,
+      "after": 73333046,
+      "inf": 5683733,
+      "computed": 5683733,
+      "diff": 0,
+      "phases": {
+        "PRE": 1497352,
+        "A": 1076,
+        "B": 528862,
+        "C": 1511696,
+        "D": 1563214,
+        "E": 581533
+      },
+      "tactics": {
+        "INT_ARITH": 3072660,
+        "INT_RING": 228528,
+        "INT_REDUCE": 2250
+      },
+      "items": {
+        "PRE:lib": 1497352,
+        "00": 0,
+        "01": 0,
+        "02": 0,
+        "03": 0,
+        "init": 0,
+        "04": 0,
+        "05": 0,
+        "B:step01:plain": 22445,
+        "B:step02:plain": 16901,
+        "B:step03:plain": 15162,
+        "B:step04:acc": 53034,
+        "B:step05:plain": 20219,
+        "B:step06:acc": 43761,
+        "B:step07:plain": 47189,
+        "B:step08:plain": 18518,
+        "B:step09:acc": 42448,
+        "B:step10:plain": 18487,
+        "B:step11:plain": 13334,
+        "B:step12:acc": 16665,
+        "B:step13:plain": 27808,
+        "B:step14:plain": 18598,
+        "B:step15:plain": 16481,
+        "B:step16:plain": 13269,
+        "B:step17:plain": 13231,
+        "B:step18:plain": 50187,
+        "B:step19:plain": 61125,
+        "06": 0,
+        "07": 0,
+        "08": 0,
+        "09": 0,
+        "bridge:algebra": 157058,
+        "bridge:algebra-arith": 0,
+        "bridge:pre-agg": 0,
+        "G:INT_RING:flat-start": 142476,
+        "G:INT_RING:flat-end": 1072,
+        "G:INT_RING:agg-start": 83970,
+        "G:INT_RING:agg-end": 1010,
+        "bridge:post-agg": 1710,
+        "bridge:post-flat": 0,
+        "G:INT_ARITH:band-start": 1508178,
+        "G:INT_ARITH:band-end": 1268,
+        "G:INT_REDUCE:finish-start": 2210,
+        "G:INT_REDUCE:finish-end": 40,
+        "bridge:post-facts": 2,
+        "bridge:pre-close": 0,
+        "G:INT_ARITH:close-start": 1561846,
+        "G:INT_ARITH:close-end": 1368,
+        "bridge:post-close": 14892,
+        "preamble": 2206633
+      },
+      "segments": []
+    }
+  },
+  "generated_sat": {
+    "add": {
+      "before": 67646907,
+      "after": 179170683,
+      "inf": 111523776,
+      "computed": 111523776,
+      "diff": 0,
+      "phases": {
+        "PRE": 1498061,
+        "A": 1795,
+        "B": 787891,
+        "E": 109236029
+      },
+      "tactics": {},
+      "items": {
+        "preamble": 1028309,
+        "bitblast": 53396030,
+        "clausify": 21500774,
+        "dimacs+search": 0,
+        "replay": 33117926,
+        "assemble": 965436,
+        "tail": 17240
+      },
+      "segments": []
+    },
+    "sub": {
+      "before": 67670291,
+      "after": 155641586,
+      "inf": 87971295,
+      "computed": 87971295,
+      "diff": 0,
+      "phases": {
+        "PRE": 1497979,
+        "A": 1805,
+        "B": 674249,
+        "E": 85797262
+      },
+      "tactics": {},
+      "items": {
+        "preamble": 862901,
+        "bitblast": 50996024,
+        "clausify": 20764090,
+        "dimacs+search": 0,
+        "replay": 12909883,
+        "assemble": 925302,
+        "tail": 15116
+      },
+      "segments": []
+    },
+    "neg": {
+      "before": 67649313,
+      "after": 101559760,
+      "inf": 33910447,
+      "computed": 33910447,
+      "diff": 0,
+      "phases": {
+        "PRE": 1497352,
+        "A": 1076,
+        "B": 528862,
+        "E": 31883157
+      },
+      "tactics": {},
+      "items": {
+        "preamble": 705713,
+        "bitblast": 21281137,
+        "clausify": 7639793,
+        "dimacs+search": 0,
+        "replay": 2420424,
+        "assemble": 350983,
+        "tail": 10628
+      },
+      "segments": []
+    }
+  },
+  "ablation": {
+    "human": {
+      "add": {
+        "plain": 1848494,
+        "phase": 1848494,
+        "diff": 0
+      },
+      "sub": {
+        "plain": 1283174,
+        "phase": 1283174,
+        "diff": 0
+      },
+      "neg": {
+        "plain": 721473,
+        "phase": 721473,
+        "diff": 0
+      }
+    },
+    "generated": {
+      "add": {
+        "plain": 5745767,
+        "phase": 5745767,
+        "diff": 0
+      },
+      "sub": {
+        "plain": 9029510,
+        "phase": 9029510,
+        "diff": 0
+      },
+      "neg": {
+        "plain": 5683733,
+        "phase": 5683733,
+        "diff": 0
+      }
+    },
+    "recorded_standing": {
+      "add": 5745767,
+      "sub": 9029510,
+      "neg": 5683733
+    }
+  }
+}

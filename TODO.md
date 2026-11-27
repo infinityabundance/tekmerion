@@ -4124,18 +4124,27 @@ reported even when it hurts).
 
 ## XXIII.A — Step 1: measure where the human cost is (gates every lever)
 
-- [ ] **XXIII.A1.** Per-phase inference breakdown, human **and** generated, for ARM
+- [x] **XXIII.A1.** Per-phase inference breakdown, human **and** generated, for ARM
   Curve25519 add/sub/neg, with identical phase boundaries: (a) init + digitize; (b) simulation, per
   instruction, accumulated vs plain separated; (c) carry/borrow characterisation
   (`FLAG_FROM_CARRY_*` + its `BOUNDER_TAC` side goal); (d) final arithmetic split by tactic
   (`ARITH_TAC`, `REAL_ARITH_TAC`, `INT_ARITH_TAC`, `REAL_INTEGER_TAC`, `NUM_REDUCE_CONV`,
-  `BOUNDER_TAC`).
-- [ ] **XXIII.A2.** Human `sub` and `neg` baselines are **not on record** (only add, 1,848,494).
-  Measure them. Without them no target is even defined.
-- [ ] **XXIII.A3.** Report the arithmetic-vs-simulation split, because it decides everything: if
+  `BOUNDER_TAC`). — **Done, IX.89.** Phase boundaries fixed first, both sides instrumented with
+  identity markers, totals reconciled exactly; tables and per-tactic splits in
+  `research/receipts/ix89-human-phases.md` §3–§4 (data `ix89-human-phases.json`).
+- [x] **XXIII.A2.** Human `sub` and `neg` baselines are **not on record** (only add, 1,848,494).
+  Measure them. Without them no target is even defined. — **Done, IX.89.** `sub` =
+  **1,283,174**, `neg` = **721,473** (add reproduced at 1,848,494). Generated ratios are
+  therefore 3.11× (add), **7.04× (sub)**, **7.88× (neg)**.
+- [x] **XXIII.A3.** Report the arithmetic-vs-simulation split, because it decides everything: if
   simulation dominates, `XXIII.D` decides the race for every task; if arithmetic does, `XXIII.C`/`B`.
-- [ ] **XXIII.A4.** Publish the table in `research/receipts/ix89-human-phases.md` with the counter,
-  the build, and the phase boundaries written down.
+  — **Done, IX.89.** Split by side: human simulation 42.5/58.0/73.2% vs arithmetic 29.2/29.9/6.2%;
+  generated simulation 13.7/7.5/9.3% vs certificate side 75.4/83.0/84.5%. The generated preamble
+  (add 2,527,490) is **59.3% support-library arithmetic, 31.2% simulation**, not simulation.
+- [x] **XXIII.A4.** Publish the table in `research/receipts/ix89-human-phases.md` with the counter,
+  the build, and the phase boundaries written down. — **Done, IX.89.** Counter
+  `hol-light-stamp2`; ablation reproduces 5,745,767 / 9,029,510 / 5,683,733 and 1,848,494 /
+  1,283,174 / 721,473 with diff 0. Measurement only; no `equals_thm`, no win claimed.
 
 ## XXIII.B — L3: pay only for the premises used (cheap, do first)
 
@@ -4316,6 +4325,15 @@ checking costs about what reading costs, and an `mm0-c` verifier under ~3,000 li
   a memorisation probe per model; a contaminated arm is **withdrawn, not adjusted**.
 
 ## XXIII.O — Order of execution
+
+**Lever decided (IX.89).** The `XXIII.A` measurement is complete. The human proof is
+simulation-dominated (42.5–73.2%), but ours is certificate-dominated: named arithmetic
+49.3–66.4% plus the per-task support library 16.6–26.3% = **75.4–84.5%**, against 7.5–13.7%
+simulation. Removing all simulation still leaves 2.68×/6.51×/7.15× human. The race is decided
+by **`XXIII.B`/`XXIII.C` (certificate replay and premise reduction) plus removing or reusing
+the per-task support library**; the simulation cache `XXIII.D` is secondary for us (≤13.7%
+headroom) although it targets the human's own dominant cost. The 2,527,490 generated
+preamble is 59.3% support-library arithmetic and 31.2% simulation.
 
 1. **`XXIII.A`** — the human/generated phase table for add, sub and neg. It decides every later
    lever, and two of the three human baselines do not exist yet.
