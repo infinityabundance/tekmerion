@@ -1,0 +1,60 @@
+Replay harness patch: one trusted-input primitive, no rule changes (XXII.B)
+=========================================================================
+
+The exported objects contain IMPORT leaves: sequents that existed in the
+recording environment before recording began.  They are name-free by design,
+so a fresh session cannot look them up, and fusion.ml exposes no way to admit
+a sequent with hypotheses without *changing the axiom registry* (new_axiom only
+admits a closed statement; mk_thm in drule.ml is itself built on new_axiom).
+
+This patch adds three functions to the kernel signature:
+
+    val proof_import : term list * term -> thm
+    val proof_const  : string * hol_type -> term
+    val proof_type   : string * hol_type list -> hol_type
+
+`proof_import` packages an already-recorded sequent as a theorem with axiom
+mask 0 and node id -1.  It checks only that every term is boolean.
+
+`proof_const` and `proof_type` are raw constructors: they rebuild the
+object's own constant and type-operator occurrences exactly as recorded,
+without adding anything to the session signature.  The object is
+self-contained (every term carries its full type), and constants the prelude
+declared (e.g. s2n-bignum's `:=`) must not be re-declared monomorphically in a
+fresh session.
+
+None of the three is an inference rule, none is used by any recorded node, and
+none touches the axioms or the definition registry.  They are the explicit
+boundary at which the replay accepts the same object-side signature and the
+same imported premises the Rust checker reads from its `.hlst` store.  Every
+node with rule != IMPORT is rebuilt with the stock primitives.
+
+Apply to a *copy* of `.bench/hol-light-objects`; never to the recording kernel.
+
+--- a/fusion.ml
++++ b/fusion.ml
+@@ -101,4 +101,10 @@
+       val proof_record_begin : unit -> unit
+       val proof_node_count : unit -> int
+       val proof_export : string -> thm -> unit
++
++      (* Trusted input for the replay harness.  Admits the recording
++         environment's sequents and rebuilds its signature; not inferences. *)
++      val proof_import : term list * term -> thm
++      val proof_const : string * hol_type -> term
++      val proof_type : string * hol_type list -> hol_type
+ end;;
+@@ -947,4 +953,13 @@
+ 
+   let axioms() = !the_axioms
+ 
++  let proof_import (asl,c) =
++    if List.for_all (fun t -> compare (type_of t) bool_ty = 0) (c::asl)
++    then Sequent((asl,c),0,(-1))
++    else failwith "proof_import: hypotheses and conclusion must be boolean"
++
++  let proof_const (n,ty) = Const(n,ty)
++
++  let proof_type (n,args) = Tyapp(n,args)
++
+   let new_axiom tm =
