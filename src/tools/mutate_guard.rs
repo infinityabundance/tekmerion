@@ -3,11 +3,23 @@
 //!
 //! AST-free by design: it finds every `Err(Refused::new(..))` refusal expression
 //! in a target file with a balanced-paren scanner that skips string literals
-//! and line comments, replaces the expression with `Ok(todo!())` (a well-typed
-//! "never refuse" mutant), runs the integration test target that exercises that
-//! module, and restores the file. A mutant that fails to compile is not a valid
-//! mutant and is excluded from the score rather than counted as killed.
-//! **Not on the verdict path.**
+//! and line comments, replaces the expression with a mutant, runs the
+//! integration test target that exercises that module, and restores the file. A
+//! mutant that fails to compile is not a valid mutant and is excluded from the
+//! score rather than counted as killed. **Not on the verdict path.**
+//!
+//! Two operators are supported, selected by `--operator <name>` or the
+//! `MUTATE_GUARD_OPERATOR` environment variable (`reachability` is the
+//! default, so an unconfigured run is unchanged):
+//!
+//! * `reachability` (default) replaces the site with `Ok(todo!())`, a well-typed
+//!   "never refuse" mutant that panics. Any test that merely reaches the site
+//!   kills it, so the score measures reachability of the refusal, not whether a
+//!   test asserts it.
+//! * `accept` replaces the site with `Ok(Default::default())`, the real checker
+//!   failure: the refusal is silently accepted. It is killed only by a test
+//!   that asserts the refusal. Sites whose `Ok` payload has no `Default` impl do
+//!   not compile and are reported `INVALID` and excluded from the score.
 //!
 //! Exit 0 only when every surviving mutant is a recorded equivalent (`?`-site
 //! refusals live in closures and `map_err` plumbing, which this scanner does not
@@ -18,8 +30,73 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const TARGET: &str = "Err(Refused::new(";
-const MUTANT: &str = "Ok(todo!())";
+const REACHABILITY_MUTANT: &str = "Ok(todo!())";
+const ACCEPT_MUTANT: &str = "Ok(Default::default())";
 const BACKUP_SUFFIX: &str = ".rs.orig";
+
+// The selector (`MUTATE_GUARD_OPERATOR` / `--operator`) is deliberately not
+// `TEKMERION_*`: `declared_binary_vars_match_the_source` in
+// src/tools/config.rs asserts that every `TEKMERION_*` variable read under
+// `src/` is declared in `ENV_VARS`, the freeze-bound configuration set. This
+// harness is a developer tool, not on the verdict path, so its switch must not
+// enter that set; declaring it there is out of scope for this change.
+
+/// The mutation operator applied to each refusal site.
+///
+/// * `Reachability` (default) replaces the refusal with `Ok(todo!())`: the
+///   mutant is killed by any test that merely *reaches* the site, because the
+///   panic is observed even when no assertion checks the refusal.
+/// * `Accept` replaces it with `Ok(Default::default())`: the mutant silently
+///   accepts what should be refused. It is killed only by a test that actually
+///   *asserts* the refusal, which is the property the reachability score does
+///   not measure. Sites whose `Ok` payload lacks `Default` fail to compile and
+///   are excluded as `INVALID`, never counted as killed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Operator {
+    Reachability,
+    Accept,
+}
+
+impl Operator {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "reachability" => Ok(Operator::Reachability),
+            "accept" => Ok(Operator::Accept),
+            other => Err(format!(
+                "unknown mutation operator {other:?}; expected reachability|accept"
+            )),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Operator::Reachability => "reachability",
+            Operator::Accept => "accept",
+        }
+    }
+
+    fn mutant(self) -> &'static str {
+        match self {
+            Operator::Reachability => REACHABILITY_MUTANT,
+            Operator::Accept => ACCEPT_MUTANT,
+        }
+    }
+}
+
+/// Resolve the operator: `--operator <name>` wins, then the environment, then
+/// the `reachability` default.
+fn operator_from(args: &[String]) -> Result<Operator, String> {
+    if let Some(i) = args.iter().position(|a| a == "--operator") {
+        let value = args
+            .get(i + 1)
+            .ok_or_else(|| "--operator requires a value (reachability|accept)".to_string())?;
+        return Operator::parse(value);
+    }
+    match std::env::var("MUTATE_GUARD_OPERATOR").ok().as_deref() {
+        None | Some("") => Ok(Operator::Reachability),
+        Some(value) => Operator::parse(value),
+    }
+}
 
 struct Job {
     file: String,
@@ -172,7 +249,7 @@ struct Tally {
     survivors: Vec<(usize, String)>,
 }
 
-fn mutate_file(root: &Path, job: &Job) -> Option<Tally> {
+fn mutate_file(root: &Path, job: &Job, operator: Operator) -> Option<Tally> {
     let target = root.join(&job.file);
     let backup = PathBuf::from(format!("{}{BACKUP_SUFFIX}", target.display()));
     if backup.exists() {
@@ -208,7 +285,7 @@ fn mutate_file(root: &Path, job: &Job) -> Option<Tally> {
     };
     for (start, end, line) in &sites {
         let mut mutant = original.clone();
-        mutant.splice(*start..*end, MUTANT.bytes());
+        mutant.splice(*start..*end, operator.mutant().bytes());
         if fs::write(&target, &mutant).is_err() {
             eprintln!("ERROR cannot write {}", target.display());
             return None;
@@ -247,12 +324,37 @@ fn selected_jobs(args: &[String]) -> Option<Vec<Job>> {
     Some(all)
 }
 
+fn print_score(operator: Operator, killed: usize, valid: usize) {
+    let value = killed as f64 / valid as f64;
+    match operator {
+        // Byte-identical to the historical single-operator output.
+        Operator::Reachability => println!("mutation score: {killed}/{valid} = {value:.3}"),
+        Operator::Accept => println!("accept mutation score: {killed}/{valid} = {value:.3}"),
+    }
+}
+
 pub fn run(args: &[String]) -> i32 {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let operator = match operator_from(args) {
+        Ok(op) => op,
+        Err(msg) => {
+            eprintln!("{msg}");
+            return 2;
+        }
+    };
+    // The accept run labels itself so the two scores can never be mistaken for
+    // one another. The default reachability run keeps its original output.
+    if operator != Operator::Reachability {
+        println!(
+            "operator: {} (mutant `{}`)",
+            operator.name(),
+            operator.mutant()
+        );
+    }
     let jobs = match selected_jobs(args) {
         Some(jobs) if !jobs.is_empty() => jobs,
         _ => {
-            eprintln!("usage: mutate_guard [--file src/tools/<module>.rs]");
+            eprintln!("usage: mutate_guard [--file src/tools/<module>.rs] [--operator reachability|accept]");
             return 2;
         }
     };
@@ -264,7 +366,7 @@ pub fn run(args: &[String]) -> i32 {
     let mut unexplained: Vec<(String, usize, String)> = Vec::new();
 
     for job in &jobs {
-        let tally = match mutate_file(&root, job) {
+        let tally = match mutate_file(&root, job, operator) {
             Some(tally) => tally,
             None => return 3,
         };
@@ -279,11 +381,7 @@ pub fn run(args: &[String]) -> i32 {
             tally.survivors.len()
         );
         if valid > 0 {
-            println!(
-                "mutation score: {}/{valid} = {:.3}",
-                tally.killed,
-                tally.killed as f64 / valid as f64
-            );
+            print_score(operator, tally.killed, valid);
         }
         total_sites += tally.sites;
         total_killed += tally.killed;
@@ -291,10 +389,14 @@ pub fn run(args: &[String]) -> i32 {
         total_survivors += tally.survivors.len();
         for (line, snippet) in tally.survivors {
             let file = job.file.clone();
-            if EQUIVALENT
-                .iter()
-                .any(|(f, l, s)| *f == job.file.as_str() && *l == line && *s == snippet)
-            {
+            // Equivalences were recorded against the reachability operator; an
+            // accept mutant that survives is always a real gap in asserted
+            // refusals, so it is never exempted.
+            let equivalent = operator == Operator::Reachability
+                && EQUIVALENT
+                    .iter()
+                    .any(|(f, l, s)| *f == job.file.as_str() && *l == line && *s == snippet);
+            if equivalent {
                 println!("EQUIVALENT {file} line {line}: {snippet}");
             } else {
                 unexplained.push((file, line, snippet));
@@ -308,10 +410,7 @@ pub fn run(args: &[String]) -> i32 {
          killed {total_killed}, survived {total_survivors}"
     );
     if valid > 0 {
-        println!(
-            "mutation score: {total_killed}/{valid} = {:.3}",
-            total_killed as f64 / valid as f64
-        );
+        print_score(operator, total_killed, valid);
     }
 
     if !unexplained.is_empty() {

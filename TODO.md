@@ -4802,15 +4802,26 @@ The general acceptance rule ("a receipt, not a look") is not enough for these; t
 The `Ok(todo!())` operator proves a test **reaches** the site. The failure a checker must not have is
 **accepting what it should refuse**, which `todo!()` cannot model because it panics.
 
-- [ ] **XXV.E1.** Add a second operator that turns a refusal into **silent acceptance**: delete the
+- [x] **XXV.E1.** Add a second operator that turns a refusal into **silent acceptance**: delete the
   guard condition, or replace the refusal with `Ok(<plausible value>)`, so execution continues as if
   the input were valid. A mutant survives unless a test **asserts** the refusal. Apply it to the same
   sites as the existing harness (`guard.rs`, `freeze.rs`, and the `refuse!` sites in `lib.rs`/`wire.rs`).
-- [ ] **XXV.E2.** Report **two** scores separately (`reachability` and `assertion`); never merge them.
-  Until operator 2 runs, label the current `101/101` **reachability-strength**.
+  — **Done for guard/freeze, XXV.E.** Operator `accept` replaces each site with
+  `Ok(Default::default())`, selected by `MUTATE_GUARD_OPERATOR=accept` (default `reachability`).
+  Receipt `research/receipts/xxv-e-mutation-operator2.md`. Not yet applied to `lib.rs`/`wire.rs`
+  (`mutate.rs`); that is a separate harness.
+- [x] **XXV.E2.** Report **two** scores separately (`reachability` and `assertion`); never merge them.
+  Until operator 2 runs, label the current `101/101` **reachability-strength**. — **Done.**
+  `reachability 101/101`; `accept 61/61` with **40 invalid** sites (payload lacks `Default`). The
+  earlier `101/101` is now labelled reachability-strength everywhere.
 - [ ] **XXV.E3.** Classify and document any surviving assertion-strength mutant as either a missing
   assertion (fix the test) or an equivalent mutant (record why, with evidence), as `EQUIVALENT` does.
+  — **Zero survivors**, so nothing to triage today. Still open: the **40 invalid** sites need a
+  variant-specific “plausible value” operator (e.g. a hand-written `impl Default`-free construction or
+  a per-site replacement table) before the accept score can cover all 101.
 - [ ] **XXV.E4.** The harness must fail the build when any valid assertion-strength mutant survives.
+  — **Implemented** (non-zero on any valid accept survivor) but **not wired into CI**; the CI step
+  still runs the reachability operator only. Deliberate, until `XXV.E3` raises the valid count.
 
 ## XXV.F — CI green (priority 1)
 
