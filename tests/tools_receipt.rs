@@ -52,8 +52,17 @@ use tekmerion::tools::{curve_check, dropin};
 /// integer combination of antecedent equations closes from a verified weight
 /// certificate instead of an `INT_ARITH` search.  All three are derived-rule
 /// only, so the phrase count and the `prove` count are unchanged; the inlined
-/// answer text moved because the library text did).
-const BRIDGE_DIGEST: &str = "b9a1926870f0f6c2fa01a4b56e49da9913f9c6efd5db6459ab05f094c48772ec";
+/// answer text moved because the library text did), `7f686bbd…` (after
+/// XXVII.B9's order-antisymmetry refutation and mask-substitution identity
+/// search: a branch carrying both `a <= b` and `b < a` (also when a condition
+/// arrives negated) is refuted by `INT_LET_ANTISYM`/`INT_LT_ANTISYM` in a
+/// handful of derived-rule inferences, and the linear-certificate greedy gains
+/// a bounded backtracking search that accepts a step which moves support from a
+/// masked atom to its raw form.  Both are derived-rule only; `prove` count and
+/// phrase count are unchanged, the inlined answer text moved.  `cae44c88…` is
+/// the lazy-negation/reordered final form (literal before order, so `neg`'s
+/// literal branches keep their 15-inference route).
+const BRIDGE_DIGEST: &str = "cae44c88ad46a740f1396ab5310c08158a8012fac331639becb6fbfb83c4a081";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -223,10 +232,14 @@ fn instrument_reproduces_the_recorded_output() {
     // The literal/AC-complement and linear-certificate fast paths add only
     // local `let ... in` bindings inside `BRIDGE_ORACLE_TAC` (no new `;;`
     // phrase), so the phrase count is still 249.
+    // XXVII.B9 boundary.  The XXVII.B5 digest was
+    //   25b47f58b76f85857447c69da011efe402c45a1be845f76bca26af615f65a6be
+    // The order-antisymmetry refutation and the mask-substitution search are
+    // likewise locals inside the existing `BRIDGE_ORACLE_TAC` phrase.
     assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "25b47f58b76f85857447c69da011efe402c45a1be845f76bca26af615f65a6be"
+        "12f972bd13d76f9a3519b8e8f7f6653787838975ffcce79246bbe75d52fddecb"
     );
 }
 
@@ -371,22 +384,26 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // complement and certificate fast paths are locals inside the existing
     // `BRIDGE_ORACLE_TAC` phrase, so the count is still 293 and only the
     // inlined library text moved: every answer now carries the new close code.
+    // XXVII.B9 boundary.  The XXVII.B5 digests were the four above.  The
+    // order-refutation and mask-substitution search are locals inside that
+    // phrase, so the count is still 293.  The values below are the lazy-
+    // negation/reordered final form.
     for (mode, digest) in [
         (
             "add-ref",
-            "998220255386373e59c0dc6e3e5626dbd3e0f758ccb3bf48c790f2f757d55507",
+            "95e9f9a35469930a26d89af373d14fd6c8fd74848bd8e34151297f2b56066d2c",
         ),
         (
             "sub",
-            "6462a72959b48f45b84c1116bcc3b658e8d3aaa06c75a6aad7b892af5ff0c261",
+            "e71fb1923d69559e14eed2b895286fa2731302ae967a10ee60d9991fdc62e864",
         ),
         (
             "neg",
-            "b1411fce8ea5db874402ecb4aaff31ad595f752c043daedc570aaec11e2e8ca6",
+            "5bdd2350ae44148d522b351e9bbd3b42dc8ed61e99eda0665a96bef19217eb55",
         ),
         (
             "add-p384",
-            "081870dd2cb1fc66414017a9c9e9468e6de2eb31f25222ddb798061ccd9f5c23",
+            "7b2b3b0bddf1f2d6c6dde0887b0ebf25bbd98d527abc5d4247b12199092bde31",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

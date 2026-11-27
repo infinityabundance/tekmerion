@@ -2702,6 +2702,72 @@ let BRIDGE_ORACLE_TAC : tactic =
           ACCEPT_TAC closed (asl,w)
       | None ->
       bridge_slice_note "ORACLE close range-nomatch ants=%d" (List.length ants);
+      (* XXVII.B9, Task 2a: order-antisymmetry refutation.
+
+         A branch splitter can leave both `a <= b' and `b < a' (or both
+         `a < b' and `b < a') among the antecedents.  Over the integers that
+         pair is unsatisfiable, and the refutation is the two-premise Farkas
+         combination with multipliers `(1,1)': `INT_LET_ANTISYM' is
+         `~(x <= y /\ y < x)' and `INT_LT_ANTISYM' is `~(x < y /\ y < x)', so
+         `NOT_ELIM' turns the chosen instance into an implication, `CONJ'
+         pairs the two hypotheses, `MP' yields `F', and `CONTR w'' closes any
+         goal.
+
+         A branch condition may also arrive *negated*: `~(a <= b)' is `b < a'
+         (`INT_NOT_LE') and `~(a < b)' is `b <= a' (`INT_NOT_LT').  Those are
+         normalised first, so the `~(n <= m)' / `~(m < n)' pair of the `sub'
+         branches 19/20 and 23/24 is the same contradiction.  Detection is pure
+         `aconv' on the two sides and builds the (single) conversion only on a
+         match, so a no-match costs no inferences.  On `sub' this handles
+         twelve of the twenty-four branches; the arithmetic close there costs
+         ~100,000 inferences for a fact this pair proves in under fifty. *)
+      let order_closed () =
+        (* the normalised comparison is built lazily, so a no-match spends no
+           inference on the `INT_NOT_LE'/`INT_NOT_LT' conversion *)
+        let normalise th =
+          match concl th with
+          | Comb(Comb(Const("int_le",_),a),b) ->
+              Some (a, b, true, (fun () -> th))
+          | Comb(Comb(Const("int_lt",_),a),b) ->
+              Some (a, b, false, (fun () -> th))
+          | Comb(Const("~",_), p) ->
+              (match p with
+               | Comb(Comb(Const("int_le",_),a),b) ->
+                   Some (b, a, false,
+                         (fun () -> EQ_MP (ISPECL [a;b] INT_NOT_LE) th))
+               | Comb(Comb(Const("int_lt",_),a),b) ->
+                   Some (b, a, true,
+                         (fun () -> EQ_MP (ISPECL [a;b] INT_NOT_LT) th))
+               | _ -> None)
+          | _ -> None in
+        let ords = List.filter_map normalise ants in
+        let le_ants = List.filter (fun (_,_,l,_) -> l) ords
+        and lt_ants = List.filter (fun (_,_,l,_) -> not l) ords in
+        let close mk mg x y lemma =
+          let lth = mk () and gth = mg () in
+          let fth =
+            MP (NOT_ELIM (ISPECL [x;y] lemma)) (CONJ lth gth) in
+          EQ_MP (SYM w_eq) (CONTR w' fth) in
+        let swapped_in hay (x, y) =
+          List.find_opt (fun (a, b, _, _) -> aconv a y && aconv b x) hay in
+        let rec le_first = function
+          | [] -> None
+          | (x, y, _, mk) :: rest ->
+              (match swapped_in lt_ants (x, y) with
+               | Some (_, _, _, mg) ->
+                   Some (close mk mg x y INT_LET_ANTISYM)
+               | None -> le_first rest) in
+        match le_first le_ants with
+        | Some closed -> Some closed
+        | None ->
+            let rec lt_first = function
+              | [] -> None
+              | (x, y, _, mk) :: rest ->
+                  (match swapped_in lt_ants (x, y) with
+                   | Some (_, _, _, mg) ->
+                       Some (close mk mg x y INT_LT_ANTISYM)
+                   | None -> lt_first rest) in
+            lt_first lt_ants in
       (* XXVII.B5, Task 1: literal and polynomial-AC complements.
 
          The `CONJ_ACI_RULE' matcher above only sees a contradiction whose two
@@ -2979,13 +3045,57 @@ let BRIDGE_ORACLE_TAC : tactic =
                                   avail)
                                (depth - 1)))) in
           step [] goal_key rows 6 in
+        (* XXVII.B9, Task 2b: mask-substitution identity search.
+
+           The greedy above only continues while the residual's support
+           *shrinks*.  A mask equation `mask + k = val' moves support from
+           `mask' to `val' without shrinking it, so a certificate of the shape
+           `agg0 + agg1 + B^4 * fact + B^3 * mask_eq' (the `sub' wrap branches)
+           is invisible to it: `first_one' and `first_two' cannot reach four
+           premises and the greedy rejects the non-shrinking step.  This
+           bounded depth-first search accepts any step that cancels the
+           residual's leading atom, tries every unused premise (so it
+           backtracks, unlike the greedy), and keeps each premise at most once;
+           depth 6 with at most five equation premises is a few dozen nodes.
+           It runs only after one/two/greedy all miss, so `add' and `neg' keep
+           their routes, and the candidate is still *verified* by the
+           `INT_POLY_CONV' identity below before any proof is built. *)
+        let search () =
+          let rec step acc res avail depth =
+            if k_zero res then Some (List.rev acc)
+            else if depth <= 0 then None
+            else
+              (match fst res with
+               | [] -> None
+               | (a, ka) :: _ ->
+                   let rec try_rows = function
+                     | [] -> None
+                     | (th, f) :: rest ->
+                         let k0 = k_at f (Some a) in
+                         if Num.eq_num k0 num_0 then try_rows rest else
+                         let k = Num.div_num ka k0 in
+                         if not (k_int k) || Num.eq_num k num_0
+                         then try_rows rest else
+                         let res' = k_add res (k_scale (Num.minus_num k) f) in
+                         let avail' =
+                           List.filter
+                             (fun (u,_) -> not (aconv (concl u) (concl th)))
+                             avail in
+                         (match step ((th, k) :: acc) res' avail' (depth - 1) with
+                          | Some ws -> Some ws
+                          | None -> try_rows rest) in
+                   try_rows avail) in
+          step [] goal_key rows 6 in
         let cert =
           match first_one rows with
           | Some ws -> Some ws
           | None ->
               (match first_two rows with
                | Some ws -> Some ws
-               | None -> greedy ()) in
+               | None ->
+                   (match greedy () with
+                    | Some ws -> Some ws
+                    | None -> search ())) in
         match cert with
         | None -> None
         | Some weights ->
@@ -3050,6 +3160,14 @@ let BRIDGE_ORACLE_TAC : tactic =
         | Some closed -> Some closed
         | None ->
         bridge_slice_note "ORACLE close ac-nomatch ants=%d" (List.length ants);
+        match order_closed () with
+        | Some closed ->
+            bridge_slice_note "ORACLE close order-refutation ants=%d"
+              (List.length ants);
+            Some closed
+        | None ->
+        bridge_slice_note "ORACLE close order-nomatch ants=%d"
+          (List.length ants);
         match linear_certificate () with
         | Some closed -> Some closed
         | None ->
