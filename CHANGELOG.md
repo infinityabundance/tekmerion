@@ -5,6 +5,27 @@ under `research/receipts/`; each line names its receipt and commit, because tota
 are only comparable within a commit (the inlined support library grows, which shifts
 per-answer totals by a constant).
 
+## [Unreleased]
+
+### XXIII.B1 — per-carrier aggregate premise fast path (`ix91`, `cdd673f`)
+
+- `bridge_aggregate_facts` now tries only the aggregate(s) that mention a carrier before
+  falling back to the full list. Strict self-contained totals: `add` 5,745,767 →
+  **5,268,391** (−477,376, the IX.86 inert-premise figure exactly; 2.85× human), `sub`
+  9,029,510 → **8,217,594** (−811,916; 6.40×), `neg` unchanged at 5,683,733 (7.88×; one
+  aggregate, so the selection is structurally a no-op). `plain == phase` with `diff 0`;
+  every phase except the aggregate-fact phase is bit-identical.
+- Fixtures re-recorded deliberately: 27 answers, `curve_check_bridge.txt` (line numbers
+  only), `BRIDGE_DIGEST` (`895a5105…`), the instrument sha and the four inline-answer digests.
+- Not established: `equals_thm` re-check, matched-session accounting, timing medians.
+
+### XXV.E — silent-acceptance mutation operator (`a62b3c4`)
+
+- A second mutation operator (`accept`, replacing a refusal with `Ok(Default::default())`)
+  measures whether tests **assert** a refusal rather than merely reach it: 61/61 valid
+  mutants killed; 40 sites are invalid because their `Ok` payload has no `Default`.
+  Reachability stays 101/101. The accept score is not yet wired into CI.
+
 ## [0.2.0] — 2026-11-26
 
 The first release in which the arithmetic reasoning is Tekmerion's own.

@@ -20,6 +20,11 @@ what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
   *Measured at `c6f5106` (`sub`/`neg` re-run today; `add` at `81f84db`, same bridge). Totals are
   only comparable within a commit — the inlined support library grows, which shifts every answer
   by a constant.*
+- **Later measurement (append-only, 2026-11-27, `cdd673f`, receipt `ix91`):** the XXIII.B1
+  per-carrier aggregate premise fast path reduces the strict self-contained totals to **add
+  5,268,391** (2.85× human), **sub 8,217,594** (6.40×), **neg 5,683,733** (7.88×, unchanged —
+  its proof has one aggregate, so the selection is a no-op). The published crates.io 0.2.0
+  artefact predates this; these are repository measurements, not a crate release.
 - **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
   upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,
   whole-tree `make` green).
