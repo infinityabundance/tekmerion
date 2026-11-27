@@ -35,10 +35,13 @@ use tekmerion::tools::{curve_check, dropin};
 /// per-carrier aggregate premise fast path (bridge.ml)), `895a5105…` (after
 /// XXIII.B1's per-carrier aggregate premise fast path with `bridge_lf_vars`
 /// returning a term list and the band/finish proof shapes restored to the IX.89
-/// anchors), `a37b4f1c…` (after XXIII.B3's direct-bound slim close: the oracle
+/// `a37b4f1c…` (after XXIII.B3's direct-bound slim close: the oracle
 /// close first tries the antecedent set without the `bridge_is_direct_bound`
-/// members, then falls back to the exact full-set close).
-const BRIDGE_DIGEST: &str = "a37b4f1c8b65b3486d58d446ca8fbd41b37bbb5e8f6e811ef3a8a46a562ad9ff";
+/// members, then falls back to the exact full-set close), `c59985e5…` (after
+/// XXIII.G's propositional-refutation fast path: the oracle close first tries
+/// to close a branch from an antecedent conjunction `P` and its AC-equivalent
+/// negation `~Q`, then falls back to the slim and full closes unchanged).
+const BRIDGE_DIGEST: &str = "c59985e546ab1718210a205233f40ffa402a8f4c6bb671cbd1ba16dcfc263bde";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -140,7 +143,9 @@ fn curve_check_reproduces_the_recorded_report() {
     // XXIII.B3's direct-bound slim close adds one `prove` call (the slim
     // attempt; the full-set close below it is the fallback and was already
     // there): 91 -> 92, hits still 0.  (The library's `prove` word-boundary
-    // occurrences go 95 -> 96.)
+    // occurrences go 95 -> 96.)  XXIII.G's propositional-refutation fast path
+    // adds no `prove` call (it uses only derived rules), so the count stays at
+    // 92; only the recorded line numbers shift.
     assert_eq!(statements, 92);
     assert_eq!(hits, 0);
     let expected =
@@ -185,11 +190,13 @@ fn instrument_reproduces_the_recorded_output() {
     // `bridge_aggregate_facts` (the phrase count is unchanged; only the body of
     // the two fact provers moved).  Still 249 after XXIII.B3's direct-bound
     // slim close, which adds phrases inside the existing `BRIDGE_ORACLE_TAC`
-    // phrase.
+    // phrase.  Still 249 after XXIII.G's propositional-refutation fast path,
+    // which adds local `let ... in` bindings inside the same phrase (no new
+    // `;;`).
     assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "9314cf8ed4cb37aa0fe2f110a0bd49f5b6df14597bd83649769b20b096d53aa6"
+        "ec2c6c32d7f2f6e2a43904074f364c0254291b12d6ca6a8585bc3e37d479a97d"
     );
 }
 
@@ -314,22 +321,31 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // inside `BRIDGE_ORACLE_TAC`, so every inlined answer carries the new
     // library text. The phrase count is unchanged (249); the tactics are
     // unchanged.
+    // XXIII.G boundary. The XXIII.B3 digests were:
+    //   add-ref   b4c7b1f990cf397d360f5da6711fa4e2e0da7c7ed7d81f9a0cbd44da59a4c7db
+    //   sub       cd64fbf28cf41ad258fb9424802e2a3df7f0e1d4e41ef768989e0d930956d88d
+    //   neg       57e3fb43d6e105bac6e95a221afcf5c0857311f372f3ce1c315398018f2542a3
+    //   add-p384  2693d797a0ff8b9497e92f14e828a7b6b27000ad56c661e627f9bc602b8a33a9
+    // XXIII.G's propositional-refutation fast path adds a block inside
+    // `BRIDGE_ORACLE_TAC`, so every inlined answer carries the new library
+    // text. The phrase count is unchanged (293); the tactics are unchanged for
+    // a branch whose antecedents hold no propositional contradiction.
     for (mode, digest) in [
         (
             "add-ref",
-            "b4c7b1f990cf397d360f5da6711fa4e2e0da7c7ed7d81f9a0cbd44da59a4c7db",
+            "bc3ff5c510352d957fe77f5f283fb8ae90c51f5bb5e793ffcc459444dde69d5f",
         ),
         (
             "sub",
-            "cd64fbf28cf41ad258fb9424802e2a3df7f0e1d4e41ef768989e0d930956d88d",
+            "8d589eced7935e0685db64a269a90fec0b95080b789c993feb6bb52ac0a33589",
         ),
         (
             "neg",
-            "57e3fb43d6e105bac6e95a221afcf5c0857311f372f3ce1c315398018f2542a3",
+            "222bc7267e8efafd79df87aac285563f369843c6945b53d53c112a2a6992945b",
         ),
         (
             "add-p384",
-            "2693d797a0ff8b9497e92f14e828a7b6b27000ad56c661e627f9bc602b8a33a9",
+            "ed8397b94a58692856a00a65be9671ad5ae7be6d9d04840e5e2ba7afac3cc10b",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

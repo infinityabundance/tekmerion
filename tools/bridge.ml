@@ -2544,6 +2544,60 @@ let BRIDGE_ORACLE_TAC : tactic =
       bridge_slice_note "ORACLE close ants=%d size=%d"
         (List.length ants)
         (List.fold_left (fun a th -> a + bridge_term_size (concl th)) 0 ants);
+      (* XXIII.G: propositional-refutation fast path (IX.93).
+         A branch splitter can leave both a conjunction `P' and its
+         AC-equivalent negation `~Q' among the antecedents, so the branch is
+         propositionally inconsistent and the whole arithmetic close is
+         unnecessary.  `EQ_MP (CONJ_ACI_RULE (mk_eq(P,Q))) pth' transports `P'
+         to `Q', `MP (NOT_ELIM nth)' yields `F', and `CONTR w'' closes the
+         flattened goal; the final `EQ_MP (SYM w_eq)' applies it to `w'.  On
+         `neg' branches this is ~500x cheaper than the full close (108
+         inferences vs ~50,000; IX.93).  Try it first on every branch; a
+         failed match falls through to the slim and full closes unchanged.
+         Only a `Failure' from CONJ_ACI_RULE (P, Q not AC-equivalent) is an
+         expected no-match; a Failure from the later steps is an implementation
+         error and is re-raised (XXVI.A3). *)
+      let bridge_is_conj t =
+        match t with Comb(Comb(Const("/\\",_),_),_) -> true | _ -> false in
+      let conj_ants =
+        List.filter_map (fun th ->
+            let t = concl th in
+            if bridge_is_conj t then Some (th, t) else None) ants in
+      let neg_ants =
+        List.filter_map (fun th ->
+            match concl th with
+            | Comb(Const("~",_),q) when bridge_is_conj q -> Some (th, q)
+            | _ -> None) ants in
+      let prop_closed =
+        let rec first_neg pth p ns =
+          match ns with
+          | [] -> None
+          | (nth, q) :: rest ->
+              let ac =
+                (try Some (CONJ_ACI_RULE (mk_eq (p, q)))
+                 with Failure _ -> None) in
+              (match ac with
+               | None -> first_neg pth p rest
+               | Some ac ->
+                   let pq = EQ_MP ac pth in
+                   let fth = MP (NOT_ELIM nth) pq in
+                   let gth = CONTR w' fth in
+                   Some (EQ_MP (SYM w_eq) gth)) in
+        let rec first_pos ps =
+          match ps with
+          | [] -> None
+          | (pth, p) :: rest ->
+              (match first_neg pth p neg_ants with
+               | Some closed -> Some closed
+               | None -> first_pos rest) in
+        first_pos conj_ants in
+      match prop_closed with
+      | Some closed ->
+          bridge_slice_note "ORACLE close prop-refutation ants=%d"
+            (List.length ants);
+          ACCEPT_TAC closed (asl,w)
+      | None ->
+      bridge_slice_note "ORACLE close prop-nomatch ants=%d" (List.length ants);
       (* XXIII.B3 probe: the close still pays to normalise every direct bound
          (`&0 <= &(val w)', `&(bitval b) < &1', ...).  Those are the antecedents
          `bridge_close_hyps' was written to drop, but the oracle path never used
