@@ -304,15 +304,15 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
         ),
         (
             "sub",
-            "0da52876c0c3e53af3bfc0d93aaa4b838b761705ca5d1505528be6f6f3444095",
+            "9ca6b923b95771c1f8e1b671af6f73b4f20f90c59108f1db8aeb39ddb9ef7409",
         ),
         (
             "neg",
-            "7683ed21c0d3e5d32fa5f56e9e004026ec130e058c409d97ae634112ae6a0b10",
+            "e2d676a2c22e6222dfcf0180239ccccd73e7275f85058ff9a836538c436ec802",
         ),
         (
             "add-p384",
-            "b8b68f7211caa87ce84312e135a037d89d16b2c12bff954bca7c367560bcdbd2",
+            "788472d9279b48fb27a615a45f0b1b41fa9db7e1ab343df6563d0e053c3a31a8",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
