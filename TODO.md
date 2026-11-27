@@ -3955,3 +3955,129 @@ export and the timing; the independent side is blocked.
 5. **`XXI.E2`** — structural coverage measurement, which will size the TQL-1 gap.
 6. **`XX.D7`/`XX.D2`** — certificate format frozen and checked in the kernel; then dataflow chain
    discovery for p256.
+
+---
+
+# XXII — Intake 2026-11-27 (after `0611f61`): checker soundness, reference baseline, premise cost
+
+Nothing omitted. `XXII.H` supersedes `XXI.G`.
+
+## XXII.0 — What IX.87 established, and what it did not
+
+- [x] **XXII.0.1.** Three machine-code derivations replayed by the Rust checker: 3.21M / 4.22M /
+  3.08M reachable nodes in 2.75 / 4.36 / 4.45 s, peak RSS 103–139 MB, deterministic across two
+  runs. Peak live theorems 4,400 / 3,946 / 2,496 — i.e. **theorem retention** is 728×–1,232× below
+  reachable nodes. Total memory is **not** frontier-bounded (object buffer, term/type tables and
+  consumer arrays remain resident).
+- [x] **XXII.0.2.** Two defects fixed (TOCTOU; budget-after-parse) and a third found by the real
+  replay: `alpha_eq` resolved **shadowed binders outermost-first** where HOL Light resolves
+  innermost-first, so a hypothesis survived `term_remove` and `ABS` failed at node 363 of the add
+  object. That is the second defect found by a real artefact and missed by the suite.
+- [x] **XXII.0.3.** The 512,129-inference add regression is attributed: **93.2% is one line**
+  (`aggregates @ side_hyps` instead of `agg :: side_hyps`), where for `add` the second aggregate is
+  logically inert. An optimistic 12→1 fold reaches only 3,147,165 (1.70× human), recorded as a
+  bound, not a result.
+- [x] **XXII.0.4.** The independent checker baseline is **blocked**, reported as blocked, with a
+  ready-to-run comparator. No checker-versus-checker claim exists.
+
+## XXII.A — CI is the release gate (P0)
+
+- [ ] **XXII.A1.** Two freeze-parser mutants survive (`src/tools/freeze.rs:885` environment
+  value-type validation; `:917` slice-flag validation). Kill them with tests, or record them as
+  equivalent **with evidence**. The harness is right to refuse a pass.
+- [ ] **XXII.A2.** Make a green assurance pipeline a **release precondition**: no version bump, tag
+  or publish while any mutation gate has survivors. `CHANGELOG` and the release procedure say so.
+- [ ] **XXII.A3.** `freeze-closure-v7.json` still pins `81f84db` and does not cover the IX.87
+  checker changes. Regenerate; do not tag until `XXII.A1` is green.
+
+## XXII.B — The reference checker that needs no download
+
+Reviewer's correction to the blocked baseline, and it is right:
+
+- [ ] **XXII.B1.** Write a replay that rebuilds each object **node by node in a fresh HOL Light
+  session using only the primitive rules of `fusion.ml`**, then check (a) `equals_thm` against the
+  original theorem and (b) `axioms()` unchanged. Run it on all three objects.
+- [ ] **XXII.B2.** Compare against the Rust checker on the same objects: does the Rust checker
+  accept **exactly** what HOL Light's kernel accepts? A disagreement in either direction is a
+  checker bug the corpus has caught. Publish the three-way table: HOL kernel time/memory, Rust
+  time/memory, verdict.
+- [ ] **XXII.B3.** This is checker-versus-checker against the kernel the statements are *about*, so
+  it needs no external tool and no network. It replaces the blocked column.
+
+## XXII.C — `alpha_eq` deserves an adversarial harness
+
+- [ ] **XXII.C1.** A differential fuzzer: generate random terms with heavy binder shadowing, and
+  compare `alpha_eq` against HOL Light's `aconv` on every pair. The bug found in IX.87 failed
+  **safe** (it refused a valid object); an alpha-equivalence bug can equally accept something it
+  should not, and that direction is silent.
+- [ ] **XXII.C2.** Also fuzz the substitution-pair ordering fixed earlier (`rev_assocd`), which the
+  same corpus caught.
+
+## XXII.D — The cost is INT_ARITH, not the branches
+
+- [ ] **XXII.D1. Premise minimisation fast path.** Prove each fact from only the aggregates that
+  mention its carrier; fall back to all of them when that fails. Cheap, and returns `add` to
+  ≈5.27M. This is a generic ASC pass, not an operation-specific special case.
+- [ ] **XXII.D2. Coefficient certificates instead of `INT_ARITH` search.** The compiler already
+  knows the weights; emit the linear combination as **fixed multipliers × premises** plus one
+  normalisation, instead of making `INT_ARITH` rediscover it per branch. This is `XIX.D1`, and it
+  now has the strongest evidence of anything on the list — and the same artefact the kernel's `LIA`
+  rule will check, so the HOL route and the kernel route share one format.
+- [ ] **XXII.D3.** Selector folding remains worth doing (`XX.B`), but it is **not** where the
+  measured regression is. Do not let it displace `D1`/`D2`.
+
+## XXII.E — Checker authority: three types, and the exporter must not supply the standard
+
+The finalizer currently builds the permitted theory from the recording's own collected
+dependencies when none is supplied, and derives the expected statement identity from the recording's
+footer. So the experiment shows consistency with a recorded derivation and its supplied environment;
+it does not show the environment or the specification was **independently authorised**.
+
+- [ ] **XXII.E1.** Three types, constructed only by kernel admission:
+  `UntrustedTheoryPackage` (from the exporter) → `ValidatedTheory` (private fields, immutable,
+  digest-bound, extension yields a new value) → `CheckedJudgment` (no public constructor).
+- [ ] **XXII.E2.** Refuse a certificate whose theory package was not validated by an external
+  authority; the exporter may not certify its own environment, just as it may not certify its own
+  imports (`XIX.G.1`).
+- [ ] **XXII.E3.** Type-definition freshness conflict stays open until extension is **one atomic
+  justified operation** producing both halves.
+
+## XXII.F — Resource limits are not one number
+
+The node budget now precedes the consumer array, but the whole file is still read and types/terms
+materialised first, and nested types are recursively **cloned** on table reconstruction — a possible
+resource amplification.
+
+- [ ] **XXII.F1.** Interned type identifiers; no recursive cloning on reconstruction.
+- [ ] **XXII.F2.** Independent limits, each enforced: total certificate bytes; node count **and
+      structural depth**; maximum coefficient size; rule applications; allocation budget; live
+      frontier. State which limit each refusal comes from.
+- [ ] **XXII.F3.** Target: authenticated immutable proof **blocks** so replay can be bounded-memory
+  without reintroducing the file-integrity race.
+
+## XXII.G — The comparator must be identity-bound, like everything else
+
+`tools/compare_checkers.sh` currently takes a trace by filename, returns status/time/memory, and
+does not establish that the two checkers checked the same judgment, theory or evidence; it also
+hard-codes a development path and does not cap the independent runner.
+
+- [ ] **XXII.G1.** Reuse the identity-bound comparison machinery (`XVII.A2`): matching statement
+  digests, authorised foundations, import scope, executable identities, and explicit timing
+  boundaries. Refuse a row whose identities do not match.
+- [ ] **XXII.G2.** No hard-coded paths; the independent runner goes through `tools/cap.sh`.
+- [ ] **XXII.G3.** An apparent speed advantage must not be explainable by one checker accepting more
+  assumptions or processing less evidence — that is exactly what the identity binding is for.
+
+## XXII.H — Order of execution
+
+1. **`XXII.B`** — the HOL-kernel reference replay. It converts a blocked baseline into a real
+   checker-versus-checker result with nothing to download, and any disagreement is a found bug.
+2. **`XXII.A1`/`A2`** — kill the two mutants; make CI green a release precondition.
+3. **`XXII.C`** — the `alpha_eq`/`aconv` differential fuzzer.
+4. **`XXII.D1`/`D2`** — premise minimisation, then coefficient certificates; measure against
+   1,848,494 and freeze the certificate format.
+5. **`XXII.E`/`F`** — theory authority and resource limits, before the checker is used for numbers
+   beyond a baseline.
+6. **`XXII.G`** — identity-bound comparison, once a reference checker produces rows.
+7. Then the ASC generality work (`XX.D2` dataflow chains for p256, `XX.D3` multiplication columns)
+   and proof archaeology over the 10.5M reachable nodes.
