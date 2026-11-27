@@ -5144,11 +5144,21 @@ level produces a kernel proof; a level that cannot prove inconsistency falls thr
   caveat recorded.
 - [ ] **XXVII.B8. Reorder range after literal.** B8/B10 still take the range path (170); literal would
   close each at 15. ≈310 inferences available. Cheap; do with the next close change.
-- [ ] **XXVII.B9. Generalise the certificates to `sub` and `add`.** `sub` is **untouched** (close
+- [x] **XXVII.B9. Generalise the certificates to `sub` and `add`.** `sub` is **untouched** (close
   2,554,010, totals 7,985,276), and `add`'s close is 786,931 (full 1, slim 8, linear 3). Classify
   the `sub`/`add` branches the way `xxvii-neg-branch-classification.md` did for `neg`, then apply the
   matching certificate (the code is already general; the open question is which branches are
-  vacuous vs genuinely arithmetic/inequality). This is P7.
+  vacuous vs genuinely arithmetic/inequality). This is P7. — **Done, IX.96.** `sub` 7,985,276 →
+  **6,646,550** (−16.77 %; 5.18× human): 12 of 24 branches close by order-antisymmetry
+  (`INT_LET_ANTISYM`/`INT_LT_ANTISYM`, **40–84** inferences), 2 by a mask-substitution identity
+  (2,177/3,322). `add` and `neg` unchanged. Classification in
+  `research/receipts/xxvii-sub-add-branch-classification.md`.
+- [ ] **XXVII.B11. General sparse Farkas certificate (level 4).** The remaining close is `sub`
+  1,217,732 (7 slim + 3 full) and `add` 786,931 (8 slim + 1 full) — 19 branches of genuine
+  multi-premise linear arithmetic. Build nonnegative integer multipliers `λ` proving the goal from
+  the chosen few premises, construct the proof, and measure. This is the next large lever.
+- [ ] **XXVII.B12. Reorder range after literal** (`XXVII.B8`): B8/B10 take range (170) where literal
+  would close at 15. ≈310 inferences; fold into the next close change.
 - [ ] **XXVII.B10. `equals_thm` and `axioms()` inside the harness** (`XXVII.D`). Still outstanding and
   mandatory before any victory claim; IX.95 says so explicitly.
 - [ ] **XXVII.B3.** Move the check **as early as mathematically justified** (`XXVII.A2`), so the

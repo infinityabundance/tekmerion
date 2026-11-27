@@ -17,7 +17,10 @@ per-answer totals by a constant).
 - **Literal/AC complements and linear-identity certificate** (`ix95`): literal `P`/`~P` closes in
   **15**; polynomial-AC in **113**; the branch whose goal is a linear combination of two antecedents
   in **1,235**. **neg 5,289,824 → 4,121,086 (−22.1 %; 5.71× human), close 1,170,099 → 2,057.**
-  add 5,139,300 → 4,926,695 (2.67×). sub unchanged at 7,985,276.
+  add 5,139,300 → 4,926,695 (2.67×).
+- **Order-antisymmetry and mask identity** (`ix96`): a two-premise Farkas `λ=(1,1)` refutation
+  (`a≤b`, `b<a`) closes in **40** (ordinary) / **84** (negated); a mask-substitution identity search
+  closes two more. **sub 7,985,276 → 6,646,550 (−16.8 %; 5.18× human), close 2,554,010 → 1,217,732.**
 - Not established: `equals_thm`/`axioms()` re-checked in-run (no offline harness yet),
   matched-session accounting, timing medians.
 
