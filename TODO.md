@@ -4667,3 +4667,191 @@ Build a general pass per family; never a bespoke tactic per routine.
   loses (1.224×). This is not a lower bound, only a statement about the current architecture.
 - [ ] **XXIV.K4.** The review's subjective score table (vision 9.5, methodology 9.5, …) is **[reviewer]**
   and is not a measurement; do not cite it as evidence.
+
+---
+
+# XXV — Intake 2026-11-27 (third): witness compilation is the mechanism; stop expanding the backlog
+
+Nothing omitted. This section records the third external review of `0b3a2a3` and the two follow-up
+corrections. It **supersedes** `XXIV.C` (execution order) and **amends** `XXIV.A1`, `XXIV.A4` and
+`XXIV.E`. `XXIV` text is kept; the corrections are appended here. Tags as in `XXIV.0`:
+**[measured]**, **[derived]**, **[reviewer]**, **[plan]**.
+
+## XXV.0 — Corrections of record (append-only)
+
+- [ ] **XXV.0.1. The mutation score is reachability-strength, not assertion-strength.** Each mutant
+  replaces `Err(Refused::new(..))` with `Ok(todo!())`; `todo!()` panics, so **any test that reaches
+  the site kills the mutant**, even one that never checks that the refusal happened. `101/101` at this
+  strength measures coverage of the site, not that every refusal is asserted. Until the second
+  operator in `XXV.E` runs, every published figure says **"reachability-strength"** and nothing more.
+  (The two survivors closed in IX.90 were genuine: those sites had no test at all.)
+- [ ] **XXV.0.2. Absolute phase dominance is diagnostic, not compulsory.** Amend `XXIV.A1`. A cheaper
+  **total** proof remains a valid total-cost victory even if one phase becomes more expensive. Report
+  every phase absolutely and name any regression, but do **not** make per-phase non-regression a
+  constraint on the optimiser. The objective is the total under the stated accounting; the phase table
+  is the diagnostic that stops a coincidence from being sold as a win.
+- [ ] **XXV.0.3. "Strict" means strict.** Amend `XXIV.A4`. Matching is not winning: a strict
+  inference-count victory requires `L + T < H`, i.e. for integer counts `L ≤ H − T − 1`. The earlier
+  `L ≤ H − T` permits a tie. `X = H − T − 1` per task; every `X` is still negative today, so the
+  precondition `T < H` is unchanged.
+- [ ] **XXV.0.4. Resolve the execution-order contradiction.** `XXIV.A4` says task-specific cost must
+  fall before library linking can deliver a strict win, but `XXIV.C` scheduled full
+  dependency-minimal linking (P2) before certificate replay (P5). **Measure the library first, then
+  pursue whichever mechanism offers the greatest experimentally supported reduction.** The order in
+  `XXV.C` replaces `XXIV.C`.
+- [ ] **XXV.0.5. CI is not yet fully green.** The latest workflow passed cargo tests, clippy, the
+  OCaml elaboration gate and all three mutation stages, then was **cancelled during the scaffold
+  self-test**; the previous completed run failed at the guard mutation stage. A complete green run of
+  `.github/workflows/ci.yml` is still outstanding (`XXV.F`).
+- [ ] **XXV.0.6. No arithmetic compiler or checker implementation changed between `458ab05` and
+  `0b3a2a3`.** All inference baselines are unchanged. Do not quote a new performance number that is
+  not backed by a new run on the tree that contains the change.
+
+## XXV.A — Proof amplification: a new reported metric (ledger L9)
+
+Define, for one theorem:
+
+`A = I_expanded / N_certificate_operations`
+
+where `I_expanded` is the primitive inferences the same-kernel expansion costs and
+`N_certificate_operations` is the number of certificate steps (e.g. `LinearCombination`,
+`CanonicalResidue`). It measures how compactly the certificate **represents** the derivation.
+
+- [ ] **XXV.A1.** Add **L9 = proof amplification** to the ledger list of `XXIII.0`, never merged with
+  L1–L8. It is **not** a speedup: different operations cost different amounts. Report separately:
+  checking wall time, CPU cycles, certificate bytes, and the cost of establishing the reusable rules.
+- [ ] **XXV.A2.** The review's illustrative `3,000,000 / 1,000 = 3,000×` is **[reviewer]**, a model,
+  not a Tekmerion result. Do not publish it as a measurement.
+- [ ] **XXV.A3.** Report L9 only once a certificate backend exists (`XXV.C` step 4); until then mark it
+  **not measurable** rather than inventing a denominator.
+
+## XXV.B — Witness compilation becomes ASC's defining mechanism
+
+The review's strongest recommendation: the compiler must **recover the mathematical witnesses from the
+instruction-derived structure**, not from the human proof scripts. For a modular result the decisive
+witness is a quotient, selector or correction coefficient: recover `x − r = q·p` and certify
+`0 ≤ r < p`; that establishes the canonical residue.
+
+- [ ] **XXV.B1.** Human proofs are the **competitive baseline, not a hidden input**. The witness must
+  be derivable from the lifted per-limb equations and the goal alone. Acceptance: the same witness is
+  produced when the human proof text is unavailable to the producer (record that the producer never
+  read it).
+- [ ] **XXV.B2. Negation witness compiler prototype first** (`XXV.C` step 3). The witness is
+  `q = [a > 0]`, `r = q·p − a` for `0 ≤ a ≤ p`, including `a = 0` and `a = p`. Derive `q` from the
+  borrow/zero-test flags in the instruction equations, prove `0 ≤ r < p` by certificate replay, and
+  close with the upstream congruence lemma. Acceptance: `equals_thm` against the upstream `_CORRECT`;
+  the witness printed with its derivation; human proof text not consulted.
+- [ ] **XXV.B3.** Then the same mechanism for `sub` (`q = if m < n then −1 else 0`) and `add`
+  (`q = [s ≥ p]`, selector constraints `p·s ≤ s'`, `s' ≤ p − 1 + p·s`).
+- [ ] **XXV.B4.** Do **not** wait for ASC-IR, a proof VM, or the native kernel. A small, sound,
+  end-to-end witness experiment outranks a hundred architectural requirements.
+
+## XXV.C — Execution order (supersedes `XXIV.C`)
+
+| priority | deliverable | done criterion (pre-registered here) |
+|---|---|---|
+| 1 | Fully green CI | One complete green run of `.github/workflows/ci.yml`; receipt with the run id. |
+| 2 | Measured matched-session baselines | L7 library cost measured once; three totals per task (strict / matched / amortised) under `XXIII.P3`; `X = H − T − 1` computed per task. |
+| 3 | Negation witness compiler prototype | `equals_thm` on neg; witness derived from instruction equations; closing phase recorded absolutely; human proof text not read. |
+| 4 | Sparse certificate replay replacing `INT_ARITH_TAC` | Same theorem; close phase strictly below the human close (neg 44,425 · add 49,680 · sub 90,227) or a recorded reason it cannot be. |
+| 5 | New inference counts, exact theorem equality and timing | A receipt table: task · human · strict · matched · L9 · wall median-of-5 · `equals_thm`. Losses stay in. |
+| 6 | Dependency-minimal support library | The indirect closure needed per theorem is computed and constructed; the library cost drops from 1.5M, with the amount pre-registered before the run. |
+| 7 | First strict-accounting victory | `L + T < H` on at least one task, with `equals_thm`, zero hypotheses, `axioms()` unchanged. |
+| 8 | Generalisation to subtraction and addition | The same frozen compiler wins on `sub` and `add` with no per-task patch (V4). |
+
+- [ ] **XXV.C1.** Note that `XXV.C` steps 3 and 4 ("neg witness", "certificate replay") run at the
+  **same stage**; AGENTS §2 still requires one subagent at a time, so "parallel" means planned together,
+  executed sequentially.
+- [ ] **XXV.C2.** Measure the library (step 6) **before** committing to a large linking effort, then
+  let the measured reduction choose between library work and certificate work. Do not let the schedule
+  become an assumption that survives contrary evidence.
+
+## XXV.D — Pre-registered numbers for P4, P6, P7, P8 (no post-hoc "done")
+
+The general acceptance rule ("a receipt, not a look") is not enough for these; the number is fixed
+**before** the run and reported whether or not it is met.
+
+- [ ] **XXV.D1. P4 — normalise once.** Instrument the number of times each aggregate is normalised per
+  branch; target **exactly 1**. Pre-register the fact-phase drop: on `add` at least the IX.86 measured
+  **477,376** (aggregate-fact 1,178,682 → ≤ 701,306); on `sub`/`neg` at least **20%**
+  (sub 2,155,782 → ≤ 1,724,626; neg 1,511,696 → ≤ 1,209,357). A miss is published as a miss.
+- [ ] **XXV.D2. P6 — congruence-plus-range negation route.** `neg` **non-simulation** task cost
+  `< 192,611` (so that with a simulation cache at the human level the total can beat 721,473), and the
+  closing phase `< 44,425` (the human neg close). Report both absolutely.
+- [ ] **XXV.D3. P7 — step-theorem cache, moved next to P5.** Done criterion: `neg` **simulation**
+  measured in absolute inferences against the human's **528,166**. Pre-register two thresholds:
+  (i) at most 528,166 (match); (ii) at most **100,000** (the 5.3× cut that raises the arithmetic
+  allowance from ≈192K to ≈620K). It changes how hard the negation target is, so it runs **with**
+  step 3–4, not after step 8. Prior art anchor: Fox measured inference counts too (see `XXV.H3`).
+- [ ] **XXV.D4. P8 — sparse arithmetic IR.** `arm/add_p256` emits at least one aggregate (today
+  `aggregates=0`); `x86/add` closes without exhausting the 12 G cap; an interleaved `ADCX`/`ADOX`
+  routine is handled. Report the cap peak for each.
+
+## XXV.E — Mutation operator 2: silent acceptance
+
+The `Ok(todo!())` operator proves a test **reaches** the site. The failure a checker must not have is
+**accepting what it should refuse**, which `todo!()` cannot model because it panics.
+
+- [ ] **XXV.E1.** Add a second operator that turns a refusal into **silent acceptance**: delete the
+  guard condition, or replace the refusal with `Ok(<plausible value>)`, so execution continues as if
+  the input were valid. A mutant survives unless a test **asserts** the refusal. Apply it to the same
+  sites as the existing harness (`guard.rs`, `freeze.rs`, and the `refuse!` sites in `lib.rs`/`wire.rs`).
+- [ ] **XXV.E2.** Report **two** scores separately (`reachability` and `assertion`); never merge them.
+  Until operator 2 runs, label the current `101/101` **reachability-strength**.
+- [ ] **XXV.E3.** Classify and document any surviving assertion-strength mutant as either a missing
+  assertion (fix the test) or an equivalent mutant (record why, with evidence), as `EQUIVALENT` does.
+- [ ] **XXV.E4.** The harness must fail the build when any valid assertion-strength mutant survives.
+
+## XXV.F — CI green (priority 1)
+
+- [ ] **XXV.F1.** Obtain one complete green run of `.github/workflows/ci.yml` on `staging`; record the
+  run id and the step list. The last attempt was cancelled during the scaffold self-test, not failed
+  there — do not describe a cancellation as a pass.
+- [ ] **XXV.F2.** Green CI is a release precondition; `main` is not moved while any stage is red or
+  cancelled.
+
+## XXV.G — Freeze the research backlog
+
+- [ ] **XXV.G1.** No new research programme, architecture document or objective list until either
+  (a) the first strict-accounting victory (`XXV.C` step 7), or (b) a recorded stop. The existing
+  agenda (structure recovery, sparse elimination, certificate compilation, proof optimisation, native
+  checking, formal soundness, executable refinement, incremental evidence, MM0) is sufficient.
+- [ ] **XXV.G2.** A literature sweep is permitted only when it feeds an experiment already scheduled
+  in `XXV.C`; its output is an extraction, not a new backlog (`XXV.H`).
+
+## XXV.H — Targeted literature requirements (not a new backlog)
+
+The review asks for novel/inverted combinations; the rule is that each search must be tied to a
+scheduled experiment and logged before any novelty wording (`XXIV.I2`, `XXIV.I3`).
+
+- [ ] **XXV.H1. Witness compilation / canonical residues.** Search for prior art that **derives**
+  quotient/selector witnesses from machine-code arithmetic for modular correctness (as opposed to
+  supplying them by hand, as CoqCryptoLine's assembly models do). Log queries and hits.
+- [ ] **XXV.H2. Proof amplification.** Search for "proof amplification", "certificate operations vs
+  primitive inferences", "proof compression ratio" with an explicit denominator. Record whether any
+  work reports a certificate-operations count alongside an expanded-inference count.
+- [ ] **XXV.H3. Fox's inference counts (correction to `XXIII.D1`).** Fox ITP 2015 Tables 2–3 are headed
+  **"decompilation time (and inferences)"**; they give counts such as `142.5 s (73,039 i)`,
+  `20.3 s (3.3 Mi)` → `0.03 s (8,435 i)` for the 1024-bit addition warm state, i.e. a **≈391×
+  inference reduction** from the step-theorem cache, not a wall-time-only result. Verified against the
+  author PDF (`https://r.jina.ai/https://acjf3.github.io/papers/itp15.pdf`) on 2026-11-27. This
+  corrects the `XXIII.D1` sentence "that measured wall time in HOL4, not an inference count".
+  Caveats: HOL4, model-evaluation only, warm state, table columns misaligned in the extraction — do
+  not attribute a per-row figure beyond the arithmetic above.
+- [ ] **XXV.H4. Mutation operators.** Record the standard operator taxonomy (value replacement,
+  condition-negation, guard-deletion, silent-acceptance) and cite the mutation-testing source used;
+  the point is that `todo!()` substitution is a reachability operator, not an assertion operator.
+- [ ] **XXV.H5. Silent-acceptance precedent in verified checkers.** Search whether verified checkers
+  (CakeML/Candle, Carcara, cake_lpr, MM0) have adversarial "should reject" test suites, and record the
+  pattern. Do not claim novelty for adversarial negative testing.
+
+## XXV.I — What the review confirms and what it does not change
+
+- [ ] **XXV.I1.** The strict-win table (`XXIV.A4`) is correct in form; only the inequality tightens
+  (`XXV.0.3`). Every `X` is negative today.
+- [ ] **XXV.I2.** Dropping share-matching for absolute per-phase reporting is confirmed; only its
+  compulsory status changes (`XXV.0.2`).
+- [ ] **XXV.I3.** The review's subjective scores (vision 9.5, methodology 9.6, engineering 8.8, …) are
+  **[reviewer]** and are not measurements; do not cite them as evidence.
+- [ ] **XXV.I4.** Native checker soundness, independent checker comparison, and human-proof
+  outperformance remain **unestablished**. No document may imply otherwise.
