@@ -31,8 +31,9 @@ use tekmerion::tools::{curve_check, dropin};
 /// builder, the negated-literal linear parser, and the aggregate-band fact),
 /// `070ed5b4…` (after IX.83's generalisation: the top-bit mask split, the
 /// zero-test/OR fold, the x86 `bit` bound, the shared sub/neg entry points,
-/// and the non-chain-equality close set).
-const BRIDGE_DIGEST: &str = "070ed5b4de5f2c42598c9cd9c5cc14a16603b2a80d10ce8c9e80c010b2885448";
+/// and the non-chain-equality close set), `6c5bc534…` (after XXIII.B1's
+/// per-carrier aggregate premise fast path (bridge.ml)).
+const BRIDGE_DIGEST: &str = "6c5bc534db3c035c32a5bc1414ebd8c0457d0f92d3160dea4ecf1f059ad515fa";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -169,11 +170,15 @@ fn instrument_reproduces_the_recorded_output() {
     // bridge_failure_contains and bridge_math_failure_shape, the allow-list)
     // -> 217 (IX.78 adds the oracle close) -> 221 (XIX.A adds the four sum
     // bound helpers) -> 232 (XIX.C1 adds the aggregate builder, its chain and
+    // -> 232 (XIX.C1 adds the aggregate builder, its chain and
     // weight helpers, the linear-combination proof and the aggregate-band fact).
+    // 249 after XXIII.B1's per-carrier aggregate premise fast path in
+    // `bridge_aggregate_facts` (the phrase count is unchanged; only the body of
+    // the two fact provers moved).
     assert_eq!(phrases, 249);
     assert_eq!(
         sha256(out.as_bytes()),
-        "f84b7582f82f4ea43d4f2b40985f6f1779705dffd75d67367517ca05f2fb5715"
+        "6146cf4e168ff00b84db2d5007b076dbf06e1f638c979d8363ecafbc7471ecaf"
     );
 }
 
@@ -281,22 +286,30 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     //   add-p384  91083c8163cca271005806aea20d9a7147adbbf247db33f39c93994412a3c640
     // `tools/bridge.ml` gained the four sum-bound helpers (XIX.A), so every
     // inlined answer carries new library text.  The SAT tactics are unchanged.
+    // XXIII.B1 boundary. The XIX.C1 digests were:
+    //   add-ref   55920f3e4b9cc42d075c22be8d3ad156c20dd2ff191e7d49882a357c8984ee2c
+    //   sub       78a05032259a798c035adb9a6b8bd5926bb11ade48835456025cbf891048b50c
+    //   neg       f67d0350a4f1ebab2af9e1c62e841a71d8d24188c3f91b8268c531b2dfb18cbe
+    //   add-p384  a50237816f2236d585ae80e0a467d3f1e7eff927bc2d8118210e55c6072fbc6d
+    // XXIII.B1 changed `bridge_aggregate_facts` to try only the aggregate(s) that
+    // mention a carrier before falling back to the full list. The library text
+    // moved, so every inlined answer moved; the tactics are unchanged.
     for (mode, digest) in [
         (
             "add-ref",
-            "55920f3e4b9cc42d075c22be8d3ad156c20dd2ff191e7d49882a357c8984ee2c",
+            "a5438cd259f62c3c86a971657500dfe53f39b8d40048c59364704bb53ec55cf6",
         ),
         (
             "sub",
-            "78a05032259a798c035adb9a6b8bd5926bb11ade48835456025cbf891048b50c",
+            "0da52876c0c3e53af3bfc0d93aaa4b838b761705ca5d1505528be6f6f3444095",
         ),
         (
             "neg",
-            "f67d0350a4f1ebab2af9e1c62e841a71d8d24188c3f91b8268c531b2dfb18cbe",
+            "7683ed21c0d3e5d32fa5f56e9e004026ec130e058c409d97ae634112ae6a0b10",
         ),
         (
             "add-p384",
-            "a50237816f2236d585ae80e0a467d3f1e7eff927bc2d8118210e55c6072fbc6d",
+            "b8b68f7211caa87ce84312e135a037d89d16b2c12bff954bca7c367560bcdbd2",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
