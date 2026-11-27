@@ -126,6 +126,18 @@ jobs:
           rustc --version
           cargo --version
 
+      # The lifecycle harness runs the full test suite via `cargo run --bin
+      # mutate_lifecycle`, which includes the answer-elaboration gate (needs
+      # `ocamlc`) and the ARM disassembly tests (need `aarch64-linux-gnu-objdump`).
+      # Jobs do not share installed packages, so this job must provision them
+      # itself. Nothing is skipped: a missing tool fails the harness.
+      - name: Install test prerequisites (OCaml front end + AArch64 binutils)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ocaml-nox binutils-aarch64-linux-gnu
+          ocamlc -version
+          aarch64-linux-gnu-objdump --version | head -1
+
       - name: Prime crate cache
         run: cargo fetch --locked
 
