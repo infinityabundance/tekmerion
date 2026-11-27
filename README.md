@@ -25,13 +25,14 @@ what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
   5,268,391** (2.85× human), **sub 8,217,594** (6.40×), **neg 5,683,733** (7.88×, unchanged —
   its proof has one aggregate, so the selection is a no-op). The published crates.io 0.2.0
   artefact predates this; these are repository measurements, not a crate release.
-- **Latest measurement (append-only, 2026-11-27, `2c380a2`, receipts `ix92`–`ix96`):** the slim close,
-  the propositional/range/order refutations, and the literal/AC complement, linear-identity and
-  mask-substitution certificates bring the strict totals to **add 4,926,695** (2.67× human),
-  **sub 6,646,550** (**5.18×**), **neg 4,121,086** (**5.71×**). For `neg`, the entire close is now
-  closed by certificates: **1,170,099 → 2,057** across all ten branches, with no slim and no
-  `INT_ARITH` of the goal. For `sub`, an order-antisymmetry refutation (**40–84** inferences) closes
-  12 of 24 branches. The crates.io 0.2.0 artefact predates all of this.
+- **Latest measurement (append-only, 2026-11-27, `d4f1bcc`, receipts `ix92`–`ix97`):** the slim close,
+  the propositional/range/order refutations, and the literal/AC complement, linear-identity,
+  mask-substitution and sparse-Farkas certificates bring the strict totals to **add 4,396,406**
+  (**2.38×** human), **sub 6,259,618** (**4.88×**), **neg 4,121,086** (**5.71×**). For `neg`, the
+  entire close is closed by certificates (**1,170,099 → 2,057**); for `add`/`sub` the close is
+  **786,931 → 259,274** and **2,554,010 → 831,616**. Cumulative since IX.89: add −23.5 %, sub
+  −30.7 %, neg −27.5 %. All certificates are derived-rule kernel proofs (no `INT_ARITH` of the goal,
+  no new axiom). The crates.io 0.2.0 artefact predates all of this.
 - **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
   upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,
   whole-tree `make` green).

@@ -5153,10 +5153,19 @@ level produces a kernel proof; a level that cannot prove inconsistency falls thr
   (`INT_LET_ANTISYM`/`INT_LT_ANTISYM`, **40–84** inferences), 2 by a mask-substitution identity
   (2,177/3,322). `add` and `neg` unchanged. Classification in
   `research/receipts/xxvii-sub-add-branch-classification.md`.
-- [ ] **XXVII.B11. General sparse Farkas certificate (level 4).** The remaining close is `sub`
+- [x] **XXVII.B11. General sparse Farkas certificate (level 4).** The remaining close is `sub`
   1,217,732 (7 slim + 3 full) and `add` 786,931 (8 slim + 1 full) — 19 branches of genuine
   multi-premise linear arithmetic. Build nonnegative integer multipliers `λ` proving the goal from
-  the chosen few premises, construct the proof, and measure. This is the next large lever.
+  the chosen few premises, construct the proof, and measure. This is the next large lever. — **Done,
+  IX.97.** Derived-rule Farkas (supports ≤ 3, `INT_LE_MUL`/`INT_LE_ADD`/`INT_LET_ANTISYM`; search
+  costs 0 kernel inferences). Fired on 11 branches: **add 4,396,406** (−10.8 %; 2.38× human, close
+  259,274), **sub 6,259,618** (−5.8 %; 4.88×, close 831,616), `neg` unchanged.
+- [ ] **XXVII.B13. Aggregate-row Farkas, cheaply.** The 4 remaining slim branches (`sub` #15/#16/#22,
+  `add` #11) and the 3 `sub` full branches need the chain-aggregate **equation** in the certificate.
+  Exposing it as two inequalities and `INT_RING`-ing over it regressed (≈100K), so it was reverted
+  (IX.97 §3). Try instead: normalise the aggregate once and **eliminate one atom in the `Num` layer**
+  before the Farkas search, so the proof never `INT_RING`s the aggregate. Remaining close: sub
+  831,616, add 259,274.
 - [ ] **XXVII.B12. Reorder range after literal** (`XXVII.B8`): B8/B10 take range (170) where literal
   would close at 15. ≈310 inferences; fold into the next close change.
 - [ ] **XXVII.B10. `equals_thm` and `axioms()` inside the harness** (`XXVII.D`). Still outstanding and

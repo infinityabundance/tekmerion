@@ -21,6 +21,11 @@ per-answer totals by a constant).
 - **Order-antisymmetry and mask identity** (`ix96`): a two-premise Farkas `λ=(1,1)` refutation
   (`a≤b`, `b<a`) closes in **40** (ordinary) / **84** (negated); a mask-substitution identity search
   closes two more. **sub 7,985,276 → 6,646,550 (−16.8 %; 5.18× human), close 2,554,010 → 1,217,732.**
+- **Sparse Farkas certificate** (`ix97`): supports ≤ 3, derived-rule proof (`INT_LE_MUL`/`INT_LE_ADD`/
+  `INT_LET_ANTISYM`), no `INT_ARITH` of the goal, search costs 0 kernel inferences on no-match. Fired
+  on 11 branches: 100–110K → 6.7K and 56–110K → 4.6–8.2K. **add 4,926,695 → 4,396,406 (−10.8 %;
+  2.38× human), close 786,931 → 259,274. sub 6,646,550 → 6,259,618 (−5.8 %; 4.88×), close
+  1,217,732 → 831,616.** neg unchanged at 4,121,086.
 - Not established: `equals_thm`/`axioms()` re-checked in-run (no offline harness yet),
   matched-session accounting, timing medians.
 
