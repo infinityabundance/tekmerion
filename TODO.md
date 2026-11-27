@@ -5039,3 +5039,140 @@ library cost).
 
 - [ ] **XXVI.G1.** No new programme documents until the neg witness result (or a recorded stop).
   `XXV.G` stands. The next artefact is a measurement, not a plan.
+
+---
+
+# XXVII — Intake 2026-11-27 (fifth): the close is refuting branches that should not exist
+
+Nothing omitted. Records the fifth review of `ed55b94` and the follow-up note. `XXVII.0` corrects
+`XXVI`/IX.92 statements; `XXVII.A` is the next milestone; the research backlog stays frozen
+(`XXV.G`).
+
+## XXVII.0 — Corrections of record (append-only)
+
+- [ ] **XXVII.0.1. IX.93 is the important result, not mainly for the 500×.** Two of the ten neg
+  branches are **propositionally inconsistent**; the 108-inference kernel refutation is a safety
+  net. The real finding is that neg's 1.36M closing phase is largely the cost of **case-splitting
+  too finely and then refuting branches that could not have happened**. The fix is to make two
+  branches, not to refute ten (`XXVII.A`).
+- [ ] **XXVII.0.2. Fix the phase instrumentation before any further phase claim.** `XXVI.C7`: the
+  `bridge:pre-close` / `bridge:post-close` anchors sit inside the `| None ->` fallback, so phase D
+  bills only fallbacks. Move them to bracket the whole close. IX.92 §3 already states this; no new
+  phase-level number is published until it is fixed.
+- [ ] **XXVII.0.3. Correct the IX.92 magnitude.** IX.92 §4 says the neg close is "three orders of
+  magnitude above the human closing phase". The ratio is **1,364,282 / 44,425 ≈ 30.7×**, i.e. ≈1.5
+  orders, and the two numbers must be compared at **equivalent phase boundaries**. Append the
+  correction to `research/receipts/ix92-slim-close.md` (do not rewrite).
+- [ ] **XXVII.0.4. Keep IX.92 and IX.93 separate.** IX.93's probe ran against the **full-close**
+  baseline; subtracting its 107,691 from IX.92's 5,469,909 is not a valid cumulative figure. Only a
+  combined experiment may add them.
+- [ ] **XXVII.0.5. Preserve the IX.93 harness.** The executable probe is in git-ignored `.bench/`.
+  Commit a reproducible harness and the inputs needed to regenerate it (`XXVII.F`), or the most
+  interesting result of the round is not externally reproducible.
+- [ ] **XXVII.0.6. CI P0 is a missing dependency, not a code failure.** The isolated mutation job
+  fails `the_committed_answer_parses_with_the_real_ocaml_front_end` with "ocamlc is required"; the
+  lifecycle harness runs the full suite and needs OCaml. Add `ocaml-nox` and
+  `binutils-aarch64-linux-gnu` to the mutation job. **Do not weaken the elaboration gate.**
+- [ ] **XXVII.0.7. Derived matched-session ratios at IX.92** **[derived]**: add 3,641,239 = **1.97×**
+  (further task-specific reduction 49.2 %), sub 6,487,297 = **5.06×** (80.2 %), neg 3,972,557 =
+  **5.51×** (81.8 %). Derived, not measured.
+- [ ] **XXVII.0.8. Neg counterfactual:** if aggregate-fact construction and the entire close region
+  were free and library construction excluded, neg would still cost ≈**1,096,579** against the human
+  721,473. Pruning must remove **upstream** work, not just the last tactic.
+
+## XXVII.A — Two branches, not ten (the next milestone)
+
+The human proof has **one case per witness shape** (two total). The generated proof has ten. Split
+**once** on the witness selector `q = [n ≠ 0]`, giving one branch per shape, each closed by its
+witness and a certificate.
+
+- [ ] **XXVII.A1. Pre-register the target before the first run.** For `arm/neg_p25519`:
+  (i) **branches = 2** (down from 10); (ii) **closing phase < 44,425** (the human neg close);
+  (iii) `equals_thm` and `axioms()` checked in the same run; (iv) SAT closes = 0.
+- [ ] **XXVII.A2. Check consistency before creating a branch.** An OCaml-side check of the candidate
+  condition set costs **no** kernel inferences; an inconsistent branch is never created. Record
+  branches avoided.
+- [ ] **XXVII.A3. Record, per branch-pruning experiment:** branches avoided · primitive inferences
+  generated · failed refutation attempts · aggregate constructions avoided · CPU time · wall time ·
+  peak RSS. A saving that is real must show up as **upstream work not generated**, not only as a
+  cheaper final tactic.
+- [ ] **XXVII.A4. The milestone is an entire proof**, not a local obligation: a complete `neg` proof
+  that benefits from the two-branch structure, measured end to end.
+
+## XXVII.B — A proof-producing feasibility pass (levels 0–5)
+
+Introduce a lightweight pass that prunes branches **with evidence**, cheapest level first. Every
+level produces a kernel proof; a level that cannot prove inconsistency falls through to the next.
+
+| level | mechanism | example |
+|---|---|---|
+| 0 | direct contradiction | `P ∧ ¬P` |
+| 1 | canonical propositional contradiction | IX.93's differently-associated conjunctions |
+| 2 | constant contradiction | `0 = 2^64` |
+| 3 | range contradiction | `x ≥ 0`, `x + 2^64 = 0` |
+| 4 | sparse linear certificate | contradictory arithmetic constraints |
+| 5 | witness compilation | the substantive remaining obligations |
+
+- [ ] **XXVII.B1.** Levels 0–1 are proved (IX.93); implement them as a general fast path with
+  fallback (WIP branch `wip/xxiii-g-propref` already contains an unverified implementation to build
+  on).
+- [ ] **XXVII.B2.** Level 3 is a candidate from the dump (`XXVII.C`). Implement a range-contradiction
+  rule: from `0 ≤ a` and `a + k = 0` with `k > 0`, derive `⊥`.
+- [ ] **XXVII.B3.** Move the check **as early as mathematically justified** (`XXVII.A2`), so the
+  normalisation, split, bounds and mask work is never spent on a dead branch.
+- [ ] **XXVII.B4.** Do not pay for arithmetic reasoning until the compiler has established that
+  arithmetic reasoning is necessary.
+
+## XXVII.C — The OR-fold bug hypothesis (investigate before building the selector)
+
+Branches 8 and 10 carry the folded OR test `val(word_or …) + 2^64 = 0` **twice**. That is
+unsatisfiable: `val` is non-negative, so `val(x) + 2^64 ≠ 0`.
+
+- [ ] **XXVII.C1.** Determine the root cause: either a case split assigned a carry of 1 to an
+  equation whose result is zero, or the OR-test folding mis-folds a `bitval` term. Acceptance: a
+  recorded root cause naming the exact step/rewrite, or a proof that the two extra equations cannot
+  both hold **and** a statement of how they arise.
+- [ ] **XXVII.C2.** Do not build the OR-reduction selector (`XXVI.C3`) on top of the folding until
+  `C1` is resolved; if it is a folding bug it may be the source of the vacuous branches, and the
+  selector bridge would inherit it.
+- [ ] **XXVII.C3. Classify all ten neg branches**: propositional contradiction (measured: 1, 7) ·
+  range contradiction (candidate: 8, 10) · requires arithmetic · witness branch. Report per branch.
+
+## XXVII.D — `equals_thm` and `axioms()` in every run
+
+- [ ] **XXVII.D1.** Move the statement check and the axiom check **into the measurement harness**, so
+  every receipt carries them automatically (`equals_thm` against the upstream `_CORRECT`, zero
+  hypotheses, `axioms()` unchanged). No receipt may say "inherited".
+- [ ] **XXVII.D2.** A run that cannot perform the check says so and is not a victory claim.
+- [ ] **XXVII.D3.** A regression that changes the statement cannot pass between rounds.
+
+## XXVII.E — CI green (P0)
+
+- [ ] **XXVII.E1.** Add to the mutation job:
+  `sudo apt-get install -y --no-install-recommends ocaml-nox binutils-aarch64-linux-gnu`.
+- [ ] **XXVII.E2.** Do not weaken the OCaml elaboration gate; it is correctly refusing an
+  under-provisioned environment.
+- [ ] **XXVII.E3.** Obtain a complete green workflow and record the run id (`XXV.F1`).
+
+## XXVII.F — A reproducible experiment harness
+
+- [ ] **XXVII.F1.** Commit a tracked harness for the branch probe (OCaml or Rust — Tekmerion-owned
+  tooling is not Python; `.bench/` scratch may remain as it is) with the exact inputs and the
+  regeneration commands.
+- [ ] **XXVII.F2.** The harness must record the per-branch full/slim/min/cert inference deltas, the
+  route taken, and the attempt costs separately from the proof cost.
+
+## XXVII.G — Next branch-pruning experiment report format
+
+- [ ] **XXVII.G1.** For the two-branch split, publish: branches avoided · inferences generated ·
+  failed refutations · aggregates avoided · CPU · wall · peak RSS · `equals_thm` · `axioms()`.
+- [ ] **XXVII.G2.** Keep the IX.92 and IX.93 figures in separate columns; no cross-experiment
+  subtraction.
+
+## XXVII.H — Targeted literature (backlog frozen)
+
+- [ ] **XXVII.H1.** Search only for mechanisms tied to `XXVII.A`/`XXVII.B`: proof-producing
+  feasibility/unreachability elimination, certified dead-branch pruning in verified compilers,
+  range-contradiction certificates, and selector-driven case splitting. Log queries and hits in
+  `research/receipts/xxvii-search-log.md`; add rows to the novelty register only with a class.
+- [ ] **XXVII.H2.** No new programme documents. The next artefact is a measurement.

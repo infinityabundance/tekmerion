@@ -100,3 +100,12 @@ re-pinned from 91 to 92 with a boundary comment.
 - **No timing claim.** Wall times 27–32 s are observations, not medians of five.
 - **Phase D attribution on this branch is artefactual** (§3).
 - **`neg` remains 7.58× human.** This is a 3.76 % improvement, not a competitive result.
+
+## Correction of record (2026-11-27, appended)
+
+- §4 said the neg close is "three orders of magnitude above the human closing phase". The ratio is
+  **1,364,282 / 44,425 ≈ 30.7×**, i.e. **≈1.5 orders of magnitude**, and it compares the generated
+  close region with the human final-arithmetic phase; read it at equivalent phase boundaries. The
+  original sentence is kept above; this line corrects it.
+- IX.93's probe ran against the **full-close** baseline. Its 107,691 saving must not be subtracted
+  from this receipt's 5,469,909 to form a cumulative figure; only a combined experiment may add them.
