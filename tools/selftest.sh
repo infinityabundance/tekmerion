@@ -43,6 +43,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "1b/7 carry-certificate bound selftest (exact rationals, no HOL Light)"
+
+# XXX.A4: the numeric core of the carry certificate is extracted verbatim and
+# checked against a semantic oracle over a small grid.  No proof build, no
+# bench; the pre-fix join rule and `v-1' tightening are required to fail.
+if bash tests/cert_bounds_selftest.sh; then
+  printf 'OK: cert_bounds_selftest passed\n'
+else
+  fail "cert_bounds_selftest failed"
+fi
+
+# ---------------------------------------------------------------------------
 section "2/7 runner script syntax"
 
 if bash -n tools/run_traces.sh; then

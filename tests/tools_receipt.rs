@@ -79,7 +79,13 @@ use tekmerion::tools::{curve_check, dropin};
 /// scope and the weighted modulus bound, by exact `Num` arithmetic first and a
 /// kernel-checked `INT_ARITH` over only the premises that bound used; the old
 /// band/fact provers remain the unchanged fallback).
-const BRIDGE_DIGEST: &str = "00ff20c5a2f19b2debcbea52e52260c8cd3040923304167cd5ac6cb8b948eb33";
+/// `576316b6…` (after XXX.A's bound-arithmetic fixes: `bridge_cert_join_lo`
+/// takes the maximum lower bound, `bridge_cert_bound` rounds a rational
+/// division to the exact integer endpoint, and `bridge_cert_hi` tightens a
+/// strict bound with `ceil(q)-1`/`floor(q)` on an integer-valued form instead
+/// of a blanket `-1`.  The numeric core is now a standalone block
+/// (`BRIDGE_CERT_STANDALONE`) so it can be tested outside HOL Light.)
+const BRIDGE_DIGEST: &str = "576316b6aba87631c94c6550da4e5977e0fdf1f09d24340258e848e83e57b89c";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -270,11 +276,14 @@ fn instrument_reproduces_the_recorded_output() {
     // `dc218bd4...`.  XXIX.B's carry-bound certificate adds fourteen top-level
     // phrases (the bound reader, the interval table, the recursive relational
     // bound, the exact elimination, the shape derivation and the certificate),
-    // so 262 -> 276 and the output digest moved `dc218bd4...` -> `0163d207...`.
-    assert_eq!(phrases, 276);
+    // 262 -> 276 and the output digest moved `dc218bd4...` -> `0163d207...`.
+    // XXX.A's bound-arithmetic fixes add three top-level phrases (the exact
+    // endpoint core, the integer-form test and the endpoint tightening), so
+    // 276 -> 279 and the output digest moved `0163d207...` -> `19fb6f94...`.
+    assert_eq!(phrases, 279);
     assert_eq!(
         sha256(out.as_bytes()),
-        "0163d20737e22df2b532c31049ed7b6e26a6027d8fe6361bfe8a3ca377b57353"
+        "19fb6f949f90b2bde72d12b6ead458e7b43ca4d3fd2a36d4294b51fdf22a14a2"
     );
 }
 
@@ -323,7 +332,9 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXVIII.C5 adds the carrier helper and the hoist tactic: 304 -> 306.
     // XXIX.B adds fourteen top-level `let` phrases to bridge.ml (the carry-bound
     // certificate and its interval/shape/elimination helpers): 306 -> 320.
-    assert_eq!(parts.len(), 320);
+    // XXX.A adds three top-level `let` phrases to bridge.ml (the exact endpoint
+    // core, the integer-form test and the endpoint tightening): 320 -> 323.
+    assert_eq!(parts.len(), 323);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -435,22 +446,25 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // certificate adds fourteen top-level phrases to bridge.ml, so every
     // inlined answer carries the new library text (the emitted tactics are
     // byte-identical; only `bridge_aggregate_facts` gained a fast path).
+    // XXX.A boundary.  The XXIX.B digests are retired: the bound-arithmetic
+    // fixes add three top-level phrases (and rewrite two), so every inlined
+    // answer carries the new library text; the emitted tactics are unchanged.
     for (mode, digest) in [
         (
             "add-ref",
-            "2e98782c6704c2be8bdef74531efc3964f12ba18b1264fdd719ed8625fa50528",
+            "b0788f3a645d23cc1a28f5cb523e6f2fa62b2ed2f1761a3c474d09ed24d45cfd",
         ),
         (
             "sub",
-            "585b0e85e8a666048a2c3b2fafd58d8bd8513c5416816a9b43219fc7364b3878",
+            "7f88aff96ab1f2d4ce18eadcf2539489002612722af58f7930440d2a94a234f8",
         ),
         (
             "neg",
-            "0deb5f43c9d47f86459766a73539d464588db478e7d3b6f0215495500be03910",
+            "6a9f04d40c67b4879607d8c0fda147f37b4ce7664a04e50fc367eb75aadc6bf9",
         ),
         (
             "add-p384",
-            "9eb344da3ecb068d3d9d2732390f9fce49103286a6aca377f9f2fbc2bd97945c",
+            "48c5b22d0c493519ede59f689e12b5b5093ebf0a2d4d0b7a7c30c4d3f4d6c5af",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
