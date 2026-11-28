@@ -73,119 +73,119 @@ line 1261: CLEAN
 line 1271: CLEAN
   !(x:N word).
 line 1753: CLEAN
-  !x:M word y:N word.
+  :int
 line 1786: CLEAN
-  !x:M word y:N word.
+  :int
 line 1789: CLEAN
-  !x:M word y:N word.
+  :int
 line 1797: CLEAN
+  :int
+line 1897: CLEAN
   !x:M word y:N word.
-line 1882: CLEAN
-  !x:M word y:N word.
-line 1919: CLEAN
+line 1934: CLEAN
   !x:N word y:N word.
-line 1936: CLEAN
+line 1951: CLEAN
   !x:N word y:N word.
-line 2105: CLEAN
+line 2120: CLEAN
   :int
-line 2108: CLEAN
+line 2123: CLEAN
   :int
-line 2508: CLEAN
+line 2523: CLEAN
   :int
-line 2564: CLEAN
+line 2579: CLEAN
   (-):int->int->int
-line 2569: CLEAN
+line 2584: CLEAN
   (-):int->int->int
-line 2585: CLEAN
+line 2600: CLEAN
   (-):int->int->int
-line 3454: CLEAN
+line 3469: CLEAN
   (<):num->num->bool
-line 3457: CLEAN
+line 3472: CLEAN
   (<):num->num->bool
-line 3508: CLEAN
+line 3523: CLEAN
   (<):num->num->bool
-line 3521: CLEAN
+line 3536: CLEAN
   (<):num->num->bool
-line 3635: CLEAN
+line 3653: CLEAN
   (MOD):num->num->num
-line 3636: CLEAN
+line 3654: CLEAN
   (MOD):num->num->num
-line 3667: CLEAN
+line 3685: CLEAN
   (rem):int->int->int
-line 3668: CLEAN
+line 3686: CLEAN
   (rem):int->int->int
-line 3740: CLEAN
+line 3758: CLEAN
   !a p:num. (a + p) MOD p = a MOD p
-line 3745: CLEAN
+line 3763: CLEAN
   !m n p:num. n <= p ==> (m + p) - n = m + (p - n)
-line 3750: CLEAN
+line 3768: CLEAN
   !a b p:num. b <= a /\ a < p ==> a - b = (a + p - b) MOD p
-line 3759: CLEAN
+line 3777: CLEAN
   !a b p t s:num.
-line 3772: CLEAN
+line 3790: CLEAN
   !(pw:W word) (x:W word) (y:W word).
-line 3796: CLEAN
-  !p (x:W word) (y:W word).
 line 3814: CLEAN
+  !p (x:W word) (y:W word).
+line 3832: CLEAN
   !(pw:W word) (x:W word).
-line 3829: CLEAN
+line 3847: CLEAN
   !p (x:W word).
-line 3843: CLEAN
+line 3861: CLEAN
   !p m n:num. 0 < p /\ m < p /\ n < p
-line 3885: CLEAN
+line 3903: CLEAN
   (<):num->num->bool
-line 3899: CLEAN
+line 3917: CLEAN
   (rem):int->int->int
-line 3900: CLEAN
+line 3918: CLEAN
   (rem):int->int->int
-line 3922: CLEAN
+line 3940: CLEAN
   :W
-line 3990: CLEAN
+line 4008: CLEAN
   !n:num. 2 EXP (64 * SUC n) = 2 EXP 64 * 2 EXP (64 * n)
-line 3996: CLEAN
+line 4014: CLEAN
   !(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
-line 4009: CLEAN
+line 4027: CLEAN
   !(c:bool) (cf:bool).
-line 4021: CLEAN
+line 4039: CLEAN
   !(b:bool) (c:bool) (cf:bool) (x:int64) (y:int64) (s:int64)
-line 4034: CLEAN
+line 4052: CLEAN
   !(c:bool) (cf:bool).
-line 4046: CLEAN
+line 4064: CLEAN
   !A B S E:num (cf:bool).
-line 4053: CLEAN
+line 4071: CLEAN
   !(xs:int64 list) (ys:int64 list) (ss:int64 list) (cf:bool).
-line 4067: CLEAN
+line 4085: CLEAN
   !l:int64 list k. LENGTH l = k ==> bignum_of_wordlist l < 2 EXP (64 * k)
-line 4074: CLEAN
+line 4092: CLEAN
   !b:bool A B:num. (~b <=> A < B) ==> (b <=> B <= A)
-line 4079: CLEAN
+line 4097: CLEAN
   !(x:int64) (y:int64) (z:int64) (c:bool).
-line 4088: CLEAN
+line 4106: CLEAN
   !(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
-line 4098: CLEAN
+line 4116: CLEAN
   !(x:int64) (y:int64) (z:int64) (c:bool).
-line 4108: CLEAN
+line 4126: CLEAN
   !(x:int64) (y:int64) (z:int64) (b:bool) (c:bool).
-line 4118: CLEAN
+line 4136: CLEAN
   !(x:int64) (z:int64) (b:bool) (c:bool).
-line 4128: CLEAN
-  !b:bool. &(bitval(~b)):real = &1 - &(bitval b)
-line 4133: CLEAN
-  &(2 EXP 64 - 1):real = &2 pow 64 - &1
-line 4139: CLEAN
-  val(word (2 EXP 64 - 1):int64) = 2 EXP 64 - 1
 line 4146: CLEAN
+  !b:bool. &(bitval(~b)):real = &1 - &(bitval b)
+line 4151: CLEAN
+  &(2 EXP 64 - 1):real = &2 pow 64 - &1
+line 4157: CLEAN
+  val(word (2 EXP 64 - 1):int64) = 2 EXP 64 - 1
+line 4164: CLEAN
   !(x:int64) (z:int64) (b:bool) (c:bool).
-line 4159: CLEAN
-  !a b:bool.
-line 4170: CLEAN
-  !a b:bool. bitval a + bitval b = 0 <=> ~a /\ ~b
 line 4177: CLEAN
+  !a b:bool.
+line 4188: CLEAN
+  !a b:bool. bitval a + bitval b = 0 <=> ~a /\ ~b
+line 4195: CLEAN
   !p:bool. (if p then (word 0:int64) else word (2 EXP 64 - 1)) =
-line 4350: CLEAN
+line 4368: CLEAN
   bignum_of_wordlist
-line 4353: CLEAN
+line 4371: CLEAN
   ll:int64 list
-line 4386: CLEAN
+line 4404: CLEAN
   (MOD):num->num->num
 statements=95 hits=0

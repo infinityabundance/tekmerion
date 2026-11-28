@@ -85,7 +85,13 @@ use tekmerion::tools::{curve_check, dropin};
 /// strict bound with `ceil(q)-1`/`floor(q)` on an integer-valued form instead
 /// of a blanket `-1`.  The numeric core is now a standalone block
 /// (`BRIDGE_CERT_STANDALONE`) so it can be tested outside HOL Light.)
-const BRIDGE_DIGEST: &str = "576316b6aba87631c94c6550da4e5977e0fdf1f09d24340258e848e83e57b89c";
+/// `9f003c54…` (after XXX.C's entry hoist: `BRIDGE_FINISH_KEEP_ALG_TAC` runs the
+/// assumption-to-integer conversion and `BRIDGE_HOIST_AGG_FACTS_TAC` above its
+/// written-value split, and `bridge_oracle_facts` reuses an assumed
+/// `v = &0`/`v = &1` fact instead of re-proving it by relaxation.  No new
+/// `prove` call and no new top-level phrase: the library text moved, the
+/// statement/phrase counts did not.)
+const BRIDGE_DIGEST: &str = "9f003c54ca6d99e99376df5499d7b3c635e776748cf08f61bd6a3c84f2877f75";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -280,10 +286,13 @@ fn instrument_reproduces_the_recorded_output() {
     // XXX.A's bound-arithmetic fixes add three top-level phrases (the exact
     // endpoint core, the integer-form test and the endpoint tightening), so
     // 276 -> 279 and the output digest moved `0163d207...` -> `19fb6f94...`.
+    // XXX.C moves text inside existing phrases (the entry hoist and the oracle
+    // reuse add no `;;`), so the phrase count stays 279 and the output digest
+    // moved to `280c60a8...`.
     assert_eq!(phrases, 279);
     assert_eq!(
         sha256(out.as_bytes()),
-        "19fb6f949f90b2bde72d12b6ead458e7b43ca4d3fd2a36d4294b51fdf22a14a2"
+        "280c60a81a02a976eff926ddbe53a92f24a167da9fbb9633aeb127b48131fce8"
     );
 }
 
@@ -449,22 +458,25 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXX.A boundary.  The XXIX.B digests are retired: the bound-arithmetic
     // fixes add three top-level phrases (and rewrite two), so every inlined
     // answer carries the new library text; the emitted tactics are unchanged.
+    // XXX.C boundary.  The entry hoist and the oracle `aconv` reuse add no
+    // top-level phrase (323 stays), but every inlined answer carries the new
+    // `BRIDGE_FINISH_KEEP_ALG_TAC` and `bridge_oracle_facts` text.
     for (mode, digest) in [
         (
             "add-ref",
-            "b0788f3a645d23cc1a28f5cb523e6f2fa62b2ed2f1761a3c474d09ed24d45cfd",
+            "f6e974524c8f9ce4db4d92c4b3adc189ed3ddb86741e001de46eb8f6dce47e05",
         ),
         (
             "sub",
-            "7f88aff96ab1f2d4ce18eadcf2539489002612722af58f7930440d2a94a234f8",
+            "70af2242a8aca6d505e3895a700ee82b055f652397d1758d54e66fc02ee28e3f",
         ),
         (
             "neg",
-            "6a9f04d40c67b4879607d8c0fda147f37b4ce7664a04e50fc367eb75aadc6bf9",
+            "299376b5136281283c613e707b92342ba27f5d0f5c63576a32a8c9ed73af9c8c",
         ),
         (
             "add-p384",
-            "48c5b22d0c493519ede59f689e12b5b5093ebf0a2d4d0b7a7c30c4d3f4d6c5af",
+            "c9864e69cc5fdcbc7f75559aba176d5ec356390cc96c1435495b316c7fdffe51",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

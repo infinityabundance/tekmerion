@@ -2774,9 +2774,22 @@ let bridge_carry_value tbl ineqs v form =
      else if bridge_val_gt rest_lo num_0 && bridge_val_le hi_v one
      then Some one else None)
 in
-let bridge_oracle_facts defs ineqs =
+let bridge_oracle_facts defs ineqs all_hyps =
   let tbl = bridge_direct_bounds ineqs in
   let out = ref [] in
+  (* XXX.C: a fact the pre-split hoist already assumed (`aconv` on `v = &0' /
+     `v = &1') is inherited by this branch; re-proving it by relaxation is pure
+     repetition.  The match is only against a hypothesis already in scope, so no
+     kernel step and no new assumption is introduced; no match is the old
+     behaviour. *)
+  let assumed v =
+    List.find_opt (fun th ->
+        match concl th with
+        | Comb(Comb(Const("=",_),a),b) when type_of a = `:int` ->
+            aconv a v &&
+            (aconv b (bridge_int_lit num_0) ||
+             aconv b (bridge_int_lit num_1))
+        | _ -> false) all_hyps in
   List.iter (fun (v, sup, form) ->
       if bridge_is_bitval_atom v then begin
         let atoms = bridge_lf_atoms form in
@@ -2787,6 +2800,12 @@ let bridge_oracle_facts defs ineqs =
             bridge_slice_note "ORACLE undetermined %s why=relaxation"
               (string_of_term v)
         | Some k ->
+          (match assumed v with
+           | Some th ->
+               bridge_slice_note "ORACLE fact %s = %s reused why=antecedent-hoist"
+                 (string_of_term v) (Num.string_of_num k);
+               out := th :: !out
+           | None ->
             let def_th = bridge_prove_from sup (bridge_lf_eq form) in
             (match bridge_try_value def_th cone v k with
              | Some th ->
@@ -2799,7 +2818,7 @@ let bridge_oracle_facts defs ineqs =
                     arbiter, so the fact is not emitted. *)
                  bridge_slice_note
                    "ORACLE undetermined %s why=not-proved-from-cone"
-                   (string_of_term v))
+                   (string_of_term v)))
       end) defs;
   List.rev !out
 in
@@ -3656,10 +3675,17 @@ in
    ten times.
 
    The tactic runs at each `BRIDGE_ALGEBRA_TAC' entry, after the first
-   normalisation and before `BRIDGE_SPLIT_CONDITIONS_KEEP_TAC'.  The entry route
-   `BRIDGE_FINISH_KEEP_ALG_TAC' splits on the written-value conditions *before*
-   the expansion, so the algebra tactic is entered once per pre-split goal (four
-   on `neg'; the fact is therefore proved four times, not ten).  The range bounds
+   normalisation and before `BRIDGE_SPLIT_CONDITIONS_KEEP_TAC', so it is a
+   per-branch fallback for any goal that did not inherit the fact (XXX.C).  The
+   entry route `BRIDGE_FINISH_KEEP_ALG_TAC' also applies it once, above its own
+   written-value split: the chain equations only exist after the assumptions are
+   converted to the integer fragment, so the entry route runs that conversion
+   first, then the hoist, then the split.  On `neg' the branch-independent
+   aggregate is single-carrier and the fact is therefore proved once per theorem
+   and inherited by every branch.  On `add'/`sub' the pre-split aggregate set
+   mentions two structural carriers (the add chain and the sub borrow chain of
+   the untaken conditional branch), so the single-carrier gate skips the entry
+   hoist and the per-branch fallback is unchanged.  The range bounds
    that `BRIDGE_ATOM_BOUNDS_TAC' would supply run after the split, so they are
    *constructed* here as closed theorems: proving a bound on `&(val w)' or
    `&(bitval b)' needs no hypothesis.
@@ -3872,14 +3898,14 @@ let BRIDGE_ORACLE_TAC : tactic =
           bridge_slice_note "ORACLE def %s : %s"
             (string_of_term v) (string_of_term (bridge_lf_eq form))) defs;
       let ineqs = bridge_lf_ineqs asl in
-      let facts = bridge_oracle_facts defs ineqs in
+      (* the aggregate decides the top carry; the fact is proved from these *)
+      let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in
+      let facts = bridge_oracle_facts defs ineqs all_hyps in
       (* XIX.C1: build the chain aggregates from the per-limb equations, by the
          same weighted sum the human proof performs.  This is *not* a larger
          `INT_ARITH' call; it is a constructed theorem, and its weights are the
          certificate. *)
       let aggregates = bridge_aggregates eqs in
-      (* the aggregate decides the top carry; the fact is proved from these *)
-      let all_hyps = List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in
       let agg_facts = bridge_aggregate_facts aggregates all_hyps in
       let facts = facts @ agg_facts in
       bridge_slice_note "ORACLE system defs=%d residual=%d facts=%d aggregates=%d"
@@ -4751,10 +4777,25 @@ let BRIDGE_ALGEBRA_TAC : tactic =
      at "split-disj" BRIDGE_SPLIT_INT_DISJ_TAC THEN
      at "oracle" BRIDGE_ORACLE_TAC) g
 in
-(* the same route, with the residue closed algebraically and no SAT call *)
+(* the same route, with the residue closed algebraically and no SAT call.
+
+   XXX.C: the aggregate/fact hoist runs *above* the written-value split, once per
+   theorem where the branch-independent aggregate is single-carrier (`neg').  The
+   hoist needs the integer chain equations, which only exist after the
+   assumptions have been taken through `BRIDGE_TO_WORD_CONV' and
+   `BRIDGE_ALG_NORM_ASSUM'; those two conversions are therefore run on the
+   assumptions once, before the split.  They touch assumptions only -- the goal
+   (and so the conditions the split reads) is unchanged -- and the later
+   per-assumption conversion after `expand' is kept: the split *adds* word-level
+   branch conditions that still need it.  Every hoisted fact is `ASSUME_TAC'ed,
+   so it is a kernel proof inherited by all branches; a failed or gated hoist is a
+   no-op and the per-branch proof stays the fallback. *)
 let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =
   fun g ->
-    (BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
+    (RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+     RULE_ASSUM_TAC BRIDGE_ALG_NORM_ASSUM THEN
+     BRIDGE_HOIST_AGG_FACTS_TAC THEN
+     BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
      BRIDGE_ZERO_TEST_TAC THEN
      expand THEN
      RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
