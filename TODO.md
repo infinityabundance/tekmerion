@@ -5607,14 +5607,17 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 
 ## XXX.D — P3: direct canonical-row certificate replay (after B/C)
 
-- [ ] **XXX.D1.** Finish `wip/xxix-b5-canonrow` (preserved, unverified): normalise the aggregate
+- [x] **XXX.D1.** Finish `wip/xxix-b5-canonrow` (preserved, unverified): normalise the aggregate
   **once**, derive the canonical carrier equation once, and replay `target ≤ bound` by scaling and
-  adding bound theorems — no `INT_ARITH` over the raw aggregate. Do this only after B/C cut the fire
-  count to ~one per theorem.
-- [ ] **XXX.D2.** Preserve the evidence: the discovery mechanism must keep the **coefficients,
-  premise references and transformations**, not discard them and ask another procedure to rediscover
-  them (`XXX.G`).
-- [ ] **XXX.D3.** Measure per-fire cost before/after and the fact phase; fall back unchanged.
+  adding bound theorems — no `INT_ARITH` over the raw aggregate. — **Done on `staging` (IX.101);**
+  implemented fresh on the current tree (the WIP branch was a reference only). All 13 fires convert;
+  certificate cost add 266,746 → 91,774, sub 120,654 → 44,053, neg 30,622 → 13,572. Totals:
+  3,885,488 / 4,831,144 / 2,728,198.
+- [x] **XXX.D2.** Preserve the evidence: the discovery mechanism must keep the **coefficients,
+  premise references and transformations**. — **Done.** `REPLAY ok … bound=… weights=…` records them;
+  the integer combination is used to build the proof.
+- [x] **XXX.D3.** Measure per-fire cost before/after and the fact phase; fall back unchanged.
+  — **Done.** Canonical kit built once (add 1, sub 2, neg 1), cached by conclusion.
 
 ## XXX.E — P4: measure matched-session now
 

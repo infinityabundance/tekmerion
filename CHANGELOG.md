@@ -7,6 +7,13 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### IX.101 — canonical-row replay of the carry certificate (`9983f9c`)
+
+- The carry certificate now replays a canonical form of the aggregate (built once and cached by
+  conclusion) instead of `INT_ARITH` over the raw aggregate. All 13 fires converted; certificate cost
+  −65.6 % / −63.5 % / −55.7 %. **add 4,060,716 → 3,885,488 (2.10× human), sub 4,907,921 →
+  4,831,144 (3.77×), neg 2,745,276 → 2,728,198 (3.78×).** Fallback byte-unchanged; `STATEMENT_OK`.
+
 ### IX.100 — entry hoist above the written-value split (`876a2da`)
 
 - The aggregate/fact hoist now runs before the entry route's conditional split; branches inherit the
