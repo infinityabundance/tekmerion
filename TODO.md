@@ -5400,11 +5400,17 @@ turns an impossible wrap case into a hypothesis.
   only by generated answers; the shared framework is untouched (files diff identical). Saves 44,714 /
   43,826 / 34,890 with identical hypothesis sets. Receipt
   `research/receipts/ix103-supersede-state-update.md`.
-- [ ] **XXX.G6. Frame-merge mechanism (the 193,789 blocker).** The four requirements:
-  read/write-set liveness, a relaxed discard, an out-of-band write set with a linear one-shot frame
-  proof, and component-indexed resolution instead of a proof per write. **This is now the largest
-  remaining simulation lever** (neg 193,789; simulation 493,972 → potential ~300K). Do it as a
-  Tekmerion-owned tactic variant (route (a)) before considering any shared-framework change.
+- [x] **XXX.G6. Frame-merge mechanism (the 193,789 blocker).** — **Done, IX.104.** Tekmerion-owned
+  one-shot frame proof (out-of-band write list, canonicalise once, membership by `aconv`, memoised
+  swap lemma). neg sim 493,972 → **414,793**; totals add 3,749,057 · sub 4,712,887 · neg 2,276,021.
+  Caveat measured: 9–14K of the saving reappears in the final subsumption because the shipped rule's
+  discarded commutations warmed the global swap cache; net is still a win. Receipt
+  `research/receipts/ix104-one-shot-frame.md`.
+- [ ] **XXX.G5. Step cache as an L7 preloaded library.** Now decisive: neg matched-session is 779,424
+  vs human 721,473 (−58K needed); the `ARM_CONV` bucket is ≈101K and the cache saves ≈77K on neg,
+  so a preloaded cache (L7) would put neg's matched-session **below** the human (~702K). Implement the
+  per-opcode step theorems as a Tekmerion-owned preloaded module; strict derivation cost counted
+  per task, matched-session L7 counted once.
 - [ ] **XXX.G7. Liveness / last-use analysis.** The prototype's `deadmem` was program-specific; a
   general read-set/last-use pass over the decoded sequence would let the liveness stand-in ship
   (~30K on neg). Do after `XXX.G6`.

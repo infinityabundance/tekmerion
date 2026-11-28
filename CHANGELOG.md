@@ -7,6 +7,13 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### IX.104 — one-shot MAYCHANGE frame proof (`b1e7d8d`)
+
+- A Tekmerion-owned replacement canonicalises the incoming frame once and merges by component
+  membership instead of re-canonicalising the whole prefix per write. **sim add 743,177 → 637,768,
+  sub 630,423 → 546,616, neg 493,972 → 414,793; totals 3,749,057 (2.03× human) / 4,712,887 (3.67×)
+  / 2,276,021 (3.15×).** Hypothesis/frame terms byte-identical; statement OK; baseline untouched.
+
 ### IX.103 — Tekmerion-owned supersede state update (`7546ac2`)
 
 - A Tekmerion-owned inlined tactic skips carrying facts about components a step overwrites (they are
