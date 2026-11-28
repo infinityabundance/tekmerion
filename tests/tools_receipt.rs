@@ -91,7 +91,13 @@ use tekmerion::tools::{curve_check, dropin};
 /// `v = &0`/`v = &1` fact instead of re-proving it by relaxation.  No new
 /// `prove` call and no new top-level phrase: the library text moved, the
 /// statement/phrase counts did not.)
-const BRIDGE_DIGEST: &str = "9f003c54ca6d99e99376df5499d7b3c635e776748cf08f61bd6a3c84f2877f75";
+/// `a901ea4c…` (after XXX.D's canonical-row replay: the carry certificate's
+/// aggregate combination is normalised into a cached carrier kit and each fire
+/// bounds the target by scaling and adding the literal-bound/relational
+/// theorems, with the IX.99 `INT_ARITH` route as the unchanged fallback.  Adds
+/// twenty top-level `let` phrases, no new axiom; the emitted tactics change only
+/// in `bridge_carry_certificate`.)
+const BRIDGE_DIGEST: &str = "a901ea4c4eb13175c3d5948d16133da73e09c667c8a95ebbebd946ce9db3026c";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -210,8 +216,10 @@ fn curve_check_reproduces_the_recorded_report() {
     // existing bound helpers, so the `prove` count is still 94 and hits 0; only
     // the reported line numbers move.  XXIX.B's carry-bound certificate adds one
     // `prove` call (the certificate's small `INT_ARITH`), so the count is 95 and
-    // hits remain 0.
-    assert_eq!(statements, 95);
+    // hits remain 0.  XXX.D's canonical-row replay adds five `prove` calls (the
+    // two cached ring identities, the top-level canonical bridge, and the two
+    // ground numeral comparisons), so the count is 100 and hits remain 0.
+    assert_eq!(statements, 100);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -288,11 +296,12 @@ fn instrument_reproduces_the_recorded_output() {
     // 276 -> 279 and the output digest moved `0163d207...` -> `19fb6f94...`.
     // XXX.C moves text inside existing phrases (the entry hoist and the oracle
     // reuse add no `;;`), so the phrase count stays 279 and the output digest
-    // moved to `280c60a8...`.
-    assert_eq!(phrases, 279);
+    // moved to `280c60a8...`.  XXX.D's canonical-row replay adds twenty
+    // top-level phrases, so 279 -> 299 and the output digest moved.
+    assert_eq!(phrases, 299);
     assert_eq!(
         sha256(out.as_bytes()),
-        "280c60a81a02a976eff926ddbe53a92f24a167da9fbb9633aeb127b48131fce8"
+        "7cd7b7ff408a6f150cb44a51a047b65d348b759b7f3f36090947bfa7b4def37a"
     );
 }
 
@@ -343,7 +352,10 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // certificate and its interval/shape/elimination helpers): 306 -> 320.
     // XXX.A adds three top-level `let` phrases to bridge.ml (the exact endpoint
     // core, the integer-form test and the endpoint tightening): 320 -> 323.
-    assert_eq!(parts.len(), 323);
+    // XXX.D adds twenty top-level `let` phrases (the canonical-row replay:
+    // literal-bound table and leaf, carrier kit and equation assembly, the
+    // relation/step search, and the combination theorem): 323 -> 343.
+    assert_eq!(parts.len(), 343);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -461,22 +473,26 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXX.C boundary.  The entry hoist and the oracle `aconv` reuse add no
     // top-level phrase (323 stays), but every inlined answer carries the new
     // `BRIDGE_FINISH_KEEP_ALG_TAC` and `bridge_oracle_facts` text.
+    // XXX.D boundary.  The XXX.C digests are retired: the canonical-row replay
+    // adds twenty top-level phrases (323 -> 343), so every inlined answer
+    // carries the new library text; the emitted tactics change only in
+    // `bridge_carry_certificate`.
     for (mode, digest) in [
         (
             "add-ref",
-            "f6e974524c8f9ce4db4d92c4b3adc189ed3ddb86741e001de46eb8f6dce47e05",
+            "cc304b0070484409a04355a9e6ab6bcb83f095b167b7fd6fda990dedbd2e2a06",
         ),
         (
             "sub",
-            "70af2242a8aca6d505e3895a700ee82b055f652397d1758d54e66fc02ee28e3f",
+            "8b4e532992f64651352554c810e7010deec51fd30686121575e12ab2e15613b6",
         ),
         (
             "neg",
-            "299376b5136281283c613e707b92342ba27f5d0f5c63576a32a8c9ed73af9c8c",
+            "c3719ad43e6e7f3dc507f6b160914b02d7a291f14f4ea5db3006aff0ffb11e56",
         ),
         (
             "add-p384",
-            "c9864e69cc5fdcbc7f75559aba176d5ec356390cc96c1435495b316c7fdffe51",
+            "cd17bce6734d91c4d2107fabcb186117c48a22f6a18a9b5cc822d438bfeb0456",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
