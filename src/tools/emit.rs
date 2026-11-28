@@ -1083,8 +1083,8 @@ const BRIDGE_EDITS: &[MarkerEdit] = &[
         marked: "let BRIDGE_ADD_REF_ALG_TAC expand pth : tactic =\n  csat_mark_goal \"bridge:goal\" THEN\n  ELIM_DIGIT_EQS_TAC THEN BRIDGE_REWRITE_MODULUS pth THEN expand THEN",
     },
     MarkerEdit {
-        plain: "  fun g ->\n    (at \"normalise\" BRIDGE_ALG_NORM_TAC THEN",
-        marked: "  fun g ->\n    csat_mark_at \"bridge:algebra\";\n    (at \"normalise\" BRIDGE_ALG_NORM_TAC THEN",
+        plain: "  fun g ->\n    (at \"canon-zero\" BRIDGE_CANON_ZERO_SELECT_TAC THEN\n     at \"normalise\" BRIDGE_ALG_NORM_TAC THEN",
+        marked: "  fun g ->\n    csat_mark_at \"bridge:algebra\";\n    (at \"canon-zero\" BRIDGE_CANON_ZERO_SELECT_TAC THEN\n     at \"normalise\" BRIDGE_ALG_NORM_TAC THEN",
     },
     MarkerEdit {
         plain: "     at \"oracle\" BRIDGE_ORACLE_TAC) g;;",

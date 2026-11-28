@@ -97,7 +97,16 @@ use tekmerion::tools::{curve_check, dropin};
 /// theorems, with the IX.99 `INT_ARITH` route as the unchanged fallback.  Adds
 /// twenty top-level `let` phrases, no new axiom; the emitted tactics change only
 /// in `bridge_carry_certificate`.)
-const BRIDGE_DIGEST: &str = "a901ea4c4eb13175c3d5948d16133da73e09c667c8a95ebbebd946ce9db3026c";
+/// `a14b1ff0…` (after XXVIII.D's zero-selector canonicalisation:
+/// `BRIDGE_CANON_ZERO_SELECT_TAC` runs at the head of
+/// `BRIDGE_FINISH_KEEP_ALG_TAC` -- before the first conditional split and before
+/// arithmetic normalisation -- and rewrites the machine's
+/// `val (word_sub V (word 0)) = 0` select condition to the per-limb zero test
+/// (`VAL_EQ_0`, `WORD_SUB_EQ_0`, `WORD_OR_EQ_0`, the join fold, `CONJ_ACI`), so
+/// `INT_VAL_WORD_SUB_CASES` never exposes the impossible `V + 2^64 = 0` branch.
+/// Additive: nine top-level phrases, no new `prove`, no new axiom; a goal with
+/// no zero selector is left untouched.)
+const BRIDGE_DIGEST: &str = "a14b1ff005f2f0981db6a449b5686f3ddc5513cf7f5df6326f1a93856793d210";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -298,10 +307,14 @@ fn instrument_reproduces_the_recorded_output() {
     // reuse add no `;;`), so the phrase count stays 279 and the output digest
     // moved to `280c60a8...`.  XXX.D's canonical-row replay adds twenty
     // top-level phrases, so 279 -> 299 and the output digest moved.
-    assert_eq!(phrases, 299);
+    // XXVIII.D's zero-selector canonicalisation adds nine more (the word-zero
+    // test, the deep join fold, the zero-sub selector test, the shape
+    // test/nominator, the conversion, its rule wrapper and the tactic), so
+    // 299 -> 308 and the output digest moved.
+    assert_eq!(phrases, 308);
     assert_eq!(
         sha256(out.as_bytes()),
-        "7cd7b7ff408a6f150cb44a51a047b65d348b759b7f3f36090947bfa7b4def37a"
+        "bad48eccd32d30575ad99eac4f5d4128cb1968a08879c2fcbfe0e6791c5de05f"
     );
 }
 
@@ -355,7 +368,8 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXX.D adds twenty top-level `let` phrases (the canonical-row replay:
     // literal-bound table and leaf, carrier kit and equation assembly, the
     // relation/step search, and the combination theorem): 323 -> 343.
-    assert_eq!(parts.len(), 343);
+    // XXVIII.D's zero-selector canonicalisation adds nine: 343 -> 352.
+    assert_eq!(parts.len(), 352);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -477,22 +491,28 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // adds twenty top-level phrases (323 -> 343), so every inlined answer
     // carries the new library text; the emitted tactics change only in
     // `bridge_carry_certificate`.
+    // XXVIII.D boundary.  The XXX.D digests are retired: the zero-selector
+    // canonicalisation adds nine top-level phrases (343 -> 352) and the emitted
+    // algebraic tactics gain one step at the head of `BRIDGE_ALGEBRA_TAC` and
+    // `BRIDGE_FINISH_KEEP_ALG_TAC`, so every inlined answer carries new library
+    // text and the `add-ref`/`sub`/`neg` answer text changes only where that
+    // step is emitted.
     for (mode, digest) in [
         (
             "add-ref",
-            "cc304b0070484409a04355a9e6ab6bcb83f095b167b7fd6fda990dedbd2e2a06",
+            "fb61f1b1798f961d8e2f24361ce7582acffdf1d8b0408b22414e4495b2d07538",
         ),
         (
             "sub",
-            "8b4e532992f64651352554c810e7010deec51fd30686121575e12ab2e15613b6",
+            "daa5889ff2ddd1f9694c74aaef49997550860457060fc471bf9d14f50fe92925",
         ),
         (
             "neg",
-            "c3719ad43e6e7f3dc507f6b160914b02d7a291f14f4ea5db3006aff0ffb11e56",
+            "dd09620c1041ff8e718f34bbfd7da6b69c940e29a962da94b45769f52084052b",
         ),
         (
             "add-p384",
-            "cd17bce6734d91c4d2107fabcb186117c48a22f6a18a9b5cc822d438bfeb0456",
+            "d6736f66fc0d2df82b31f73871041b57ed746e769ed7630a7f6ed6bdac4774df",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();

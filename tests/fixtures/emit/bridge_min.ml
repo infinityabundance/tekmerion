@@ -41,11 +41,14 @@ let BRIDGE_ADD_REF_ALG_TAC expand pth : tactic =
 
 let BRIDGE_ALG_NORM_TAC : tactic = ALL_TAC;;
 
+let BRIDGE_CANON_ZERO_SELECT_TAC : tactic = ALL_TAC;;
+
 let BRIDGE_ALGEBRA_TAC : tactic =
   let str t = "x" in
   let at stage (t:tactic) : tactic = fun g -> t g in
   fun g ->
-    (at "normalise" BRIDGE_ALG_NORM_TAC THEN
+    (at "canon-zero" BRIDGE_CANON_ZERO_SELECT_TAC THEN
+     at "normalise" BRIDGE_ALG_NORM_TAC THEN
      at "oracle" BRIDGE_ORACLE_TAC) g;;
 
 let bridge_anchor_count = 6;;

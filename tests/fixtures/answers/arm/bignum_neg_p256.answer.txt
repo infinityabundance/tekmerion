@@ -2915,6 +2915,137 @@ let BRIDGE_ZERO_FOLD_TAC : tactic = fun (asl,w) ->
    CONV_TAC BRIDGE_INT_OR_ZERO_CONV) (asl,w)
 in
 (* ------------------------------------------------------------------------- *)
+(* 6c.2c2 Canonicalise the machine's zero selector before the first split.     *)
+(*                                                                           *)
+(* XXVIII.D / XXIX.D.  The ARM `CMP X6, XZR' zero flag reaches the bridge as   *)
+(*                                                                           *)
+(*   val (word_sub V (word 0)) = 0                                           *)
+(*                                                                           *)
+(* (`arm_SUBS' on a zero subtrahend, `arm_CSEL ... Condition_NE'), and nothing *)
+(* eliminates the subtraction before `BRIDGE_ALG_NORM_ASSUM' expands it with   *)
+(* `INT_VAL_WORD_SUB_CASES'.  The splitter then keeps the impossible wrap      *)
+(* branch `&(val V) + &2^64 = &0' (neg branches 8/10; receipt XXVII §4).  The  *)
+(* human proof eliminates the subtraction first                               *)
+(* (`REWRITE_TAC[VAL_EQ_0; WORD_SUB_EQ_0; WORD_OR_EQ_0]',                    *)
+(* bignum_neg_p25519.ml:82) and never sees the wrap.                          *)
+(*                                                                           *)
+(* This is the same reduction, applied to the goal and every hypothesis       *)
+(* *before* the first conditional split and before arithmetic normalisation:   *)
+(*                                                                           *)
+(*   val (word_sub x (word 0)) = 0  <=>  x = word 0   (VAL_EQ_0, WORD_SUB_EQ_0) *)
+(*   word_or a b = word 0        <=>  a = word 0 /\ b = word 0  (WORD_OR_EQ_0) *)
+(*   word_join a b = word 0      <=>  a = word 0 /\ b = word 0  (WORD_JOIN_EQ_0,*)
+(*                                                   BRIDGE_JOIN_ZERO_CONV)   *)
+(*   bignum_of_wordlist l = 0    <=>  ALL (\x. x = word 0) l                  *)
+(*                                            (BIGNUM_OF_WORDLIST_EQ_0, ALL)  *)
+(*                                                                           *)
+(* and the resulting conjunction is put in `CONJ_ACI' normal form, so the      *)
+(* machine's OR zero test and the reference's own `if x = word 0' are the      *)
+(* *same* term and the splitter makes one case split, not two (the human's two *)
+(* branches), with no `word_sub' inside a zero test left for the normaliser    *)
+(* to expand.  Both int shapes (`&(val (word_sub x (word 0))) = &0', the      *)
+(* normalised form a hypothesis has by then) and num shapes are handled.       *)
+(*                                                                           *)
+(* Every step is an equation of the term, produced by the kernel's rewrite     *)
+(* engine from library theorems: nothing is nominated in OCaml and then        *)
+(* dropped, and `CONV_TAC' keeps the original goal as the proved statement.    *)
+(* A term without one of these shapes is returned unchanged (REFL), so the     *)
+(* old route is the fallback and no other task sees a different goal.          *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_is_word_zero tm =
+  try match tm with
+    | Comb(Const("word",_),n) -> dest_numeral n = num_0
+    | _ -> false
+  with _ -> false
+in
+(* `BRIDGE_JOIN_ZERO_CONV' closes one join; a 256-bit value is a nest of      *)
+(* joins, so the fold has to be iterated over the terms it produces.  The      *)
+(* explicit recursion is used because `TOP_DEPTH_CONV' here rewrote only the   *)
+(* outermost equation (measured: the two-limb fact was left in the split      *)
+(* condition).                                                                *)
+let rec BRIDGE_JOIN_ZERO_DEEP_CONV tm =
+  let th =
+    try BRIDGE_JOIN_ZERO_CONV tm
+    with Failure _ ->
+      if is_comb tm then
+        MK_COMB (BRIDGE_JOIN_ZERO_DEEP_CONV (rator tm),
+                 BRIDGE_JOIN_ZERO_DEEP_CONV (rand tm))
+      else if is_abs tm then
+        let (v,b) = dest_abs tm in
+        ABS v (BRIDGE_JOIN_ZERO_DEEP_CONV b)
+      else REFL tm in
+  if aconv (rand (concl th)) tm then th
+  else TRANS th (BRIDGE_JOIN_ZERO_DEEP_CONV (rand (concl th)))
+in
+(* `val (word_sub x (word 0))' -- the CMP/CSEL zero test *)
+let bridge_is_zero_sub_selector tm =
+  try
+    let (f,arg) = dest_comb tm in
+    if name_of f <> "val" then false else
+    let (op,args) = strip_comb arg in
+    name_of op = "word_sub" && List.length args = 2 &&
+    bridge_is_word_zero (List.nth args 1)
+  with _ -> false
+in
+let bridge_is_num_zero r =
+  try is_numeral r && dest_numeral r = num_0 with _ -> false
+in
+(* Which zero-test shape is this equation?  Pure, so it only nominates; the     *)
+(* rewrite below is the kernel check.  A string tag: the answer is one `let'.   *)
+let BRIDGE_ZERO_SELECT_TEST tm =
+  try
+    let (l,r) = dest_eq tm in
+    let head t = name_of (fst (strip_comb t)) in
+    if bridge_is_word_zero r && head l = "word_join" then "join"
+    else if bridge_is_num_zero r && head l = "bignum_of_wordlist" then "bignum"
+    else if bridge_is_num_zero r && bridge_is_zero_sub_selector l then "num"
+    else if (match r with
+             | Comb(Const("int_of_num",_),n) -> dest_numeral n = num_0
+             | _ -> false) &&
+            (let (f,a) = dest_comb l in
+             name_of f = "int_of_num" && bridge_is_zero_sub_selector a)
+    then "int"
+    else "none"
+  with _ -> "none"
+in
+let bridge_nominates_zero_selector tm =
+  List.exists (fun t -> BRIDGE_ZERO_SELECT_TEST t <> "none")
+    (find_terms (fun t -> is_comb t && can dest_eq t) tm)
+in
+let BRIDGE_ZERO_SELECT_CONV : conv = fun tm ->
+  match BRIDGE_ZERO_SELECT_TEST tm with
+  | "bignum" -> REWRITE_CONV[BIGNUM_OF_WORDLIST_EQ_0; ALL; CONJ_ACI] tm
+  | "join" -> (BRIDGE_JOIN_ZERO_DEEP_CONV THENC REWRITE_CONV[CONJ_ACI]) tm
+  | "num" ->
+      REWRITE_CONV[VAL_EQ_0; WORD_SUB_EQ_0; WORD_OR_EQ_0; CONJ_ACI] tm
+  | "int" ->
+      REWRITE_CONV[INT_OF_NUM_EQ; VAL_EQ_0; WORD_SUB_EQ_0; WORD_OR_EQ_0;
+                  CONJ_ACI] tm
+  | _ -> failwith "BRIDGE_ZERO_SELECT_CONV: no zero-selector shape"
+in
+(* The conversion is run only where the pure test nominates a shape: traversing  *)
+(* a large term with `DEPTH_CONV' rebuilds it with `MK_COMB'/`ABS' even when     *)
+(* nothing matches, which costs inferences (measured: add +221) without touching *)
+(* the goal.  So a term with no zero selector is left exactly as it was.        *)
+let bridge_canon_zero_rule th =
+  if bridge_nominates_zero_selector (concl th) then
+    CONV_RULE (DEPTH_CONV BRIDGE_ZERO_SELECT_CONV) th
+  else th
+in
+(* `RULE_ASSUM_TAC' is not free: this HOL Light rebuilds the assumption list     *)
+(* with `LABEL_TAC' (kernel steps per hypothesis), so it is only run when an     *)
+(* assumption actually nominates a shape (measured: an unconditional call cost  *)
+(* add +24 inferences for no change).                                          *)
+let BRIDGE_CANON_ZERO_SELECT_TAC : tactic = fun (asl,w) ->
+  ((if List.exists (fun (_,th) -> bridge_nominates_zero_selector (concl th)) asl
+    then RULE_ASSUM_TAC bridge_canon_zero_rule
+    else ALL_TAC) THEN
+   (if bridge_nominates_zero_selector w then
+      CONV_TAC (DEPTH_CONV BRIDGE_ZERO_SELECT_CONV)
+    else ALL_TAC)) (asl,w)
+in
+(* ------------------------------------------------------------------------- *)
 (* 6c.3c Aggregate, don't eliminate (XIX.C1).                                 *)
 (*                                                                           *)
 (* IX.78 measured the exact defect: eliminating every internal carry by      *)
@@ -5246,7 +5377,8 @@ let BRIDGE_ALGEBRA_TAC : tactic =
           bridge_slice_note "ALG_HYP %d %s" (i + 1) (str (concl th))) asl;
         raise e in
   fun g ->
-    (at "normalise" BRIDGE_ALG_NORM_TAC THEN
+    (at "canon-zero" BRIDGE_CANON_ZERO_SELECT_TAC THEN
+     at "normalise" BRIDGE_ALG_NORM_TAC THEN
      at "hoist-facts" BRIDGE_HOIST_AGG_FACTS_TAC THEN
      at "split-conditions" BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
      at "renormalise" BRIDGE_ALG_NORM_TAC THEN
@@ -5270,10 +5402,19 @@ in
    per-assumption conversion after `expand' is kept: the split *adds* word-level
    branch conditions that still need it.  Every hoisted fact is `ASSUME_TAC'ed,
    so it is a kernel proof inherited by all branches; a failed or gated hoist is a
-   no-op and the per-branch proof stays the fallback. *)
+   no-op and the per-branch proof stays the fallback.
+
+   XXVIII.D / XXIX.D: `BRIDGE_CANON_ZERO_SELECT_TAC' runs *first*, before the
+   assumptions are normalised and before the first conditional split, so the
+   machine's `val (word_sub V (word 0)) = 0' select condition is reduced to the
+   per-limb zero test while it is still a subtraction (see 6c.2c2).  It touches
+   the goal and the assumptions by kernel-checked rewrites only, and the goal's
+   statement is unchanged (`CONV_TAC' proves the original from the rewritten
+   form).  A goal with no zero selector is left alone. *)
 let BRIDGE_FINISH_KEEP_ALG_TAC expand : tactic =
   fun g ->
-    (RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
+    (BRIDGE_CANON_ZERO_SELECT_TAC THEN
+     RULE_ASSUM_TAC (CONV_RULE BRIDGE_TO_WORD_CONV) THEN
      RULE_ASSUM_TAC BRIDGE_ALG_NORM_ASSUM THEN
      BRIDGE_HOIST_AGG_FACTS_TAC THEN
      BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
