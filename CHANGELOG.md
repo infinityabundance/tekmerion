@@ -36,8 +36,11 @@ per-answer totals by a constant).
 - **Hoisted aggregate fact** (`ix98`): the final-carry fact is proved **before the conditional split**
   and reused by every branch (the fact needs no branch hypothesis). **neg 4,121,086 → 2,941,309
   (−28.6 %; 4.08× human), fact phase 1,511,696 → 336,655, zero per-branch fact proofs. add
-  4,396,406 → 4,310,114 (2.33×); sub 6,259,618 → 5,795,082 (4.52×).** Every run prints
-  `STATEMENT_OK aconv=1 hyps=0 axioms=3`.
+  4,396,406 → 4,310,114 (2.33×); sub 6,259,618 → 5,795,082 (4.52×).**
+- **Generic carry-bound certificate** (`ix99`): from `S + N − B^n·c = p` and the bounds, `c = 0`,
+  width-independent, `B`/`n` derived from the coefficient multiset. Fires 8/4/4, zero fallback.
+  **add 4,310,114 → 4,088,374 (2.21×), facts 613,764 → 392,024; sub 5,795,082 → 4,969,556 (3.87×),
+  facts 1,252,636 → 427,110; neg 2,941,309 → 2,848,020 (3.95×), facts 336,655 → 243,366.**
 - Not established: `equals_thm`/`axioms()` re-checked in-run (no offline harness yet),
   matched-session accounting, timing medians.
 

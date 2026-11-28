@@ -25,15 +25,15 @@ what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
   5,268,391** (2.85× human), **sub 8,217,594** (6.40×), **neg 5,683,733** (7.88×, unchanged —
   its proof has one aggregate, so the selection is a no-op). The published crates.io 0.2.0
   artefact predates this; these are repository measurements, not a crate release.
-- **Latest measurement (append-only, 2026-11-27, `cee7d57`, receipts `ix92`–`ix98`):** the slim close,
-  the propositional/range/order refutations, the complement/identity/Farkas certificates, and the
-  hoisted aggregate fact bring the strict totals to **add 4,310,114** (**2.33×** human),
-  **sub 5,795,082** (**4.52×**), **neg 2,941,309** (**4.08×**). Cumulative since IX.89: add −25.0 %,
-  sub −35.8 %, neg −48.3 %. For `neg`, the whole close is certificate-only (**1,170,099 → 2,057**)
-  and the aggregate-fact phase falls **1,511,696 → 336,655** by proving the final-carry fact once
-  before the split. All certificates are derived-rule kernel proofs. **Statement-checked in-run:**
-  all three report `STATEMENT_OK aconv=1 hyps=0 axioms=3` (exactly `INFINITY_AX`, `SELECT_AX`,
-  `ETA_AX`), with a mutated-statement negative control that fails. The crates.io 0.2.0 artefact
+- **Latest measurement (append-only, 2026-11-27, `d4d09e1`, receipts `ix92`–`ix99`):** the slim close,
+  the refutations, the complement/identity/Farkas certificates, the hoisted aggregate fact and the
+  generic carry-bound certificate bring the strict totals to **add 4,088,374** (**2.21×** human),
+  **sub 4,969,556** (**3.87×**), **neg 2,848,020** (**3.95×**). Cumulative since IX.89: add −28.8 %,
+  sub −44.9 %, neg −49.9 %. Neg's close is **2,057** (certificate-only) and its fact phase
+  **1,511,696 → 243,366** (proved once per pre-split goal, then by a width-independent carry-bound
+  certificate). All certificates are derived-rule kernel proofs. **Statement-checked in-run**
+  (`aconv=1 hyps=0 axioms=3`, exactly `INFINITY_AX`/`SELECT_AX`/`ETA_AX`), with a mutated-statement
+  negative control and a hostile harness self-test (5/5 rejected). The crates.io 0.2.0 artefact
   predates all of this.
 - **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
   upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,

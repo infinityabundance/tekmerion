@@ -5458,14 +5458,24 @@ For width `W` (here `B = 2^64`, `B^4 = 2^256`), from the aggregate
 
 `B^4·c = S + N − p ≤ B^4 − 1`, hence `c < 1`, hence **`c = 0`**.
 
-- [ ] **XXIX.B1.** Compile this as a **generic, width-independent** certificate: the proof must not
+- [x] **XXIX.B1.** Compile this as a **generic, width-independent** certificate: the proof must not
   mention Curve25519, the zero-test selector, the OR reduction, or any branch condition.
-- [ ] **XXIX.B2.** Replace `bridge_aggregate_facts`'s `INT_ARITH` + separate bit-value proof with
+  — **Done, IX.99.** `B` and `n` derived from the coefficient multiset; detection pure `Num`.
+- [x] **XXIX.B2.** Replace `bridge_aggregate_facts`'s `INT_ARITH` + separate bit-value proof with
   this certificate where the shape matches; fall back to the existing path otherwise.
-- [ ] **XXIX.B3.** Measure against the remaining fact phase (neg 336,655 · add 613,764 · sub
-  1,252,636) and against the pre-hoist B3/B5 scale (~629K) if reproducible in a scratch run.
-- [ ] **XXIX.B4.** Report the certificate's premise list and cost; if the bounds are not available
-  pre-split for some task, say which and keep the fallback.
+  — **Done.** Fires 8/8 (add), 4/4 (sub), 4/4 (neg); **0 fallback**; the old `INT_REDUCE` bit-value
+  finish is gone.
+- [x] **XXIX.B3.** Measure against the remaining fact phase (neg 336,655 · add 613,764 · sub
+  1,252,636). — **Done.** add → 392,024 (−36.1 %), sub → 427,110 (−65.9 %), neg → 243,366
+  (−27.7 %); totals 4,088,374 / 4,969,556 / 2,848,020 (2.21× / 3.87× / 3.95×).
+- [x] **XXIX.B4.** Report the certificate's premise list and cost; if the bounds are not available
+  pre-split, say which. — **Done.** 7–12 premises; all bounds in scope. Cost **30,622/fire** on neg;
+  bound-then-final split worse (46,141), so kept one call.
+- [ ] **XXIX.B5. Canonical-row replay for the carry certificate.** The remaining fact cost is mostly
+  **one `INT_ARITH` normalisation of the aggregate per fire** (~30K). Normalise the aggregate **once**
+  and combine by merging canonical forms (`XXVIII.B`), so the per-fire cost is no longer ~30K. This is
+  the user's “normalise once” lever, now with a measured target: facts add 392,024 · sub 427,110 · neg
+  243,366.
 
 ## XXIX.C — P2: hoist above the entry split
 
