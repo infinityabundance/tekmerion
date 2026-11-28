@@ -5590,11 +5590,20 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 
 ## XXX.C — P2: hoist above the entry split
 
-- [ ] **XXX.C1.** Move the aggregate/fact hoist above `BRIDGE_FINISH_KEEP_ALG_TAC`'s written-value
+- [x] **XXX.C1.** Move the aggregate/fact hoist above `BRIDGE_FINISH_KEEP_ALG_TAC`'s written-value
   split so the fact is proved once per theorem. Keep the load-bearing controls (single-carrier gate,
-  `band_only`; without them add +488,528, sub +214,336).
-- [ ] **XXX.C2.** Acceptance: add's 6 and sub's 12 per-branch fact proofs fall; `STATEMENT_OK`;
-  `plain == phase`.
+  `band_only`; without them add +488,528, sub +214,336). — **Done, IX.100.** `neg` now proves the
+  fact **once per theorem** (1 proof, was 14; facts 243,378 → 36,321); `sub` 4 (24 per-branch
+  relaxations now reuses); `add` 8 (2 per-goal + 6 gate-blocked per-branch carry certs).
+  Receipt `research/receipts/ix100-entry-hoist.md`. Totals: add 4,060,716 · sub 4,907,921 · neg
+  2,745,276.
+- [x] **XXX.C2.** Acceptance: add's 6 and sub's 12 per-branch fact proofs fall; `STATEMENT_OK`;
+  `plain == phase`. — **Done.** `sub` 28 → 4 fact proofs; `add` 14 → 8. The remaining `add` 6 are
+  the gate-skipped fallback (deliberate), which `XXX.B` supersedes.
+- [ ] **XXX.C3. The gate still blocks `add`/`sub`.** A second structural carrier makes the
+  single-carrier gate skip the entry hoist, so `add` proves 6 per-branch carry certificates. The
+  selector fold (`XXX.B`) is the lever that makes it once per theorem for every task; do that before
+  canonical-row replay (`XXX.D`).
 
 ## XXX.D — P3: direct canonical-row certificate replay (after B/C)
 

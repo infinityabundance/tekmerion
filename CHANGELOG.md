@@ -7,6 +7,13 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### IX.100 — entry hoist above the written-value split (`876a2da`)
+
+- The aggregate/fact hoist now runs before the entry route's conditional split; branches inherit the
+  fact by `aconv`. **neg 2,848,020 → 2,745,276 (3.81× human), fact phase 243,378 → 36,321, one fact
+  proof (was 14). sub 4,969,556 → 4,907,921 (3.83×). add 4,088,374 → 4,060,716 (2.20×).** The
+  single-carrier gate and `band_only` remain load-bearing (relaxed gate regresses add +121,581).
+
 ### XXX.E — measured matched-session baseline (`7acf887`)
 
 - With the support library preloaded and kernel-checked before the counter (L7 = **1,496,597**), the
