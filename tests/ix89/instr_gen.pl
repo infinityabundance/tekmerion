@@ -18,16 +18,18 @@ close $fh;
 
 # 1. Split the single ARM_ACCSTEPS_TAC into one call per instruction, with a
 #    marker naming the step and whether it is an accumulated (carry-producing)
-#    or a plain step.
+#    or a plain step.  XXX.G3: the emitted tactic may be the Tekmerion-owned
+#    `TEKMERION_ARM_ACCSTEPS_TAC`; the name is captured so the split calls the
+#    same tactic it replaced (the marker geometry is unchanged).
 my $sim_done = 0;
-$s =~ s{csat_mark "(\d\d) play" THEN ARM_ACCSTEPS_TAC (\S+) \[([0-9;]+)\] \(1--(\d+)\) THEN}{
-    my ($mk, $exec, $anums, $m) = ($1, $2, $3, $4);
+$s =~ s{csat_mark "(\d\d) play" THEN (TEKMERION_ARM_ACCSTEPS_TAC|ARM_ACCSTEPS_TAC) (\S+) \[([0-9;]+)\] \(1--(\d+)\) THEN}{
+    my ($mk, $tac, $exec, $anums, $m) = ($1, $2, $3, $4, $5);
     my %acc = map { $_ => 1 } split /;/, $anums;
     my $o = "csat_mark \"$mk play\" THEN\n";
     for my $n (1 .. $m) {
         my $cls = $acc{$n} ? "acc" : "plain";
-        $o .= sprintf("csat_mark \"B:step%02d:%s\" THEN ARM_ACCSTEPS_TAC %s [%s] (%d--%d) THEN\n",
-                      $n, $cls, $exec, $anums, $n, $n);
+        $o .= sprintf("csat_mark \"B:step%02d:%s\" THEN %s %s [%s] (%d--%d) THEN\n",
+                      $n, $cls, $tac, $exec, $anums, $n, $n);
     }
     $o;
 }se;

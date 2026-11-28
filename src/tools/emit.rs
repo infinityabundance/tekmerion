@@ -835,7 +835,8 @@ fn arm_simulation(exec_name: &str, accumulate: &[usize], last: usize) -> String 
     } else {
         let nums: Vec<String> = accumulate.iter().map(|n| n.to_string()).collect();
         format!(
-            "ARM_ACCSTEPS_TAC {exec_name} [{}] (1--{last})",
+            "{} {exec_name} [{}] (1--{last})",
+            TEKMERION_ARM_SIMULATION,
             nums.join(";")
         )
     }
@@ -1275,6 +1276,140 @@ pub const ANSWER_SOURCES: &[&str] = &[
     "tools/bridge.ml",
 ];
 
+/// The name of the ARM simulation tactic the generated proofs call (XXX.G3).
+/// It is Tekmerion-owned: the shared s2n-bignum framework is untouched, and
+/// nothing but an emitted answer refers to this name.
+pub const TEKMERION_ARM_SIMULATION: &str = "TEKMERION_ARM_ACCSTEPS_TAC";
+
+/// The Tekmerion-owned ARM simulation tactic, inlined *only* into generated
+/// ARM answers (the emitter selects it in [`arm_simulation`]).  It is a copy of
+/// `arm/proofs/arm.ml:ARM_STEP_TAC` and the tactics above it, with one
+/// substitution: `ASSUMPTION_STATE_UPDATE_TAC` becomes
+/// `TEKMERION_ASSUMPTION_STATE_UPDATE_TAC`, which skips (does not attempt to
+/// carry) a hypothesis about a component the step itself overwrites.  The
+/// shipped tactic only ever fails on such a hypothesis and drops it; the
+/// `STATE_UPDATE_NEW_RULE` fact for the same component supersedes it.  Every
+/// other hypothesis is still carried by the unchanged `STATE_UPDATE_RULE`, so
+/// the resulting assumption set is identical — only the wasted failing
+/// attempts are removed.  Rationale and measurement:
+/// `research/receipts/xxx-state-propagation-feasibility.md` §3.3.  It adds no
+/// step, rule or axiom: it derives the same theorems through fewer kernel calls.
+pub const TEKMERION_ARM_TACTIC: &str = r#"(* ========================================================================= *)
+(* TEKMERION-OWNED ARM simulation tactic (XXX.G3).                           *)
+(*                                                                           *)
+(* NOT part of the shared s2n-bignum framework.  Inlined only into generated *)
+(* Tekmerion answers; the upstream `ARM_ACCSTEPS_TAC`, `ARM_STEP_TAC` and    *)
+(* `ASSUMPTION_STATE_UPDATE_TAC` are untouched.  The step body is a copy of  *)
+(* `arm/proofs/arm.ml:ARM_STEP_TAC` with one substitution: the assumption    *)
+(* update skips a hypothesis about a component this step overwrites.         *)
+(* Such a hypothesis cannot be carried (the shipped tactic only ever fails   *)
+(* on it and drops it) and the STATE_UPDATE_NEW_RULE fact for the same       *)
+(* component supersedes it, so the resulting assumption set is identical.    *)
+(* See research/receipts/xxx-state-propagation-feasibility.md section 3.3.   *)
+(* ========================================================================= *)
+
+(* `TRY` under another name.  The offline OCaml parse gate lower-cases HOL   *)
+(* value names but must keep `TRY` (its lower-case spelling is a keyword); an *)
+(* upper-case value then cannot be an operand of `o` in stock OCaml syntax.  *)
+(* This alias has the same value and a name the gate can lower, so the        *)
+(* framework expression below is copied verbatim from arm.ml.                *)
+let TEKMERION_TRY = TRY;;
+
+(* The write spine of the step: `write c1 y1 (... (write cn yn s))`. *)
+let TEKMERION_WRITTEN_COMPONENTS uth =
+  let rec go acc tm =
+    match tm with
+      Comb(Comb(Comb(Const("write",_),c),_),t) -> go (c::acc) t
+    | _ -> acc in
+  go [] (lhand(concl uth));;
+
+(* The components `c` with a subterm `read c s` in `tm`. *)
+let TEKMERION_READS_OF_STATE s tm =
+  let rec go acc tm =
+    match tm with
+      Comb(a,b) ->
+        let acc' =
+          (match tm with
+             Comb(Comb(Const("read",_),c),st) when aconv st s -> c::acc
+           | _ -> acc) in
+        go (go acc' a) b
+    | Abs(_,b) -> go acc b
+    | _ -> acc in
+  go [] tm;;
+
+let TEKMERION_SUPERSEDED uth s thi =
+  let ws = TEKMERION_WRITTEN_COMPONENTS uth in
+  let rs = TEKMERION_READS_OF_STATE s (concl thi) in
+  exists (fun r -> exists (aconv r) ws) rs;;
+
+(* components.ml:ASSUMPTION_STATE_UPDATE_TAC plus the supersede filter. *)
+let TEKMERION_ASSUMPTION_STATE_UPDATE_TAC =
+  let rec memorable tm =
+    match tm with
+      Var(_,_) -> false
+    | Abs(_,b) -> memorable b
+    | Const(n,_) -> n = "memory"
+    | Comb(s,t) -> memorable s || memorable t in
+  fun gl -> (DISCH_THEN(fun uth ->
+   let utm = lhand(concl uth)
+   and thl = map snd (fst gl) in
+   let s = repeat rand utm in
+   let keep thi = not (TEKMERION_SUPERSEDED uth s thi) in
+   let newthms =
+     if memorable utm then
+       let thy,thn = partition (vfree_in s o concl) thl in
+       let cxt = (NONOVERLAPPING_DRIVERS thn,FILTER_CANONIZE_ASSUMPTIONS thn) in
+       mapfilter (fun thi -> STATE_UPDATE_RULE cxt uth thi) (filter keep thy)
+     else
+       let thy = filter (fun thi -> vfree_in s (concl thi) && keep thi) thl in
+       mapfilter (fun thi -> STATE_UPDATE_RULE ([],[]) uth thi) thy in
+   MP_TAC uth THEN MAP_EVERY ASSUME_TAC newthms)) gl;;
+
+(* arm.ml:ARM_STEP_TAC with the substitution above. *)
+let TEKMERION_ARM_STEP_TAC (mc_length_th,decode_ths) (subths:thm list) sname
+      (store_inst_term_to: term ref option)
+      (strip_component_tac: thm_tactic) =
+  ARM_BASIC_STEP_TAC decode_ths sname store_inst_term_to THEN
+  NONSELFMODIFYING_STATE_UPDATE_TAC
+    (MATCH_MP aligned_bytes_loaded_update mc_length_th) THEN
+  MAP_EVERY (TEKMERION_TRY o NONSELFMODIFYING_STATE_UPDATE_TAC o
+    MATCH_MP aligned_bytes_loaded_update o CONJUNCT1) subths THEN
+  TEKMERION_ASSUMPTION_STATE_UPDATE_TAC THEN
+  MAYCHANGE_STATE_UPDATE_TAC THEN
+  DISCH_THEN(fun th ->
+    let thl = STATE_UPDATE_NEW_RULE th in
+    if thl = [] then ALL_TAC else
+    MP_TAC(end_itlist CONJ thl) THEN
+    ASSEMBLER_SIMPLIFY_TAC THEN
+    strip_component_tac th);;
+
+let TEKMERION_ARM_VERBOSE_STEP_TAC (exth1,exth2) sname g =
+  TEKMERION_ARM_STEP_TAC (exth1,exth2) [] sname None (K STRIP_TAC) g;;
+
+let TEKMERION_ARM_SINGLE_STEP_TAC th s =
+  time (TEKMERION_ARM_VERBOSE_STEP_TAC th s) THEN
+  DISCARD_OLDSTATE_TAC s THEN
+  CLARIFY_TAC;;
+
+let TEKMERION_ARM_XACCSTEP_TAC th excs aflag s =
+  TEKMERION_ARM_SINGLE_STEP_TAC th s THEN
+  (if aflag then TRY(ACCUMULATEX_ARITH_TAC excs s THEN CLARIFY_TAC)
+   else ALL_TAC);;
+
+let TEKMERION_ARM_XACCSTEPS_TAC th excs anums snums =
+  MAP_EVERY
+   (fun n -> TEKMERION_ARM_XACCSTEP_TAC th excs (mem n anums) ("s"^string_of_int n))
+   snums;;
+
+let TEKMERION_ARM_ACCSTEPS_TAC th anums snums =
+  TEKMERION_ARM_XACCSTEPS_TAC th [`SP`] anums snums;;
+"#;
+
+/// Does this emitted tactic call the Tekmerion-owned ARM simulation?
+fn tekmerion_arm_requested(tactic: &str) -> bool {
+    tactic.contains(TEKMERION_ARM_SIMULATION)
+}
+
 /// The judged artefact: the tactic inlined after the CSAT and bridge libraries.
 pub fn inlined_answer(tactic: &str, repo: &Path) -> Result<String> {
     inlined_answer_with(tactic, repo, false)
@@ -1302,6 +1437,15 @@ fn inlined_answer_with(tactic: &str, repo: &Path, measured: bool) -> Result<Stri
             src
         };
         sources.push((rel.to_string(), src));
+    }
+    // XXX.G3: the Tekmerion-owned ARM simulation tactic is inlined only for an
+    // answer that calls it, so an x86 answer (which cannot resolve ARM names)
+    // and every answer that does not use it are byte-identical to before.
+    if tekmerion_arm_requested(tactic) {
+        sources.push((
+            "tekmerion/arm_supersede.ml".to_string(),
+            TEKMERION_ARM_TACTIC.to_string(),
+        ));
     }
     let refs: Vec<(&str, &str)> = sources
         .iter()
@@ -1699,6 +1843,7 @@ pub fn dev_script_arm(info: &ArmInfo, policy: &GuardPolicy, repo: &Path) -> Resu
         "needs \"Cadical/make.ml\";;".to_string(),
         format!("loadt \"{}/tools/csat_lib.ml\";;", repo.display()),
         format!("loadt \"{}/tools/bridge.ml\";;", repo.display()),
+        TEKMERION_ARM_TACTIC.to_string(),
         moddef,
         mcphrase,
         format!("let {} = ARM_MK_EXEC_RULE {};;", info.exec_name, mcname),
@@ -2026,6 +2171,11 @@ pub fn cert_producer_source(info: &ArmInfo, repo: &Path, work: &Path) -> Result<
             src
         };
         parts.extend(crate::tools::inline_answer::phrases_from(&src));
+    }
+    if tekmerion_arm_requested(&info.tactic) {
+        parts.extend(crate::tools::inline_answer::phrases_from(
+            TEKMERION_ARM_TACTIC,
+        ));
     }
     let mut s = template_prefix(repo, &info.task)?;
     s.push_str("\n(* ==== C61 measurement run: untrusted, solver and I/O allowed ==== *)\n(\n");
