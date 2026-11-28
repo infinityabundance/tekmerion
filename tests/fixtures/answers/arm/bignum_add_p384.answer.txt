@@ -6380,7 +6380,181 @@ let TEKMERION_ASSUMPTION_STATE_UPDATE_TAC =
        mapfilter (fun thi -> STATE_UPDATE_RULE ([],[]) uth thi) thy in
    MP_TAC uth THEN MAP_EVERY ASSUME_TAC newthms)) gl
 in
-(* arm.ml:ARM_STEP_TAC with the substitution above. *)
+(* ------------------------------------------------------------------------- *)
+(* One-shot MAYCHANGE frame update (XXX.G6).                                  *)
+(*                                                                           *)
+(* The shipped MAYCHANGE_STATE_UPDATE_TAC extends the frame one write at a   *)
+(* time and, for every write, canonicalises the whole accumulated prefix and  *)
+(* then commutes the new component back into it.  Measured on the IX.103     *)
+(* `neg` answer that is 196,493 inferences for 61 writes, of which ~76,000    *)
+(* are spent commuting a component that is not in the frame at all: the       *)
+(* commutation is thrown away and the component appended.                    *)
+(*                                                                           *)
+(* This rule instead reads the step's write spine as a list first (out of     *)
+(* band), keeps the frame in canonical ASSIGNS form for the whole step (one   *)
+(* canonicalisation of the incoming frame, one of each new entry), decides    *)
+(* membership by comparing components instead of by commuting, and converts   *)
+(* back to the shipped MAYCHANGE form once at the end of the step.  A         *)
+(* component already in the frame costs one move-back (which the shipped      *)
+(* rule also pays); a component that is not in it costs only the append.      *)
+(* Every step is a kernel proof built from the framework's own rules; the     *)
+(* frame term after every step is the term the shipped rule produces.  See   *)
+(* research/receipts/xxx-state-propagation-feasibility.md section 3.2.        *)
+(* ------------------------------------------------------------------------- *)
+
+(* Components of a frame term, in chain order.  A node is `MAYCHANGE [c]`,   *)
+(* `ASSIGNS c`, or the identity `(=)` (the canonical form of MAYCHANGE []).   *)
+let TEKMERION_NODE_COMPONENT tm =
+  match tm with
+    Comb(Const("ASSIGNS",_),c) -> Some c
+  | Comb(Const("MAYCHANGE",_),lst) ->
+      (match lst with
+         Comb(Comb(Const("CONS",_),c),_) -> Some c
+       | _ -> None)
+  | Const("=",_) -> None
+  | _ -> failwith "TEKMERION_NODE_COMPONENT"
+in
+(* The chain as a list of nodes, for either association. *)
+let rec TEKMERION_FRAME_NODES tm =
+  match tm with
+    Comb(Comb(Const(",,",_),l),r) ->
+      TEKMERION_FRAME_NODES l @ TEKMERION_FRAME_NODES r
+  | _ -> [tm]
+in
+let TEKMERION_FRAME_COMPONENTS tm =
+  let rec go acc = function
+    | [] -> rev acc
+    | n::rest ->
+        (match TEKMERION_NODE_COMPONENT n with
+           Some c -> go (c::acc) rest
+         | None -> go acc rest) in
+  go [] (TEKMERION_FRAME_NODES tm)
+in
+(* Component-indexed resolution of the swap lemmas: the framework's own cache *)
+(* is keyed on constant components only, so every swap of e.g.                *)
+(* `memory :> bignum(z,4)` with a register is re-proved from scratch.  A       *)
+(* swap theorem is a function of the pair alone and is proved by the kernel    *)
+(* once; here it is also remembered once.                                     *)
+let tekmerion_swap_cache = ref ([]: (term * thm) list)
+in
+let TEKMERION_SWAP_CONV tm =
+  try assoc tm !tekmerion_swap_cache
+  with Failure _ ->
+    let th = ASSIGNS_SWAP_CONV tm in
+    tekmerion_swap_cache := (tm,th) :: !tekmerion_swap_cache;
+    th
+in
+(* relational.ml:ASSIGNS_MOVE_BACK_CONV with the swap conversion passed in. *)
+let rec TEKMERION_MOVE_BACK swcv acv tm =
+  try let th0 = GEN_REWRITE_CONV I [GSYM SEQ_ASSOC] tm in
+      let ltm,rtm = dest_comb(rand(concl th0)) in
+      let (p,th1) = TEKMERION_MOVE_BACK swcv acv rtm in
+      let th2 = TRANS th0 (AP_TERM ltm th1) in
+      if p <> 0 then (p,th2) else
+      let th3 = GEN_REWRITE_RULE RAND_CONV [SEQ_ASSOC] th2 in
+      (try 1,CONV_RULE (RAND_CONV (LAND_CONV acv)) th3
+       with Failure _ -> try
+         let th4 = CONV_RULE (RAND_CONV (LAND_CONV swcv)) th3 in
+         0,GEN_REWRITE_RULE RAND_CONV [GSYM SEQ_ASSOC] th4
+       with Failure _ -> -1,th2)
+  with Failure _ -> try 1,acv tm
+  with Failure _ -> try 0,swcv tm
+  with Failure _ -> -1,REFL tm
+in
+(* `(=) ,, r = r`, the rewrite MAYCHANGE_LID performs for the empty starter. *)
+let TEKMERION_SEQ_ID_CONV tm =
+  try PURE_REWRITE_CONV [SEQ_ID] tm with Failure _ -> REFL tm
+in
+(* Rebuild the MAYCHANGE-form frame from its node list. *)
+let rec TEKMERION_FRAME_CHAIN sq = function
+  | [n] -> n
+  | n::rest -> mk_comb(mk_comb(sq,n),TEKMERION_FRAME_CHAIN sq rest)
+  | [] -> failwith "TEKMERION_FRAME_CHAIN"
+in
+let TEKMERION_MAYCHANGE_UPDATE_RULE uth th =
+  let spine = lhand(concl uth) in
+  let rec is_write tm =
+    match tm with
+      Comb(Comb(Comb(Const("write",_),_),_),_) -> true
+    | _ -> false in
+  if not (is_write spine) then
+    (* no write in this step: the frame is carried unchanged *)
+    EQ_MP (AP_TERM (rator(concl th)) uth) th
+  else
+  let frame = rator(rator(concl th)) in
+  let nodes0 = List.filter
+    (fun n -> TEKMERION_NODE_COMPONENT n <> None)
+    (TEKMERION_FRAME_NODES frame) in
+  (* canonicalise the incoming frame once, for the whole write list *)
+  let lth = MAYCHANGE_CANON_CONV frame in
+  let acur0 = rand(concl lth) in
+  let comps0 = TEKMERION_FRAME_COMPONENTS frame in
+  if not (TEKMERION_FRAME_COMPONENTS acur0 = comps0) then
+    failwith "TEKMERION_MAYCHANGE_UPDATE_RULE: frame is not canonicalisable";
+  let anodes0 = List.filter
+    (fun n -> TEKMERION_NODE_COMPONENT n <> None)
+    (TEKMERION_FRAME_NODES acur0) in
+  (* thread (theorem, canonical frame, its nodes, the shipped-form nodes, the
+     component list, the sequencing relation, the step certificate) *)
+  let rec step st tm =
+    match tm with
+      Comb(Comb(Comb(Const("write",_),c),y),s) ->
+        let (th_cur,acur,anodes,nodes,comps,sqo) = step st s in
+        let th1 = ISPECL [c;y] (MATCH_MP MAYCHANGE_WRITE th_cur) in
+        let pred = rator(rator(concl th1)) in
+        let sq = match sqo with Some q -> q | None -> rator(rator pred) in
+        let item = rand pred in
+        let ithm = MAYCHANGE_CANON_CONV item in
+        let ac = rand(concl ithm) in
+        let cmp = match ac with
+                    Comb(Const("ASSIGNS",_),cc) -> cc
+                  | _ -> failwith "TEKMERION_MAYCHANGE_UPDATE_RULE: item" in
+        (* (acur ,, MAYCHANGE [c]) = (acur ,, ASSIGNS c) *)
+        let pth = MK_COMB(AP_TERM sq (REFL acur),ithm) in
+        let pair = mk_comb(mk_comb(sq,acur),ac) in
+        (* the same element sequence in canonical (right-associative) form *)
+        let appended () =
+          let rea =
+            GEN_REWRITE_CONV TOP_DEPTH_CONV [GSYM SEQ_ASSOC] pair in
+          (TRANS pth rea, rand(concl rea), anodes @ [ac], nodes @ [item],
+           comps @ [cmp]) in
+        let res =
+          if anodes = [] then
+            (* first component: the identity is dropped, as MAYCHANGE_LID does *)
+            (TRANS pth (TEKMERION_SEQ_ID_CONV pair),
+             ac, [ac], [item], [cmp])
+          else if exists (fun e -> aconv e cmp) comps then
+            (* already allowed: absorb it; the frame term does not change *)
+            let n,eth = TEKMERION_MOVE_BACK TEKMERION_SWAP_CONV
+                          ASSIGNS_IDEMPOT_CONV pair in
+            if n = 1 && aconv (rand(concl eth)) acur then
+              (TRANS pth eth, acur, anodes, nodes, comps)
+            else appended ()
+          else appended () in
+        let (eq,acur',anodes',nodes',comps') = res in
+        (CONV_RULE(RATOR_CONV(RATOR_CONV (K eq))) th1,
+         acur',anodes',nodes',comps',Some sq)
+    | _ -> st in
+  let inf = (CONV_RULE(RATOR_CONV(RATOR_CONV (K lth))) th,
+             acur0,anodes0,nodes0,comps0,None) in
+  let (th_cur,acur,_,nodes,_,sqo) = step inf spine in
+  let sq = match sqo with
+             Some q -> q
+           | None -> failwith "TEKMERION_MAYCHANGE_UPDATE_RULE: no write" in
+  (* back to the shipped MAYCHANGE form, one conversion for the whole step *)
+  let mth = MAYCHANGE_CANON_CONV (TEKMERION_FRAME_CHAIN sq nodes) in
+  if not (rand(concl mth) = acur) then
+    failwith "TEKMERION_MAYCHANGE_UPDATE_RULE: frame bookkeeping";
+  let th' = CONV_RULE(RATOR_CONV(RATOR_CONV (K (SYM mth)))) th_cur in
+  EQ_MP (AP_TERM (rator(concl th')) uth) th'
+in
+let TEKMERION_MAYCHANGE_STATE_UPDATE_TAC =
+  DISCH_THEN(fun uth ->
+    MP_TAC uth THEN
+    FIRST_X_ASSUM(ASSUME_TAC o TEKMERION_MAYCHANGE_UPDATE_RULE uth o
+           check(maychange_term o concl)))
+in
+(* arm.ml:ARM_STEP_TAC with the substitutions above. *)
 let TEKMERION_ARM_STEP_TAC (mc_length_th,decode_ths) (subths:thm list) sname
       (store_inst_term_to: term ref option)
       (strip_component_tac: thm_tactic) =
@@ -6390,7 +6564,7 @@ let TEKMERION_ARM_STEP_TAC (mc_length_th,decode_ths) (subths:thm list) sname
   MAP_EVERY (TEKMERION_TRY o NONSELFMODIFYING_STATE_UPDATE_TAC o
     MATCH_MP aligned_bytes_loaded_update o CONJUNCT1) subths THEN
   TEKMERION_ASSUMPTION_STATE_UPDATE_TAC THEN
-  MAYCHANGE_STATE_UPDATE_TAC THEN
+  TEKMERION_MAYCHANGE_STATE_UPDATE_TAC THEN
   DISCH_THEN(fun th ->
     let thl = STATE_UPDATE_NEW_RULE th in
     if thl = [] then ALL_TAC else
