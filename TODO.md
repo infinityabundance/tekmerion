@@ -5515,3 +5515,127 @@ For width `W` (here `B = 2^64`, `B^4 = 2^256`), from the aggregate
   hoisting, and zero-selector canonicalisation. Log queries in `research/receipts/xxix-search-log.md`;
   add novelty rows only with a class.
 - [ ] **XXIX.F2.** No new programme documents; the next artefact is a measurement.
+
+---
+
+# XXX — Intake 2026-11-27 (eighth): fix the bound arithmetic, fold the selectors, measure matched session
+
+Nothing omitted. Records the review of `28c21d9` and the follow-up note. The backlog stays frozen
+(`XXV.G`). The canonical-row WIP is preserved at `wip/xxix-b5-canonrow` (unverified, do not cite).
+
+## XXX.0 — Status and corrections (append-only)
+
+- [ ] **XXX.0.1. Status at `28c21d9` [measured].** add **4,088,374** (2.21× human) · sub **4,969,556**
+  (3.87×) · neg **2,848,020** (3.95×); every run `STATEMENT_OK`. Cumulative since IX.89: add −28.8 %,
+  sub −44.9 %, neg −49.9 %; combined −41.8 % (8,553,060 inferences). Derived matched-session **1.40×
+  / 2.71× / 1.87×** (not measured).
+- [ ] **XXX.0.2. The carry certificate is a premise selector, not a direct replay.** IX.99 discovers
+  sufficient premises numerically and then calls `INT_ARITH_TAC`. The next step is a direct,
+  canonical-row replay (`XXX.D`), but only **after** the entry split is folded (`XXX.B`), so it
+  optimises one call per theorem, not eight.
+- [ ] **XXX.0.3. Three bound-arithmetic defects (P0, blocking any native use).** They do **not**
+  make a generated theorem unsound (the HOL step re-checks the conclusion), but they can produce
+  wrong numerical candidates and must be fixed before the numerical layer is a foundation:
+  - `bridge_cert_join_lo` selects the **smaller** lower bound; it must select the **tighter, larger**
+    one;
+  - `bridge_cert_bound`'s exact-division check does not establish integrality when `Num.div_num`
+    returns a rational;
+  - `bridge_cert_hi` tightens a strict bound by subtracting one **without** accounting for the
+    magnitude of a rational multiplier. For integer `x`, `x < 1/2` gives `x ≤ 0`, not `x ≤ −1/2`.
+  Correct integer endpoint rules: `x<q ⟹ x ≤ ceil(q)−1`; `x≤q ⟹ x ≤ floor(q)`; `x>q ⟹ x ≥
+  floor(q)+1`; `x≥q ⟹ x ≥ ceil(q)`.
+- [ ] **XXX.0.4. The entry split is the root cause of branch multiplication.**
+  `BRIDGE_FINISH_KEEP_ALG_TAC` splits on the written-value conditions **before** expansion, so the
+  hoist fires 4× on neg and per-branch work is multiplied. The human proof keeps the selected value
+  as one term and splits **once** at the end. Selector folding is the elimination lever (`XXX.B`).
+- [ ] **XXX.0.5. Neg has ~0.58M unaccounted** after simulation, library, facts and close: preamble,
+  inter-split gaps and tail. Instrument those next (`XXX.F`).
+- [ ] **XXX.0.6. Order matters:** fold the entry split (or hoist above it) **first**, then
+  canonical-row replay. Shrinking a cost that is about to disappear is waste.
+
+## XXX.A — P0: fix the bound arithmetic and test it exhaustively
+
+- [ ] **XXX.A1.** `bridge_cert_join_lo`: take the **maximum** of the two lower bounds (the tighter
+  one); symmetric check for upper bounds (minimum).
+- [ ] **XXX.A2.** Integrality: a bound candidate is only exact when the division is exact; when
+  `Num.div_num` yields a rational, round per the endpoint rules in `XXX.0.3` (ceil/floor), and never
+  emit a fractional integer bound.
+- [ ] **XXX.A3.** Strict tightening: apply `ceil(q)−1` / `floor(q)` / `floor(q)+1` / `ceil(q)` for
+  rational `q`, not a blanket `−1`.
+- [ ] **XXX.A4. Exhaustive small-integer regression tests** for the three functions over a grid of
+  small integers and rationals (positive, negative, zero, exact and non-exact division, equal and
+  unequal bounds). Acceptance: an OCaml test harness (like `tests/interval_engine_selftest`) that
+  enumerates the grid and fails on any wrong bound; included in `cargo test` or a scripted gate.
+- [ ] **XXX.A5.** Re-run add/sub/neg: `STATEMENT_OK`, totals no worse than `28c21d9`, and report any
+  change (a corrected bound may change a candidate, hence a cost).
+
+## XXX.B — P1: fold the conditional select at the entry split (the elimination lever)
+
+- [ ] **XXX.B1.** Write each conditional-select result as `p·x + (1−p)·y` with `p ∈ {0,1}` and do
+  **not** split on it at entry; carry the selector symbolically.
+- [ ] **XXX.B2.** Split **once**, at the end, on the selector — the human structure (two branches).
+- [ ] **XXX.B3.** Every fact and certificate then runs **once per theorem**; the hoist fires once.
+  Acceptance: neg branches 10 → 2; add 12 → 2; sub 24 → 2; facts/certificates once; `STATEMENT_OK`;
+  report branches avoided and pre-close work avoided.
+- [ ] **XXX.B4.** Any elimination must be justified by a kernel-checked theorem (`XXVIII.0.3`); the
+  selector encoding `p·x+(1−p)·y` is itself proved from the machine select semantics, not assumed.
+- [ ] **XXX.B5. If folding is too large a first step, do `XXX.C` first** (hoist above the entry
+  split); it gets most of the fact-sharing benefit and multiplies the later levers similarly.
+
+## XXX.C — P2: hoist above the entry split
+
+- [ ] **XXX.C1.** Move the aggregate/fact hoist above `BRIDGE_FINISH_KEEP_ALG_TAC`'s written-value
+  split so the fact is proved once per theorem. Keep the load-bearing controls (single-carrier gate,
+  `band_only`; without them add +488,528, sub +214,336).
+- [ ] **XXX.C2.** Acceptance: add's 6 and sub's 12 per-branch fact proofs fall; `STATEMENT_OK`;
+  `plain == phase`.
+
+## XXX.D — P3: direct canonical-row certificate replay (after B/C)
+
+- [ ] **XXX.D1.** Finish `wip/xxix-b5-canonrow` (preserved, unverified): normalise the aggregate
+  **once**, derive the canonical carrier equation once, and replay `target ≤ bound` by scaling and
+  adding bound theorems — no `INT_ARITH` over the raw aggregate. Do this only after B/C cut the fire
+  count to ~one per theorem.
+- [ ] **XXX.D2.** Preserve the evidence: the discovery mechanism must keep the **coefficients,
+  premise references and transformations**, not discard them and ask another procedure to rediscover
+  them (`XXX.G`).
+- [ ] **XXX.D3.** Measure per-fire cost before/after and the fact phase; fall back unchanged.
+
+## XXX.E — P4: measure matched-session now
+
+- [ ] **XXX.E1.** Load the support library before the counter starts, count it **once** in ledger
+  L7, and publish the measured matched-session total next to the strict one. The derived 1.40× /
+  2.71× / 1.87× are close enough to the headline that they must be replaced by measurement.
+- [ ] **XXX.E2.** The run must carry the statement check; report strict, matched, amortised, and the
+  L7 library cost for each task.
+
+## XXX.F — P5: instrument the unaccounted neg cost
+
+- [ ] **XXX.F1.** The ~0.58M not in simulation/library/facts/close is preamble, inter-split gaps and
+  tail. Measure each, per branch and once-only, so the next layer is visible after the branch work
+  is gone.
+
+## XXX.G — P6: one typed certificate representation
+
+- [ ] **XXX.G1.** Consolidate the mechanisms (prop/literal/AC/range/order/linear/Farkas/carry) into a
+  **unified typed certificate** carrying coefficients, premise references and the arithmetic
+  transformations, so the producer does not discard evidence and the checker replays it directly.
+- [ ] **XXX.G2.** This is the precondition for extending to multiplication and Montgomery.
+
+## XXX.H — Targeted literature (backlog frozen)
+
+- [ ] **XXX.H1.** Search only for what `XXX.B`/`XXX.D`/`XXX.A` need: **if-conversion / select
+  folding** in verified compilers (e.g. `p·x+(1−p)·y` encodings in verification conditions),
+  canonical-row / semiring-normaliser replay in LCF kernels, and exact **rational endpoint/rounding
+  rules** for integer bound propagation. Log in `research/receipts/xxx-search-log.md`.
+- [ ] **XXX.H2.** No new programme documents; the next artefact is a measurement.
+
+## XXX.I — Execution order (supersedes `XXIX.E`)
+
+1. `XXX.A` — fix the bound arithmetic + exhaustive tests (P0).
+2. `XXX.C` or `XXX.B` — hoist above / fold the entry split (the multiplier).
+3. `XXX.D` — canonical-row replay, now optimising ~one fire per theorem.
+4. `XXX.E` — measured matched-session baseline.
+5. `XXX.F` — instrument the unaccounted cost.
+6. `XXX.G` — unified certificate representation; then families.
+7. Step-theorem cache and library diet for the strict win.
