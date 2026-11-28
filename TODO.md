@@ -5405,3 +5405,103 @@ turns an impossible wrap case into a hypothesis.
   branch-feasibility pruning, OR-reduction/zero-test canonicalisation, and numeral-product caching.
   Log queries in `research/receipts/xxviii-search-log.md`; add novelty rows only with a class.
 - [ ] **XXVIII.J2.** No new programme documents; the next artefact is a measurement.
+
+---
+
+# XXIX — Intake 2026-11-27 (seventh): harness provenance, the carry-bound certificate, then pruning
+
+Nothing omitted. Records the review of `4ae3506` and the follow-up note. **The review is two commits
+behind:** IX.98 (`cee7d57`) already hoists the aggregate fact once per pre-split goal, so the fact
+phase is no longer 100 % per branch. The backlog stays frozen (`XXV.G`).
+
+## XXIX.0 — Status and corrections (append-only)
+
+- [ ] **XXIX.0.1. The review's totals are IX.97; the tree is IX.98.** At `cee7d57`/`c98eafe`: **add
+  4,310,114 · sub 5,795,082 · neg 2,941,309** (2.33× / 4.52× / **4.08×** human), every run
+  `STATEMENT_OK`. The fact phase is **add 613,764 · sub 1,252,636 · neg 336,655** (was 701,306 /
+  1,343,866 / 1,511,696). Neg proves the final-carry fact **0 times per branch** (10/10 reuse).
+- [ ] **XXIX.0.2. The review's counterfactual table predates IX.98.** Derived at `c98eafe`
+  **[derived]**: task-specific `T` = total − library = add 2,812,053 · sub 4,297,103 · neg
+  **1,443,957**; matched-session ratio **1.52× / 3.35× / 2.00×**; strict `X = H − T − 1` =
+  **−963,560 / −3,013,930 / −722,485**. Recompute any scenario from these, not from 4,121,086.
+- [ ] **XXIX.0.3. The pruning-vs-facts question is settled.** Pruning the nine vacuous branches saves
+  1,089,215; a perfect fact certificate saves 1,511,696; they are **complementary**, not substitutes
+  (`xxviii-neg-per-branch-cost.md`). The reviewer's earlier premise is withdrawn; keep both.
+- [ ] **XXIX.0.4. The hoist is per pre-split goal, not per theorem.** `BRIDGE_FINISH_KEEP_ALG_TAC`
+  splits on written-value conditions before `expand`; the fact is proved once per pre-split goal
+  (neg 4, add 2, sub 2). Remaining repeated work: add 6 per-branch proofs, sub 12 (`XXIX.C`).
+- [ ] **XXIX.0.5. The remaining fact cost is the derivation itself, not repetition.** On neg,
+  336,655 is now 4 pre-split proofs; B3/B5-scale proofs (~629K each before the hoist) were the
+  `INT_ARITH`/`INT_RING`-over-the-aggregate cost. Replace the derivation with a generic, width-
+  independent carry-bound certificate (`XXIX.B`).
+
+## XXIX.A — P0: statement-harness hardening (evidence integrity)
+
+The check is correct; the harness that carries it can be fooled. Fix all four.
+
+- [ ] **XXIX.A1.** `ensure` must require **exactly one valid `REPARSE 1`** and validate every
+  mandatory field; a nonempty cache with `REPARSE 0` or missing fields is rejected, not accepted.
+- [ ] **XXIX.A2.** Bind the cache to **provenance**: upstream commit, the theory definitions used to
+  parse, and the machine-code bytes' digest. Store and verify them; a cache from a different upstream
+  or a different object is invalid.
+- [ ] **XXIX.A3.** `verdict` must require the **expected task**, **exactly one** `STATEMENT_OK`, a
+  completion marker, and **no** failure markers. Any `STATEMENT_OK` substring is not enough.
+- [ ] **XXIX.A4.** Remove hard-coded filesystem paths; resolve everything from the repository root.
+- [ ] **XXIX.A5. Mutation controls for the harness itself**: missing marker, wrong task, `REPARSE 0`,
+  two `STATEMENT_OK` lines, and a stray `STATEMENT_FAIL` must each make the run fail. Acceptance: a
+  script that runs all five and records the rejections.
+
+## XXIX.B — P1: the generic carry-bound certificate
+
+For width `W` (here `B = 2^64`, `B^4 = 2^256`), from the aggregate
+`S + N − B^4·c = p` and the bounds `0 ≤ S ≤ B^4 − 1`, `0 ≤ N ≤ p`, `c ∈ {0,1}`:
+
+`B^4·c = S + N − p ≤ B^4 − 1`, hence `c < 1`, hence **`c = 0`**.
+
+- [ ] **XXIX.B1.** Compile this as a **generic, width-independent** certificate: the proof must not
+  mention Curve25519, the zero-test selector, the OR reduction, or any branch condition.
+- [ ] **XXIX.B2.** Replace `bridge_aggregate_facts`'s `INT_ARITH` + separate bit-value proof with
+  this certificate where the shape matches; fall back to the existing path otherwise.
+- [ ] **XXIX.B3.** Measure against the remaining fact phase (neg 336,655 · add 613,764 · sub
+  1,252,636) and against the pre-hoist B3/B5 scale (~629K) if reproducible in a scratch run.
+- [ ] **XXIX.B4.** Report the certificate's premise list and cost; if the bounds are not available
+  pre-split for some task, say which and keep the fallback.
+
+## XXIX.C — P2: hoist above the entry split
+
+- [ ] **XXIX.C1.** Move the aggregate/fact hoist above `BRIDGE_FINISH_KEEP_ALG_TAC`'s written-value
+  split so the fact is proved **once per theorem**, not once per pre-split goal. **Do not regress**:
+  the single-carrier gate and `band_only` are load-bearing (without them add +488,528, sub +214,336).
+- [ ] **XXIX.C2.** Acceptance: add's 6 and sub's 12 per-branch fact proofs fall, with `STATEMENT_OK`
+  and `plain == phase`; report the derivation count (once vs per goal).
+
+## XXIX.D — P3: prune what is left (non-fact work on impossible branches)
+
+- [ ] **XXIX.D1.** After `XXIX.B`/`XXIX.C`, the remaining avoidable neg work is ≈206,692 of non-fact
+  work on the nine impossible branches. Prune at creation by canonicalising the zero selector
+  (`VAL_EQ_0`, `WORD_SUB_EQ_0`, `BIGNUM_OF_WORDLIST_EQ_0`, `WORD_OR_EQ_0`) **before the first
+  conditional splitter** and before arithmetic normalisation (`XXVIII.D`).
+- [ ] **XXIX.D2.** Elimination must be justified by a **kernel-checked** contradiction or verified
+  simplification; an OCaml structural check may only nominate (`XXVIII.0.3`).
+- [ ] **XXIX.D3.** Target: neg branches 10 → 2 (the human structure). Report branches avoided,
+  pre-close work avoided, and `STATEMENT_OK`.
+
+## XXIX.E — P4: the order to a matched-session win
+
+- [ ] **XXIX.E1.** Order: **shared facts once → certificate for the derivation → pruning → step-theorem
+  cache → library diet.** The step cache decides a matched-session win for neg: simulation is 528,862;
+  at ~100K it would put matched-session neg near 0.48M against the human 721,473 (a **projection**,
+  not a result).
+- [ ] **XXIX.E2.** Measure the matched-session baseline (`XXV.C` step 2) after `XXIX.B`/`C`, with the
+  statement check in the same run.
+- [ ] **XXIX.E3. Strict win still needs the library diet** (`XXVIII.G1`): the 1.5M support library is
+  larger than the human total for every task.
+- [ ] **XXIX.E4.** Do **not** spend more effort on neg's final close: 2,057 is 0.05 % and is done.
+
+## XXIX.F — P5: targeted literature (backlog frozen)
+
+- [ ] **XXIX.F1.** Search only for what `XXIX.B`/`XXIX.C`/`XXIX.D` need: width-generic carry/bound
+  certificates, canonical-row / semiring-normaliser replay in LCF kernels, proof-producing shared-fact
+  hoisting, and zero-selector canonicalisation. Log queries in `research/receipts/xxix-search-log.md`;
+  add novelty rows only with a class.
+- [ ] **XXIX.F2.** No new programme documents; the next artefact is a measurement.
