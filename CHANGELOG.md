@@ -33,6 +33,11 @@ per-answer totals by a constant).
   on 11 branches: 100–110K → 6.7K and 56–110K → 4.6–8.2K. **add 4,926,695 → 4,396,406 (−10.8 %;
   2.38× human), close 786,931 → 259,274. sub 6,646,550 → 6,259,618 (−5.8 %; 4.88×), close
   1,217,732 → 831,616.** neg unchanged at 4,121,086.
+- **Hoisted aggregate fact** (`ix98`): the final-carry fact is proved **before the conditional split**
+  and reused by every branch (the fact needs no branch hypothesis). **neg 4,121,086 → 2,941,309
+  (−28.6 %; 4.08× human), fact phase 1,511,696 → 336,655, zero per-branch fact proofs. add
+  4,396,406 → 4,310,114 (2.33×); sub 6,259,618 → 5,795,082 (4.52×).** Every run prints
+  `STATEMENT_OK aconv=1 hyps=0 axioms=3`.
 - Not established: `equals_thm`/`axioms()` re-checked in-run (no offline harness yet),
   matched-session accounting, timing medians.
 

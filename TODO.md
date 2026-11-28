@@ -5316,14 +5316,23 @@ Neg's aggregate-fact phase is **1,511,696**, the largest identifiable item after
 - [ ] **XXVIII.C1.** Apply the certificate methodology to `bridge_aggregate_facts` itself: derive the
   final carry/borrow fact from the aggregate identity and the input range, not by a general
   arithmetic proof.
-- [ ] **XXVIII.C2.** Derive the repeated "final carry = 0" theorem **once, before case splitting**,
-  from the aggregate and the range, and reuse the checked theorem in every branch.
-- [ ] **XXVIII.C3.** Measure: aggregate-fact phase per task (add 701,306 · sub 1,343,866 · neg
-  1,511,696) before/after, with the derivation count (once vs per branch).
-- [ ] **XXVIII.C4. Measure the pre-close cost per branch, all 10 neg branches.** The receipt reports
-  how each branch closes but not what it cost before the close. If most of the ~2.1M non-close cost is
-  spread across the nine vacuous branches, **pruning at creation beats refuting afterwards** and is a
-  larger lever than every close optimisation combined.
+- [x] **XXVIII.C2.** Derive the repeated "final carry = 0" theorem **once, before case splitting**,
+  from the aggregate and the range, and reuse the checked theorem in every branch. — **Done, IX.98.**
+  `BRIDGE_HOIST_AGG_FACTS_TAC` proves it between normalisation and the first conditional split and
+  `ASSUME_TAC`s it; branches reuse by `aconv`. The fact needs **no branch hypothesis**. neg facts
+  **1,511,696 → 336,655**, zero per-branch proofs (10/10 reuse); add 701,306 → 613,764; sub
+  1,343,866 → 1,252,636. Receipt `research/receipts/ix98-hoist-aggregate-facts.md`.
+- [x] **XXVIII.C3.** Measure: aggregate-fact phase per task (add 701,306 · sub 1,343,866 · neg
+  1,511,696) before/after, with the derivation count (once vs per branch). — **Done, IX.98.**
+- [x] **XXVIII.C4. Measure the pre-close cost per branch, all 10 neg branches.** — **Done.**
+  Receipt `research/receipts/xxviii-neg-per-branch-cost.md`: facts are **100 % per branch**
+  (1,511,696), B3+B5 = 83.2 %; pruning the nine vacuous saves 1,089,215, a perfect fact certificate
+  1,511,696; they are complementary (both = 1,718,388).
+- [ ] **XXVIII.C5. Hoist above the entry split.** The hoist currently fires once per **pre-split
+  goal** (neg 4, add 2, sub 2) because `BRIDGE_FINISH_KEEP_ALG_TAC` splits on the written-value
+  conditions before `expand`. `add` still proves facts 6× (12 branches) and `sub` 12× (24). Hoist
+  above that route for the remaining repeated work. **Do not regress**: the single-carrier gate and
+  `band_only` controls are load-bearing (without them add +488,528, sub +214,336).
 
 ## XXVIII.D — P3: canonicalise selectors before the first split
 
