@@ -5378,8 +5378,40 @@ turns an impossible wrap case into a hypothesis.
 
 - [ ] **XXVIII.G1.** Dependency-minimal library linking (`XXIII.K3`/`XXV.C` step 6): the indirect
   closure per theorem, strict-accounted; the route to a strict win once `T < H`.
-- [ ] **XXVIII.G2.** Step-theorem caching (`XXIII.D`/`XXV.D3`): the simulation floor (add 787,891 ·
-  sub 674,249 · neg 528,862).
+- [ ] **XXX.G2.** Step-theorem caching (`XXIII.D`/`XXV.D3`): the simulation floor (add 787,891 ·
+  sub 674,249 · neg 528,862). — **Feasibility measured, `e41df24`.** Receipt
+  `research/receipts/xxx-step-cache-feasibility.md`. A generic per-opcode step theorem works
+  (`SBCS` expansion **7,392 → 1,280** per occurrence; derive once 20,502, or 6,715/opcode after a
+  shared 13,214). But the instruction-expansion bucket is only **101,460 of 528,083**; the rest is
+  `ASSUMPTION_STATE_UPDATE_TAC` **159,456** + `MAYCHANGE_STATE_UPDATE_TAC` **193,789** (80.8 %). So
+  the simulation ceiling is **428,029**, and the review's ~100K target is unreachable by a step
+  cache; the cache is ~break-even on `neg` alone and pays only when shared across tasks.
+- [x] **XXX.G3. Probe `ASSUMPTION_STATE_UPDATE_TAC` + `MAYCHANGE_STATE_UPDATE_TAC`.** — **Done,
+  `4f6efee`.** Receipt `research/receipts/xxx-state-propagation-feasibility.md`.
+  `ASSUMPTION_STATE_UPDATE_TAC` = 303 attempts / 19 steps (12.5 succeed), 173 inf per (fact, write)
+  pair, 8,392/step; `MAYCHANGE_STATE_UPDATE_TAC` = 61 writes, ~3,177/write, and the two `STP` steps
+  alone are 53,232. **A supersede rule** (skip carrying facts about components the step overwrites —
+  they are superseded anyway) is a 6-line change producing the **identical final hypothesis set**
+  and `aconv`-identical statement, saving **34,890** on neg (sim 528,083 → 493,193). A liveness
+  stand-in saves **64,856** (463,787). The `MAYCHANGE` frame merge is the blocker (deferring it was
+  +76,687 worse). With the step cache, projected neg sim **386,647** — still 3.9× the ~100K target.
+- [ ] **XXX.G4. DECISION REQUIRED: where the supersede rule lives.** `ASSUMPTION_STATE_UPDATE_TAC` /
+  `MAYCHANGE_STATE_UPDATE_TAC` are the **shared s2n-bignum framework**, used by the human baseline
+  too. Modifying them changes the human proof; shadowing them after the framework defines the
+  tactics may not take effect. Options: (a) a Tekmerion-owned tactic variant used only by generated
+  answers (counted as a Tekmerion addition, baseline unchanged — needs the framework to call it
+  dynamically, or the emitted answer to redefine the caller); (b) modify the shared framework and
+  **re-run the human baseline** with the same framework (fair only if both sides are re-measured, and
+  it changes the published baseline). Record a decision before implementing; do not silently change
+  the baseline.
+- [ ] **XXX.G5. Step cache as an L7 preloaded library.** Per-opcode step theorems pay only when their
+  derivation is shared across tasks (neg alone: derive ≈74K vs save ≈77K). Derive once into L7, then
+  measure the per-task saving on add/sub/neg; a matched-session claim is legitimate with the cache in
+  L7.
+- [ ] **XXX.G6. Frame-merge mechanism (the 193,789 blocker).** The four requirements recorded in the
+  receipt: read/write-set liveness, a relaxed discard, an out-of-band write set with a linear one-shot
+  frame proof, and component-indexed resolution instead of a proof per write. Do not build until
+  `XXX.G4` is decided.
 - [ ] **XXVIII.G3.** Measured matched-session baselines (`XXV.C` step 2): library built and
   kernel-checked before the counter, cost in L7.
 
