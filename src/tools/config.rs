@@ -37,6 +37,7 @@ pub const ENV_VARS: &[&str] = &[
     "TEKMERION_ALG_CLOSE",
     "TEKMERION_FAULT",
     "TEKMERION_PROBLEMS",
+    "TEKMERION_SIM_BACKEND",
 ];
 
 /// Variables the **OCaml bridge** (`tools/*.ml`, invoked by the emitter) reads.
@@ -54,6 +55,7 @@ pub const ALL_ENV_VARS: &[&str] = &[
     "TEKMERION_FAULT",
     "TEKMERION_PROBLEMS",
     "TEKMERION_RECORD_ANSWERS",
+    "TEKMERION_SIM_BACKEND",
     "TEKMERION_SLICE_CONTROL",
     "TEKMERION_SLICE_DEBUG",
 ];
@@ -474,6 +476,7 @@ mod tests {
         env.insert("TEKMERION_FAULT".to_string(), Some("L01".to_string()));
         env.insert("TEKMERION_PROBLEMS".to_string(), None);
         env.insert("TEKMERION_RECORD_ANSWERS".to_string(), None);
+        env.insert("TEKMERION_SIM_BACKEND".to_string(), None);
         env.insert(
             "TEKMERION_SLICE_CONTROL".to_string(),
             Some("drop-largest".to_string()),

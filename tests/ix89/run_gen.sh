@@ -28,6 +28,14 @@ tid="$arch.bignum_${op}_${fam}.$th"
 outdir="$BENCH/ix89/gen"; mkdir -p "$outdir"
 tag="${arch}_${op}_${fam}.${mode}"
 check="$ROOT/tests/ix89/stmt_check.sh"
+fwcheck="$ROOT/tests/ix89/framework_check.sh"
+
+# XXXI.B1: print the pinned upstream framework digests and their verdict on
+# every run, before the build, so a drifted baseline is visible even if the
+# proof later fails.  The exit status is enforced below.
+"$fwcheck" hashes
+hash_rc=$?
+echo "GEN_UPSTREAM_HASH_RC $hash_rc"
 
 # XXVIII.A / XXIX.A: the upstream conclusion is cached once per task and only
 # accepted with valid provenance; only a missing or invalid cache pays for the
@@ -61,6 +69,24 @@ n=$(grep -c '^PHASE_MARK' "$outdir/${tag}.correct" 2>/dev/null || echo 0)
 "$check" verdict "$tag" "$outdir/${tag}.correct"
 sc=$?
 echo "GEN_RUN ${tag} rc=$rc phase_marks=$n statement_rc=$sc"
+if [ "$hash_rc" -eq 0 ]; then
+  echo "GEN_UPSTREAM_UNCHANGED 1"
+else
+  echo "GEN_UPSTREAM_UNCHANGED 0"
+fi
 grep -E '^(STAMP_INF_BEFORE|STAMP_INFERENCES|Running time)' "$outdir/${tag}.correct" 2>/dev/null | head
+
+# XXXI.B2: with TEKMERION_AB=1, build the same task under both simulation
+# backends and fail the run on any goal/assumption/frame/bridge mismatch.
+ab_rc=0
+if [ "${TEKMERION_AB:-0}" = "1" ]; then
+  TEKMERION_AB_SKIP_HASHES=1 "$fwcheck" ab "$tid"
+  ab_rc=$?
+  echo "GEN_AB_RC $ab_rc"
+fi
+
 [ "$rc" -eq 0 ] || exit "$rc"
-exit "$sc"
+[ "$sc" -eq 0 ] || exit "$sc"
+[ "$hash_rc" -eq 0 ] || exit "$hash_rc"
+[ "$ab_rc" -eq 0 ] || exit "$ab_rc"
+exit 0

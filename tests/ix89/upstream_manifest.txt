@@ -1,0 +1,16 @@
+# XXXI.B1: pinned SHA-256 of the shared s2n-bignum framework files the
+# Tekmerion ARM side-tactics rely on.  `tests/ix89/framework_check.sh hashes`
+# compares the effective build tree and the pristine baseline against these
+# digests on every run; a mismatch is `UPSTREAM_UNCHANGED 0` and fails the run.
+#
+# Format: <sha256>  <path relative to the s2n-bignum root>   (sha256sum -c shape)
+#
+# `common/components.ml`, `common/relational.ml` and `arm/proofs/arm.ml` are
+# the three files TEKMERION_ARM_TACTIC copies from or calls into (assumption
+# update, frame/sequence rules, step tactics).  `arm/proofs/base.ml` is the
+# `needs` entry the generated proof names, so pinning it pins the closure
+# declaration as well.
+893b5b1cc8589fb4024555952951e269db4b9a1438d1f5e55ef462d3be155857  common/components.ml
+1f83d69177b0625928943394f4d4686f6bc8e8e90398078a802a1295a9ddefce  common/relational.ml
+6ff6d009d873ac8a0c00b492ab965a0d0a14f67ed92d36fa168e246f39f9bff9  arm/proofs/arm.ml
+4e08e32c6aa3afe27c89a500a9ef5b0d4e357d5d44ad525c9a82abaebaa0a5d0  arm/proofs/base.ml

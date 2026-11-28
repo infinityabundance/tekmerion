@@ -62,7 +62,8 @@ TAG=freeze-ix77-control
 
 # The generation step must see exactly the environment the manifest records.
 unset TEKMERION_ALG_CLOSE TEKMERION_FAULT TEKMERION_PROBLEMS \
-      TEKMERION_RECORD_ANSWERS TEKMERION_SLICE_CONTROL TEKMERION_SLICE_DEBUG
+      TEKMERION_RECORD_ANSWERS TEKMERION_SIM_BACKEND \
+      TEKMERION_SLICE_CONTROL TEKMERION_SLICE_DEBUG
 
 "$FREEZE" manifest --repo "$REPO" --tag "$TAG" --runtime \
   --executable runtime/emit --hol "$HOL" \

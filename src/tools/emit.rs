@@ -829,14 +829,67 @@ pub fn post_text_for(
     }
 }
 
-fn arm_simulation(exec_name: &str, accumulate: &[usize], last: usize) -> String {
+/// `TEKMERION_SIM_BACKEND` selects the ARM simulation backend the emitted answer
+/// calls (XXXI.B3).  The default, `tekmerion`, calls the Tekmerion-owned
+/// `TEKMERION_ARM_ACCSTEPS_TAC`; `upstream` calls the shared s2n-bignum
+/// `ARM_ACCSTEPS_TAC`.  The two answers differ only by that call name (and by
+/// whether the Tekmerion tactic definition is inlined), which is what the
+/// three-baseline procedure (`XXXI.F1`) requires without editing fixtures.
+pub const SIM_BACKEND_ENV: &str = "TEKMERION_SIM_BACKEND";
+
+/// Which ARM simulation backend an emitted answer uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimBackend {
+    /// The Tekmerion-owned re-implementation (`TEKMERION_ARM_ACCSTEPS_TAC`).
+    Tekmerion,
+    /// The shared s2n-bignum framework (`ARM_ACCSTEPS_TAC`).
+    Upstream,
+}
+
+impl SimBackend {
+    /// The spelling accepted by [`SIM_BACKEND_ENV`].
+    pub fn name(self) -> &'static str {
+        match self {
+            SimBackend::Tekmerion => "tekmerion",
+            SimBackend::Upstream => "upstream",
+        }
+    }
+
+    /// The tactic name the emitted answer calls.
+    fn accsteps(self) -> &'static str {
+        match self {
+            SimBackend::Tekmerion => TEKMERION_ARM_SIMULATION,
+            SimBackend::Upstream => "ARM_ACCSTEPS_TAC",
+        }
+    }
+}
+
+/// Resolve [`SIM_BACKEND_ENV`].  An unset or empty variable is the default
+/// (`tekmerion`); an unrecognised value is an error, never a silent fallback.
+fn simulation_backend() -> Result<SimBackend> {
+    match std::env::var(SIM_BACKEND_ENV) {
+        Err(_) => Ok(SimBackend::Tekmerion),
+        Ok(v) if v.is_empty() || v == "tekmerion" => Ok(SimBackend::Tekmerion),
+        Ok(v) if v == "upstream" => Ok(SimBackend::Upstream),
+        Ok(v) => other(format!(
+            "{SIM_BACKEND_ENV} must be \"tekmerion\" or \"upstream\", got {v:?}"
+        )),
+    }
+}
+
+fn arm_simulation(
+    backend: SimBackend,
+    exec_name: &str,
+    accumulate: &[usize],
+    last: usize,
+) -> String {
     if accumulate.is_empty() {
         format!("ARM_STEPS_TAC {exec_name} (1--{last})")
     } else {
         let nums: Vec<String> = accumulate.iter().map(|n| n.to_string()).collect();
         format!(
             "{} {exec_name} [{}] (1--{last})",
-            TEKMERION_ARM_SIMULATION,
+            backend.accsteps(),
             nums.join(";")
         )
     }
@@ -1875,9 +1928,13 @@ pub fn build_arm(op: &str, task: &str, policy: &GuardPolicy, repo: &Path) -> Res
         .checked_sub(1)
         .ok_or_else(|| EmitError::Other(format!("no instructions in {}", obj.display())))?;
     let modulus = spec.conclusion.modulus().to_string();
+    let backend = simulation_backend()?;
     let tactic = [
         format!("{} THEN", preamble(&spec)),
-        format!("{} THEN", arm_simulation(&exec_name, &accumulate, last)),
+        format!(
+            "{} THEN",
+            arm_simulation(backend, &exec_name, &accumulate, last)
+        ),
         post_text_for(
             Some(task),
             algebraic_close_requested(task),
@@ -2634,4 +2691,42 @@ fn emit_x86(args: &EmitArgs, repo: &Path) -> Result<()> {
         text.len()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+
+    #[test]
+    fn arm_simulation_names_the_selected_backend() {
+        let accumulate = [3usize, 4];
+        assert_eq!(
+            arm_simulation(SimBackend::Tekmerion, "EXEC", &accumulate, 4),
+            "TEKMERION_ARM_ACCSTEPS_TAC EXEC [3;4] (1--4)"
+        );
+        assert_eq!(
+            arm_simulation(SimBackend::Upstream, "EXEC", &accumulate, 4),
+            "ARM_ACCSTEPS_TAC EXEC [3;4] (1--4)"
+        );
+    }
+
+    #[test]
+    fn an_empty_accumulate_set_is_backend_independent() {
+        // No carry chain: both backends use the plain `ARM_STEPS_TAC`, so the two
+        // emitted answers are byte-identical.
+        assert_eq!(
+            arm_simulation(SimBackend::Tekmerion, "EXEC", &[], 7),
+            "ARM_STEPS_TAC EXEC (1--7)"
+        );
+        assert_eq!(
+            arm_simulation(SimBackend::Upstream, "EXEC", &[], 7),
+            "ARM_STEPS_TAC EXEC (1--7)"
+        );
+    }
+
+    #[test]
+    fn backend_names_are_the_documented_spellings() {
+        assert_eq!(SimBackend::Tekmerion.name(), "tekmerion");
+        assert_eq!(SimBackend::Upstream.name(), "upstream");
+    }
 }
