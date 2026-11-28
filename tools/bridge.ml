@@ -2329,7 +2329,20 @@ let bridge_int_eq_has_carry th =
 (* integer discreteness through `INT_NOT_EQ', so `c = 0' follows from         *)
 (* `M + N < B^n', `W >= 0' and `0 <= c <= 1'.  The fact is *proved*, and the  *)
 (* premises are the aggregate and the same integer hypotheses as before.     *)
-let bridge_aggregate_facts aggregates all_hyps =
+(* The carriers are the `&(bitval c)' atoms the aggregates mention; when an   *)
+(* aggregate mentions more than one, only some of them are decided by the    *)
+(* global context (the rest are branch facts).                               *)
+let bridge_aggregate_carriers aggregates =
+  List.fold_left (fun acc th ->
+      match bridge_lf_row_of_thm th with
+      | Some f ->
+          List.fold_left (fun a t ->
+              if bridge_is_bitval_atom t &&
+                 not (List.exists (fun (u,_) -> aconv u t) a)
+              then a @ [(t, th)] else a) acc (bridge_lf_vars f)
+      | None -> acc) [] aggregates;;
+
+let bridge_aggregate_facts ?(band_only=false) aggregates all_hyps =
   (* a top-level disjunction cannot be an antecedent of a linear-arithmetic
      goal (the prover would have to case-split); the branch splitter has
      already produced the conjunctive branches, so one is dropped here.  The
@@ -2352,15 +2365,7 @@ let bridge_aggregate_facts aggregates all_hyps =
      case split is what supplies the two possible values; the strict bound
      itself is proved by linear arithmetic from the aggregate. *)
   let lt_tm = `int_lt` in
-  let carriers =
-    List.fold_left (fun acc th ->
-        match bridge_lf_row_of_thm th with
-        | Some f ->
-            List.fold_left (fun a t ->
-                if bridge_is_bitval_atom t &&
-                   not (List.exists (fun (u,_) -> aconv u t) a)
-                then a @ [(t, th)] else a) acc (bridge_lf_vars f)
-        | None -> acc) [] aggregates in
+  let carriers = bridge_aggregate_carriers aggregates in
   bridge_slice_note "ORACLE aggregate-carriers=%d [%s]"
     (List.length carriers)
     (String.concat "," (List.map (fun (v,_) -> string_of_term v) carriers));
@@ -2380,6 +2385,21 @@ let bridge_aggregate_facts aggregates all_hyps =
     if local = [] || List.length local >= List.length aggregates then
       [aggregates @ side_hyps]
     else [local @ side_hyps; aggregates @ side_hyps] in
+  (* XXVIII.C5: a fact with the same conclusion may already be an antecedent.
+     The pre-split hoist (`BRIDGE_HOIST_AGG_FACTS_TAC`) assumes the branch-
+     independent facts, so every branch inherits them; re-proving one is pure
+     repetition (measured: 1,511,696 inferences on `neg', XXVIII.C4).  The
+     match is `aconv' on the equation `v = &0' / `v = &1' and only against a
+     hypothesis already in scope, so reusing it assumes nothing new.  No match
+     is the old behaviour: the per-branch proof below still runs. *)
+  let assumed v =
+    List.find_opt (fun th ->
+        match concl th with
+        | Comb(Comb(Const("=",_),a),b) when type_of a = `:int` ->
+            aconv a v &&
+            (aconv b (bridge_int_lit num_0) ||
+             aconv b (bridge_int_lit num_1))
+        | _ -> false) all_hyps in
   let prove_zero_lt v =
     let attempt premises =
       let th = prove(bridge_mk_imps premises
@@ -2412,12 +2432,24 @@ let bridge_aggregate_facts aggregates all_hyps =
     go (premise_sets v) in
   List.filter_map (fun carrier ->
       let v = fst carrier in
+      match assumed v with
+      | Some th ->
+          bridge_slice_note "ORACLE fact %s reused why=antecedent"
+            (string_of_term v);
+          Some th
+      | None ->
       match prove_zero_lt v with
       | Some th ->
           bridge_slice_note "ORACLE fact %s = 0 why=aggregate-band"
             (string_of_term v);
           Some th
       | None ->
+          (* `band_only': the pre-split hoist uses this.  A carrier the
+             aggregate-band route cannot decide is left to the per-branch
+             proof; the `v = 0' / `v = 1' searches are kept for the oracle
+             fallback, where they are measured to be the cheap route in the
+             branches that need them. *)
+          if band_only then None else
           (match prove_fact v num_0 with
            | Some th ->
                bridge_slice_note "ORACLE fact %s = 0 why=aggregate"
@@ -2444,6 +2476,85 @@ let bridge_int_hyps asl =
       List.exists (fun u -> match u with
           | Comb(Const("int_of_num",_),_) -> true | _ -> false)
         (find_terms (fun _ -> true) t)) asl;;
+
+(* XXVIII.C5: hoist the branch-independent part of the aggregate fact phase.
+
+   `BRIDGE_ORACLE_TAC' builds the chain aggregate and decides each carry from
+   the aggregate and the integer hypotheses in scope.  A conditional split only
+   *adds* hypotheses, and the chain equations are present before the split, so a
+   fact proved there from the global context holds in every branch; the
+   measured cost of proving it per branch was 1,511,696 inferences on
+   `arm.bignum_neg_p25519' (XXVIII.C4), the same `&(bitval carry_s12) = &0'
+   ten times.
+
+   The tactic runs at each `BRIDGE_ALGEBRA_TAC' entry, after the first
+   normalisation and before `BRIDGE_SPLIT_CONDITIONS_KEEP_TAC'.  The entry route
+   `BRIDGE_FINISH_KEEP_ALG_TAC' splits on the written-value conditions *before*
+   the expansion, so the algebra tactic is entered once per pre-split goal (four
+   on `neg'; the fact is therefore proved four times, not ten).  The range bounds
+   that `BRIDGE_ATOM_BOUNDS_TAC' would supply run after the split, so they are
+   *constructed* here as closed theorems: proving a bound on `&(val w)' or
+   `&(bitval b)' needs no hypothesis.
+
+   Each fact it proves is *assumed*, so every branch inherits it and
+   `BRIDGE_ORACLE_TAC' reuses it (see `assumed' in `bridge_aggregate_facts')
+   instead of proving it again.  The hoist is limited to the single-carrier case
+   and to the aggregate-band route: attempting a carrier the global context
+   leaves undecided costs more than the per-branch proofs it replaces (measured
+   on `add' and `sub').  If no aggregate is found, nothing is decided, or
+   anything raises, the goal is returned unchanged: the per-branch proof remains
+   the fallback and current behaviour is preserved.  A hoisted fact is proved
+   before any branch assumption exists, so reusing it assumes nothing a branch
+   does not already carry, and the kernel checks every step. *)
+let BRIDGE_HOIST_AGG_FACTS_TAC : tactic =
+  fun (asl,w) ->
+    try
+      let eqs = List.filter_map (fun (_,th) ->
+          match bridge_lf_row_of_thm th with
+          | Some f -> Some (th,f) | None -> None) asl in
+      let aggs = bridge_aggregates eqs in
+      let carriers = bridge_aggregate_carriers aggs in
+      (* Only the single-carrier (final-carry) case is hoisted.  With two
+         carriers the second one is left undecided by the global context and
+         the failed band/`v = k' attempts cost more than the per-branch proofs
+         they replace (measured on `arm.bignum_add_p25519': +488528
+         inferences).  A skip is exactly the old route. *)
+      if List.length carriers <> 1 then begin
+        bridge_slice_note "HOIST skip eqs=%d aggregates=%d carriers=%d"
+          (List.length eqs) (List.length aggs) (List.length carriers);
+        ALL_TAC (asl,w)
+      end else
+      let hyps =
+        List.map (fun (_,th) -> bridge_flat_th th) (bridge_int_hyps asl) in
+      (* XXVIII.C5 probe: the non-branch bounds.  `BRIDGE_ATOM_BOUNDS_TAC' runs
+         after the split, so they are not hypotheses yet; they are closed
+         theorems of the word types and are proved here, not assumed. *)
+      let atoms =
+        setify (List.concat
+          (map (fun th -> BRIDGE_INT_ATOMS (concl th)) (aggs @ hyps))) in
+      let bounds =
+        List.concat (map (fun t ->
+            match t with
+            | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) ->
+                [BRIDGE_BOUND_BITVAL_HI t; BRIDGE_BOUND_NONNEG t]
+            | Comb(Const("int_of_num",_), Comb(Const("val",_),_)) ->
+                [BRIDGE_BOUND_VAL_HI (rand (rand t)); BRIDGE_BOUND_NONNEG t]
+            | _ -> []) atoms) in
+      let facts = bridge_aggregate_facts ~band_only:true aggs (bounds @ hyps) in
+      if facts = [] then begin
+        bridge_slice_note "HOIST none eqs=%d aggregates=%d hyps=%d bounds=%d"
+          (List.length eqs) (List.length aggs) (List.length hyps)
+          (List.length bounds);
+        ALL_TAC (asl,w)
+      end else begin
+        bridge_slice_note "HOIST aggregates=%d hyps=%d bounds=%d facts=%d"
+          (List.length aggs) (List.length hyps) (List.length bounds)
+          (List.length facts);
+        EVERY (map ASSUME_TAC facts) (asl,w)
+      end
+    with e ->
+      bridge_slice_note "HOIST failed: %s" (Printexc.to_string e);
+      ALL_TAC (asl,w);;
 
 (* A hypothesis that is only a one-sided bound on one atom (`&0 <= x',   *)
 (* `x < &B', `x <= &1', or the same with the atom on the right) is not     *)
@@ -3460,6 +3571,7 @@ let BRIDGE_ALGEBRA_TAC : tactic =
         raise e in
   fun g ->
     (at "normalise" BRIDGE_ALG_NORM_TAC THEN
+     at "hoist-facts" BRIDGE_HOIST_AGG_FACTS_TAC THEN
      at "split-conditions" BRIDGE_SPLIT_CONDITIONS_KEEP_TAC THEN
      at "renormalise" BRIDGE_ALG_NORM_TAC THEN
      at "zero-fold" BRIDGE_ZERO_FOLD_TAC THEN

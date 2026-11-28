@@ -68,8 +68,13 @@ use tekmerion::tools::{curve_check, dropin};
 /// hand with `INT_LE_MUL`/`INT_LE_ADD` plus one `INT_RING` identity.  Detection
 /// is pure linear-form arithmetic, so a no-match spends no inference; the two
 /// new `prove` calls (the ring identity and the ground `&c < &0`) move the
-/// statement count 92 -> 94).
-const BRIDGE_DIGEST: &str = "ae942c74d63fbe1f3f450bc3ca3199c264960a7653c96a517de8312116fb42ae";
+/// statement count 92 -> 94).  `a1b9a1e0…` (after XXVIII.C5's pre-split
+/// aggregate-fact hoist: `bridge_aggregate_carriers` and
+/// `BRIDGE_HOIST_AGG_FACTS_TAC` derive the branch-independent aggregate fact
+/// once per pre-split goal and assume it, and `bridge_aggregate_facts` reuses a
+/// matching antecedent instead of re-proving it; the per-branch proof is still
+/// the fallback and is unchanged when the hoist does not fire).
+const BRIDGE_DIGEST: &str = "a1b9a1e05b54d4d483a3888caecd9d13e2651d0f22e63d91f3aec8bfe6f41a53";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -182,7 +187,11 @@ fn curve_check_reproduces_the_recorded_report() {
     // its results), so the statement count is still 92 and hits are still 0;
     // only the reported line numbers move.  XXVII.B11's sparse Farkas refutation
     // adds two `prove` calls (the `INT_RING` sum identity and the ground
-    // `&c < &0`), so the count is 94 and hits remain 0.
+    // `&c < &0`), so the count is 94 and hits remain 0.  XXVIII.C5 hoists the
+    // branch-independent aggregate fact before the conditional split; it adds
+    // `bridge_aggregate_carriers` and `BRIDGE_HOIST_AGG_FACTS_TAC` and calls the
+    // existing bound helpers, so the `prove` count is still 94 and hits 0; only
+    // the reported line numbers move.
     assert_eq!(statements, 94);
     assert_eq!(hits, 0);
     let expected =
@@ -249,10 +258,13 @@ fn instrument_reproduces_the_recorded_output() {
     // refutation (the shape parser, the positive-term builders, the scaling and
     // addition rules, and the non-negativity rule), so 249 -> 260 and the output
     // digest moved to `f95a579c...`.
-    assert_eq!(phrases, 260);
+    // XXVIII.C5 adds two top-level phrases (`bridge_aggregate_carriers` and
+    // `BRIDGE_HOIST_AGG_FACTS_TAC`), so 260 -> 262 and the output digest moved to
+    // `dc218bd4...`.
+    assert_eq!(phrases, 262);
     assert_eq!(
         sha256(out.as_bytes()),
-        "f95a579cce4bb6586fa40b75287541e1696672e99c36e8edff7146fafa8abab4"
+        "dc218bd4b71411ab6d052b6a2d676f4bd5ff43d5f3d01503c55fdf988a444a7e"
     );
 }
 
@@ -298,7 +310,8 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // linear-combination proof, and the aggregate-band fact): 265 -> 276.
     // XXVII.B11 boundary.  The ten new top-level helper phrases in bridge.ml
     // take the inlined count 293 -> 304; every answer carries the new text.
-    assert_eq!(parts.len(), 304);
+    // XXVIII.C5 adds the carrier helper and the hoist tactic: 304 -> 306.
+    assert_eq!(parts.len(), 306);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -403,22 +416,25 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // order-refutation and mask-substitution search are locals inside that
     // phrase, so the count is still 293.  The values below are the lazy-
     // negation/reordered final form.
+    // XXVIII.C5 boundary.  The XXVII.B9 digests are retired: the hoist adds two
+    // top-level phrases to bridge.ml, so every inlined answer carries the new
+    // library text (the emitted tactics are byte-identical).
     for (mode, digest) in [
         (
             "add-ref",
-            "488314dbe8f2bdf47b60fa15f2928def64c7d6866253ee7be10dff3f41b42301",
+            "a807fc83054cb3096bfea6ed3d350e5fab4ac5eb3f6e9ec06154ccb0eb2ef21d",
         ),
         (
             "sub",
-            "d0ab40a788c028307b821937e4c752d0af071de652ba14f326d1c98021ea7dda",
+            "cc844d0b13ed6a073df838a8690a40ccfc8edaee717bdab82bfbcec120309714",
         ),
         (
             "neg",
-            "b81df16e89f3472d3de9df11cf061a41cd675a8de7e78d3776cd3a66dab2b54b",
+            "3273bc8e6b7eb5a8717d156814f4d98738cca18d396818be661fc94e01aa0827",
         ),
         (
             "add-p384",
-            "6212ec641d5af3b684658b5a707a1187608c5acaf0b69f5f647c5f478a3bf580",
+            "198e96ee93849a757fa1a7cbf5b017db9040c19ba2cc2fa3f39e6514de850786",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
