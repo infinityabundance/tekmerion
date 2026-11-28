@@ -2342,6 +2342,319 @@ let bridge_aggregate_carriers aggregates =
               then a @ [(t, th)] else a) acc (bridge_lf_vars f)
       | None -> acc) [] aggregates;;
 
+(* ------------------------------------------------------------------------- *)
+(* 6c.3b The carry-bound certificate (XXIX.B).                                *)
+(*                                                                            *)
+(* The aggregate is `A + K*c = 0' with `c' the top carry and `K' its          *)
+(* coefficient.  The fact the close needs is `c = 0', and it follows from the *)
+(* *bounds already in scope*, not from another arithmetic search:             *)
+(*                                                                            *)
+(*   K*c = -A.  Every atom of `A' is bounded (`&(val w) < 2^dimindex',        *)
+(*   `&0 <= &(val w)', `&0 <= &(bitval b) <= &1'), and a weighted modulus     *)
+(*   bound `N <= p' bounds one whole group.  If the interval bound on `K*c'   *)
+(*   lies strictly on the side that rules out `c >= 1', then `c = 0':         *)
+(*                                                                            *)
+(*       c >= 1 ==> (K < 0  =>  K*c <= K)  and  (K > 0  =>  K*c >= K),        *)
+(*                                                                            *)
+(*   so an upper bound `K*c < K' (K > 0) or a lower bound `K*c > K' (K < 0)  *)
+(*   closes it.  The bound is computed with exact `Num' arithmetic, so a      *)
+(*   shape or value mismatch costs no inference.                              *)
+(*                                                                            *)
+(* Nothing here is width- or limb-specific: `B' and `n' are derived from the  *)
+(* coefficient multiset of the aggregate itself (the smallest magnitude > 1   *)
+(* is the limb base `B', every magnitude is a power of it, and `|K| = B^n').  *)
+(* A second aggregate that shares atoms with the carrier row is used when the *)
+(* bound needs it (`add'/`sub' carry a raw and a corrected aggregate); the    *)
+(* elimination is an exact integer combination, so the certificate remains a  *)
+(* certificate and not a solver trace.  The final proof is a kernel-checked   *)
+(* `INT_ARITH' over only the equations that combination used, the bound       *)
+(* hypotheses it read, and `&0 <= c'; the caller keeps the band/fact fallback *)
+(* unchanged when the shape does not match or the certificate fails.          *)
+(* ------------------------------------------------------------------------- *)
+
+(* a one-atom integer hypothesis, as `k*x + c REL 0' with `REL' `>=' or `>' *)
+let bridge_cert_atom_ineq th =
+  match concl th with
+  | Comb(Comb(Const("int_le",_),a),b) when type_of a = `:int` ->
+      (match bridge_lf_of_term a, bridge_lf_of_term b with
+       | Some x, Some y ->
+           let f = bridge_lf_add y (bridge_lf_neg x) in
+           (match fst f with
+            | [(u,k)] when not (Num.eq_num k num_0) -> Some (u,k,snd f,false)
+            | _ -> None)
+       | _ -> None)
+  | Comb(Comb(Const("int_lt",_),a),b) when type_of a = `:int` ->
+      (match bridge_lf_of_term a, bridge_lf_of_term b with
+       | Some x, Some y ->
+           let f = bridge_lf_add y (bridge_lf_neg x) in
+           (match fst f with
+            | [(u,k)] when not (Num.eq_num k num_0) -> Some (u,k,snd f,true)
+            | _ -> None)
+       | _ -> None)
+  | _ -> None;;
+
+(* `(atom, lower bound, upper bound)' where each bound is `(value, strict, thm)'
+   and means `x > value' / `x >= value' (lower) or `x < value' / `x <= value'
+   (upper).  Exact division only: anything else yields no bound and the caller
+   falls back. *)
+let bridge_cert_bound th =
+  match bridge_cert_atom_ineq th with
+  | Some (u,k,c,strict) when Num.lt_num num_0 k ->
+      let q = Num.div_num (Num.minus_num c) k in
+      if Num.eq_num (Num.mult_num q k) (Num.minus_num c)
+      then Some (u, Some ((if strict then Num.add_num q num_1 else q),
+                          false, th), None)
+      else None
+  | Some (u,k,c,strict) ->
+      let ak = Num.abs_num k in
+      let q = Num.div_num c ak in
+      if Num.eq_num (Num.mult_num q ak) c
+      then Some (u, None, Some ((if strict then Num.sub_num q num_1 else q),
+                                false, th))
+      else None
+  | None -> None;;
+
+let bridge_cert_join_lo a b =
+  match a,b with
+  | None,x | x,None -> x
+  | Some(v1,s1,_),Some(v2,s2,_) ->
+      if Num.lt_num v1 v2 then a
+      else if Num.lt_num v2 v1 then b
+      else if s1 then a else b;;
+
+let bridge_cert_join_hi a b =
+  match a,b with
+  | None,x | x,None -> x
+  | Some(v1,s1,_),Some(v2,s2,_) ->
+      if Num.lt_num v1 v2 then a
+      else if Num.lt_num v2 v1 then b
+      else if s1 then a else b;;
+
+let bridge_cert_add tbl u lo hi =
+  let (lo0,hi0) = try List.assoc u tbl with Not_found -> (None,None) in
+  (u, (bridge_cert_join_lo lo0 lo, bridge_cert_join_hi hi0 hi))
+  :: List.remove_assoc u tbl;;
+
+(* the contribution of `k*x' to (lo,hi): increasing for k>0, decreasing for
+   k<0, so the two endpoint bounds swap. *)
+let bridge_cert_scaled k (l,h) =
+  let scale bnd = match bnd with
+    | None -> None
+    | Some(v,s,th) -> Some(Num.mult_num k v, s, th) in
+  if Num.lt_num num_0 k then (scale l, scale h) else (scale h, scale l);;
+
+(* bounds of `sum k_i*x_i + c', with the hypotheses that establish each
+   endpoint kept apart so only the queried direction travels to the proof. *)
+let bridge_cert_form_bounds tbl form =
+  let (xs,c) = form in
+  let (lo,lps,hi,hps) =
+    List.fold_left (fun (lo,lps,hi,hps) (t,k) ->
+        let (l,h) = try List.assoc t tbl with Not_found -> (None,None) in
+        let (cl,ch) = bridge_cert_scaled k (l,h) in
+        let addl acc bnd = match acc,bnd with
+          | None,_ | _,None -> None
+          | Some(v0,s0),Some(v,s,_) -> Some(Num.add_num v0 v, s0 || s) in
+        let plo = match cl with Some(_,_,th) -> [th] | None -> [] in
+        let phi = match ch with Some(_,_,th) -> [th] | None -> [] in
+        (addl lo cl, plo @ lps, addl hi ch, phi @ hps))
+      (Some(c,false), [], Some(c,false), []) xs in
+  (lo,lps,hi,hps);;
+
+(* one relational hypothesis, rewritten as an upper bound of a *rest* form:
+   `target = alpha*f + rest' with `alpha < 0' and `f >= 0' (or `> 0'), so
+   `target <= rest'.  Mirrors `bridge_rel_hi'. *)
+let bridge_cert_rel_hi tbl target (th,f,strict) =
+  ignore th; ignore strict;
+  let (txs,_) = target and (fxs,_) = f in
+  let shared = List.filter (fun (x,_) ->
+      List.exists (fun (y,_) -> aconv x y) txs) fxs in
+  match shared with
+  | [] -> None
+  | (x0,_)::_ ->
+      let k0 = bridge_lf_coeff x0 txs and kf = bridge_lf_coeff x0 fxs in
+      if Num.eq_num kf num_0 then None else
+      let alpha = Num.div_num k0 kf in
+      let prop = List.for_all (fun (x,_) ->
+          Num.eq_num (bridge_lf_coeff x txs)
+                     (Num.mult_num alpha (bridge_lf_coeff x fxs))) shared in
+      if not prop || not (Num.lt_num alpha num_0) then None else
+      Some (bridge_lf_add target (bridge_lf_neg (bridge_lf_scale alpha f)));;
+
+(* the tightest upper bound over the per-atom table and every *combination*
+   of relational hypotheses: each application bounds one weighted group
+   (`N < p' then `M < p'), and the recursion is what lets `add' retire the
+   top carry before the split, where the two modulus bounds are separate
+   hypotheses and no single one suffices.  `(value, premises)'. *)
+let rec bridge_cert_hi depth tbl rels target =
+  let (_,_,hi0,pr0) = bridge_cert_form_bounds tbl target in
+  let best0 = match hi0 with Some(v,_) -> Some(v,pr0) | None -> None in
+  if depth <= 0 then best0 else
+  List.fold_left (fun acc (th,f,strict) ->
+      match bridge_cert_rel_hi tbl target (th,f,strict) with
+      | None -> acc
+      | Some rest ->
+          let inner = bridge_cert_hi (depth - 1) tbl
+              (List.filter (fun (u,_,_) ->
+                   not (aconv (concl u) (concl th))) rels) rest in
+          (match inner with
+           | None -> acc
+           | Some(v,pr) ->
+               let v = if strict then Num.sub_num v num_1 else v in
+               (match acc with
+                | None -> Some(v, th :: pr)
+                | Some(v0,_) ->
+                    if Num.lt_num v v0 then Some(v, th :: pr) else acc)))
+    best0 rels;;
+
+let bridge_cert_lo depth tbl rels target =
+  match bridge_cert_hi depth tbl rels (bridge_lf_neg target) with
+  | None -> None
+  | Some(v,pr) -> Some(Num.minus_num v, pr);;
+
+let bridge_cert_uniq ths =
+  List.rev (List.fold_left (fun acc th ->
+      if List.exists (fun u -> aconv (concl u) (concl th)) acc then acc
+      else th :: acc) [] ths);;
+
+(* `row' = kjx * row - kx * rowj' cancels atom `x'; every weight is an
+   integer, so the combination is an exact equation and not a relaxation. *)
+let bridge_cert_elim (combo,row) (thj,rowj) x =
+  let kx = bridge_lf_coeff_in x row and kjx = bridge_lf_coeff_in x rowj in
+  if Num.eq_num kjx num_0 then None else
+  let row' = bridge_lf_add (bridge_lf_scale kjx row)
+                           (bridge_lf_scale (Num.minus_num kx) rowj) in
+  let combo' = List.map (fun (th,w) -> (th, Num.mult_num kjx w)) combo
+               @ [(thj, Num.minus_num kx)] in
+  Some (combo', row');;
+
+(* `(B, n)' from the coefficient multiset of the carrier row, or `None' when
+   the magnitudes are not the geometric limb weights (the shape does not
+   match, and the caller keeps the old route). *)
+let bridge_cert_shape v row =
+  let k = bridge_lf_coeff_in v row in
+  let mags = List.map (fun (_,c) -> Num.abs_num c) (fst row) in
+  let big = List.filter (fun x -> Num.lt_num num_1 x) mags in
+  match big with
+  | [] -> None
+  | b0::rest ->
+      let b = List.fold_left (fun a x -> if Num.lt_num x a then x else a) b0 rest in
+      let km = Num.abs_num k in
+      let rec pow p n =
+        if Num.lt_num km p then None
+        else if Num.eq_num km p then Some n
+        else pow (Num.mult_num p b) (n + 1) in
+      (match pow b 1 with
+       | None -> None
+       | Some n ->
+           let rec ispow x =
+             if Num.eq_num x num_1 then true
+             else if Num.lt_num num_1 x && Num.eq_num (Num.mod_num x b) num_0
+             then ispow (Num.div_num x b)
+             else false in
+           if n > 1 && List.for_all ispow mags then Some (b,n) else None);;
+
+let bridge_carry_certificate aggregates all_hyps v =
+  try
+    let rows = List.filter_map (fun th ->
+        match bridge_lf_row_of_thm th with
+        | Some f -> Some (th,f) | None -> None) aggregates in
+    let carriers = List.filter (fun (_,f) ->
+        not (Num.eq_num (bridge_lf_coeff_in v f) num_0)) rows in
+    match carriers with
+    | [(th0,row0)] ->
+        (match bridge_cert_shape v row0 with
+         | None -> None
+         | Some (base,limbs) ->
+             let tbl = List.fold_left (fun tbl th ->
+                 match bridge_cert_bound th with
+                 | Some (u,lo,hi) -> bridge_cert_add tbl u lo hi
+                 | None -> tbl) [] all_hyps in
+             let rels = List.filter_map (fun th ->
+                 match concl th with
+                 | Comb(Comb(Const("int_le",_),a),b) when type_of a = `:int` ->
+                     (match bridge_lf_of_term a, bridge_lf_of_term b with
+                      | Some x, Some y ->
+                          let f = bridge_lf_add y (bridge_lf_neg x) in
+                          if List.length (fst f) > 1
+                          then Some (th,f,false) else None
+                      | _ -> None)
+                 | Comb(Comb(Const("int_lt",_),a),b) when type_of a = `:int` ->
+                     (match bridge_lf_of_term a, bridge_lf_of_term b with
+                      | Some x, Some y ->
+                          let f = bridge_lf_add y (bridge_lf_neg x) in
+                          if List.length (fst f) > 1
+                          then Some (th,f,true) else None
+                      | _ -> None)
+                 | _ -> None) all_hyps in
+             let nonneg =
+               try match List.assoc v tbl with
+                 | (Some (_,_,th), _) -> th
+                 | _ -> BRIDGE_BOUND_NONNEG v
+               with Not_found -> BRIDGE_BOUND_NONNEG v in
+             let trial (combo,row) =
+               let k = bridge_lf_coeff_in v row in
+               let bn = Num.abs_num k in
+               if Num.le_num bn num_1 then None else
+               let a = (List.filter (fun (t,_) -> not (aconv t v)) (fst row),
+                        snd row) in
+               let s = bridge_lf_neg a in
+               let ok =
+                 if Num.lt_num k num_0 then
+                   (match bridge_cert_lo 3 tbl rels s with
+                    | Some(u,pr) ->
+                        if Num.lt_num (Num.minus_num bn) u then Some pr else None
+                    | None -> None)
+                 else
+                   (match bridge_cert_hi 3 tbl rels s with
+                    | Some(u,pr) ->
+                        if Num.lt_num u bn then Some pr else None
+                    | None -> None) in
+               match ok with
+               | None -> None
+               | Some pr -> Some (List.map fst combo, pr) in
+             let rec search depth st =
+               match trial st with
+               | Some r -> Some r
+               | None when depth = 0 -> None
+               | None ->
+                   let (combo,row) = st in
+                   let atoms = List.filter_map (fun (t,_) ->
+                       if aconv t v then None else Some t) (fst row) in
+                   let others = List.filter (fun (th,_) ->
+                       not (List.exists (fun u ->
+                           aconv (concl u) (concl th)) (List.map fst combo))) rows in
+                   let rec try_atoms = function
+                     | [] -> None
+                     | x::xs ->
+                         let rec try_rows = function
+                           | [] -> try_atoms xs
+                           | (thj,rowj)::rest ->
+                               (match bridge_cert_elim (combo,row) (thj,rowj) x with
+                                | None -> try_rows rest
+                                | Some st' ->
+                                    (match search (depth - 1) st' with
+                                     | Some r -> Some r
+                                     | None -> try_rows rest)) in
+                         try_rows others in
+                   try_atoms atoms in
+             (match search 2 ([th0, num_1], row0) with
+              | None -> None
+              | Some (eqs,pr) ->
+                  let prems = bridge_cert_uniq (eqs @ pr @ [nonneg]) in
+                  let goal = mk_eq(v, bridge_int_lit num_0) in
+                  let th = prove(bridge_mk_imps prems goal, INT_ARITH_TAC) in
+                  let th = List.fold_left (fun acc h -> MP acc h) th prems in
+                  bridge_slice_note
+                    "ORACLE carry-cert %s = 0 base=%s limbs=%d premises=%d"
+                    (string_of_term v) (Num.string_of_num base) limbs
+                    (List.length prems);
+                  Some th))
+    | _ -> None
+  with e ->
+    bridge_slice_note "ORACLE carry-cert %s failed: %s"
+      (string_of_term v) (Printexc.to_string e);
+    None;;
+
 let bridge_aggregate_facts ?(band_only=false) aggregates all_hyps =
   (* a top-level disjunction cannot be an antecedent of a linear-arithmetic
      goal (the prover would have to case-split); the branch splitter has
@@ -2438,6 +2751,12 @@ let bridge_aggregate_facts ?(band_only=false) aggregates all_hyps =
             (string_of_term v);
           Some th
       | None ->
+      (match bridge_carry_certificate aggregates all_hyps v with
+       | Some th ->
+           bridge_slice_note "ORACLE fact %s = 0 why=carry-cert"
+             (string_of_term v);
+           Some th
+       | None ->
       match prove_zero_lt v with
       | Some th ->
           bridge_slice_note "ORACLE fact %s = 0 why=aggregate-band"
@@ -2464,7 +2783,7 @@ let bridge_aggregate_facts ?(band_only=false) aggregates all_hyps =
                 | None ->
                     bridge_slice_note "ORACLE undetermined %s why=aggregate"
                       (string_of_term v);
-                    None))) carriers;;
+                    None)))) carriers;;
 
 (* ------------------------------------------------------------------------- *)
 (* 6c.4 The close.                                                            *)

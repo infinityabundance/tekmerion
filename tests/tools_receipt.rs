@@ -74,7 +74,12 @@ use tekmerion::tools::{curve_check, dropin};
 /// once per pre-split goal and assume it, and `bridge_aggregate_facts` reuses a
 /// matching antecedent instead of re-proving it; the per-branch proof is still
 /// the fallback and is unchanged when the hoist does not fire).
-const BRIDGE_DIGEST: &str = "a1b9a1e05b54d4d483a3888caecd9d13e2651d0f22e63d91f3aec8bfe6f41a53";
+/// `00ff20c5…` (after XXIX.B's generic carry-bound certificate: the aggregate's
+/// top carry is decided from the aggregate(s), the interval bounds already in
+/// scope and the weighted modulus bound, by exact `Num` arithmetic first and a
+/// kernel-checked `INT_ARITH` over only the premises that bound used; the old
+/// band/fact provers remain the unchanged fallback).
+const BRIDGE_DIGEST: &str = "00ff20c5a2f19b2debcbea52e52260c8cd3040923304167cd5ac6cb8b948eb33";
 
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -191,8 +196,10 @@ fn curve_check_reproduces_the_recorded_report() {
     // branch-independent aggregate fact before the conditional split; it adds
     // `bridge_aggregate_carriers` and `BRIDGE_HOIST_AGG_FACTS_TAC` and calls the
     // existing bound helpers, so the `prove` count is still 94 and hits 0; only
-    // the reported line numbers move.
-    assert_eq!(statements, 94);
+    // the reported line numbers move.  XXIX.B's carry-bound certificate adds one
+    // `prove` call (the certificate's small `INT_ARITH`), so the count is 95 and
+    // hits remain 0.
+    assert_eq!(statements, 95);
     assert_eq!(hits, 0);
     let expected =
         fs::read_to_string(manifest_dir().join("tests/fixtures/curve_check_bridge.txt")).unwrap();
@@ -260,11 +267,14 @@ fn instrument_reproduces_the_recorded_output() {
     // digest moved to `f95a579c...`.
     // XXVIII.C5 adds two top-level phrases (`bridge_aggregate_carriers` and
     // `BRIDGE_HOIST_AGG_FACTS_TAC`), so 260 -> 262 and the output digest moved to
-    // `dc218bd4...`.
-    assert_eq!(phrases, 262);
+    // `dc218bd4...`.  XXIX.B's carry-bound certificate adds fourteen top-level
+    // phrases (the bound reader, the interval table, the recursive relational
+    // bound, the exact elimination, the shape derivation and the certificate),
+    // so 262 -> 276 and the output digest moved `dc218bd4...` -> `0163d207...`.
+    assert_eq!(phrases, 276);
     assert_eq!(
         sha256(out.as_bytes()),
-        "dc218bd4b71411ab6d052b6a2d676f4bd5ff43d5f3d01503c55fdf988a444a7e"
+        "0163d20737e22df2b532c31049ed7b6e26a6027d8fe6361bfe8a3ca377b57353"
     );
 }
 
@@ -311,7 +321,9 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXVII.B11 boundary.  The ten new top-level helper phrases in bridge.ml
     // take the inlined count 293 -> 304; every answer carries the new text.
     // XXVIII.C5 adds the carrier helper and the hoist tactic: 304 -> 306.
-    assert_eq!(parts.len(), 306);
+    // XXIX.B adds fourteen top-level `let` phrases to bridge.ml (the carry-bound
+    // certificate and its interval/shape/elimination helpers): 306 -> 320.
+    assert_eq!(parts.len(), 320);
     // IX.63 boundary. These were the Python-era digests and no longer hold:
     //   add-ref   39fd3d64c65063410c02f0a879d505632b4d82042ac3a64f26c137426e23264f
     //   sub       b36a7fd0274396d72bdbe87f6cd8810888ad308bfe415e952f9bfed015c9e176
@@ -419,22 +431,26 @@ fn inline_answer_reproduces_all_four_recorded_digests() {
     // XXVIII.C5 boundary.  The XXVII.B9 digests are retired: the hoist adds two
     // top-level phrases to bridge.ml, so every inlined answer carries the new
     // library text (the emitted tactics are byte-identical).
+    // XXIX.B boundary.  The XXVIII.C5 digests are retired: the carry-bound
+    // certificate adds fourteen top-level phrases to bridge.ml, so every
+    // inlined answer carries the new library text (the emitted tactics are
+    // byte-identical; only `bridge_aggregate_facts` gained a fast path).
     for (mode, digest) in [
         (
             "add-ref",
-            "a807fc83054cb3096bfea6ed3d350e5fab4ac5eb3f6e9ec06154ccb0eb2ef21d",
+            "2e98782c6704c2be8bdef74531efc3964f12ba18b1264fdd719ed8625fa50528",
         ),
         (
             "sub",
-            "cc844d0b13ed6a073df838a8690a40ccfc8edaee717bdab82bfbcec120309714",
+            "585b0e85e8a666048a2c3b2fafd58d8bd8513c5416816a9b43219fc7364b3878",
         ),
         (
             "neg",
-            "3273bc8e6b7eb5a8717d156814f4d98738cca18d396818be661fc94e01aa0827",
+            "0deb5f43c9d47f86459766a73539d464588db478e7d3b6f0215495500be03910",
         ),
         (
             "add-p384",
-            "198e96ee93849a757fa1a7cbf5b017db9040c19ba2cc2fa3f39e6514de850786",
+            "9eb344da3ecb068d3d9d2732390f9fce49103286a6aca377f9f2fbc2bd97945c",
         ),
     ] {
         let body = inline_answer::render(&parts, mode).unwrap();
