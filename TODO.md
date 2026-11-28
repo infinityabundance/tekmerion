@@ -5646,9 +5646,18 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 
 ## XXX.F — P5: instrument the unaccounted neg cost
 
-- [ ] **XXX.F1.** The ~0.58M not in simulation/library/facts/close is preamble, inter-split gaps and
-  tail. Measure each, per branch and once-only, so the next layer is visible after the branch work
-  is gone.
+- [x] **XXX.F1.** The ~0.58M not in simulation/library/facts/close is preamble, inter-split gaps and
+  tail. Measure each, per branch and once-only. — **Done, `37bf495`.** Receipt
+  `research/receipts/xxx-f-neg-unaccounted.md`, reconciling exactly to 2,380,714: **library 1,497,352
+  (62.9 %), simulation 528,862 (22.2 %), `ENSURES_FINAL_STATE_TAC` 142,511 (6.0 %), branches 125,725
+  (5.3 %), tail 15,388, other ≈75 K, inter-split gaps 0.** Of the unaccounted 353,424, 227,699 is
+  once-only and 125,725 branch-dependent. The aggregate is rebuilt **5×** with an identical term
+  (59,190 total; ceiling **46,977** if shared). `ENSURES_FINAL_STATE_TAC` is upstream of the bridge —
+  the step cache reaches none of it.
+- [ ] **XXX.F2. Share the aggregate construction once** (memoise by the equation set): ceiling ≈46,977
+  on neg. Cheap; do with the next bridge change.
+- [ ] **XXX.F3. `ENSURES_FINAL_STATE_TAC` (142,511)** is the largest unaccounted bucket and is upstream
+  of the bridge; investigate only after the step cache, and only if it can be proved shared.
 
 ## XXX.G — P6: one typed certificate representation
 
