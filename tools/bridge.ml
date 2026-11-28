@@ -2553,6 +2553,376 @@ let bridge_cert_shape v row =
              else false in
            if n > 1 && List.for_all ispow mags then Some (b,n) else None);;
 
+(* ------------------------------------------------------------------------- *)
+(* 6c.3c Canonical-row replay of the carry certificate (XXIX.B5).             *)
+(*                                                                            *)
+(* The IX.99 certificate ends with one `INT_ARITH' over the aggregate and the  *)
+(* bounds.  The aggregate is a canonical sparse linear equation over a handful *)
+(* of atoms with 256-bit coefficients, and `REAL_ARITH' normalises it on every *)
+(* fire -- that is the ~30K inferences the fact phase pays.  Here the aggregate *)
+(* is used to derive the canonical carrier equation `|K| * c = target' once    *)
+(* (a derived rule plus ring identities, cached by the aggregate's conclusion  *)
+(* so it is built once per distinct aggregate), and each fire then proves      *)
+(* `target <= bound' by scaling the per-atom bound theorems and adding them:   *)
+(* the same integer combination the numeric search already found, built as a   *)
+(* chain of `INT_LE_LMUL' / `INT_LE_ADD2' steps instead of a rational          *)
+(* elimination.  Every step is a derived rule; a shape or value mismatch       *)
+(* returns `None' and the caller keeps the IX.99 `INT_ARITH' path unchanged.   *)
+(* ------------------------------------------------------------------------- *)
+
+let bridge_cert_sub_tm = `(-):int->int->int`
+and bridge_cert_lt_tm = `(<):int->int->bool`
+and bridge_cert_zero_tm = `&0:int`;;
+
+(* the atoms the aggregate carries: `&(val ..)' and `&(bitval ..)' *)
+let bridge_cert_lit_atom t =
+  match t with
+  | Comb(Const("int_of_num",_), Comb(Const("val",_),_)) -> true
+  | Comb(Const("int_of_num",_), Comb(Const("bitval",_),_)) -> true
+  | _ -> false;;
+
+let bridge_cert_pos_le k = ISPEC (mk_numeral k) INT_POS;;
+
+(* `bridge_cert_rel_hi' returning the multiplier as well as the residual *)
+let bridge_cert_rel_hi_tr target (th,f,strict) =
+  ignore th; ignore strict;
+  let (txs,_) = target and (fxs,_) = f in
+  let shared = List.filter (fun (x,_) ->
+      List.exists (fun (y,_) -> aconv x y) fxs) txs in
+  match shared with
+  | [] -> None
+  | (x0,_)::_ ->
+      let k0 = bridge_lf_coeff x0 txs and kf = bridge_lf_coeff x0 fxs in
+      if Num.eq_num kf num_0 then None else
+      let alpha = Num.div_num k0 kf in
+      let prop = List.for_all (fun (x,_) ->
+          Num.eq_num (bridge_lf_coeff x txs)
+                     (Num.mult_num alpha (bridge_lf_coeff x fxs))) shared in
+      if not prop || not (Num.lt_num alpha num_0) then None else
+      Some (alpha, bridge_lf_add target (bridge_lf_neg (bridge_lf_scale alpha f)));;
+
+(* every simple literal one-sided bound an ordinary hypothesis states.  Each
+   is `(atom, is_upper, value, literal_term, theorem)' with the theorem in
+   non-strict form `atom <= lit' or `lit <= atom'. *)
+let bridge_cert_lit_bounds th =
+  match concl th with
+  | Comb(Comb(Const("int_le",_),a),b) ->
+      if bridge_cert_lit_atom a then
+        (match bridge_lf_num b with
+         | Some k -> [(a, true, k, b, th)]
+         | None -> [])
+      else if bridge_cert_lit_atom b then
+        (match bridge_lf_num a with
+         | Some k -> [(b, false, k, a, th)]
+         | None -> [])
+      else []
+  | Comb(Comb(Const("int_lt",_),a),b) ->
+      if bridge_cert_lit_atom a then
+        (match bridge_lf_num b with
+         | Some k ->
+             let one = bridge_int_lit num_1 in
+             let h1 = EQ_MP (ISPECL [a;b] INT_LT_DISCRETE) th in
+             let h2 = EQ_MP (SYM (ISPECL [a;b;one] INT_LE_SUB_LADD)) h1 in
+             [(a, true, Num.sub_num k num_1,
+               mk_binop bridge_cert_sub_tm b one, h2)]
+         | None -> [])
+      else if bridge_cert_lit_atom b then
+        (match bridge_lf_num a with
+         | Some k ->
+             let one = bridge_int_lit num_1 in
+             let h1 = EQ_MP (ISPECL [a;b] INT_LT_DISCRETE) th in
+             [(b, false, Num.add_num k num_1,
+               mk_binop bridge_int_add_tm a one, h1)]
+         | None -> [])
+      else []
+  | _ -> [];;
+
+let bridge_cert_lookup a tbl =
+  match List.find_opt (fun (u,_) -> aconv u a) tbl with
+  | Some (_,e) -> Some e
+  | None -> None;;
+
+let bridge_cert_update a e tbl =
+  (a,e) :: List.filter (fun (u,_) -> not (aconv u a)) tbl;;
+
+let bridge_cert_lit_table all_hyps =
+  List.fold_left (fun tbl th ->
+      List.fold_left (fun tbl (a,is_upper,v,lt,h) ->
+          let (lo,hi) = match bridge_cert_lookup a tbl with
+            | Some p -> p | None -> (None,None) in
+          let e = if is_upper then (lo, Some (v,lt,h))
+                  else (Some (v,lt,h), hi) in
+          bridge_cert_update a e tbl)
+        tbl (bridge_cert_lit_bounds th)) [] all_hyps;;
+
+(* the leaf bound: scale each atom's one-sided bound by its (signed) coefficient
+   and add them in the canonical order, so the accumulated lhs is exactly
+   `bridge_lf_term form'. *)
+let bridge_cert_leaf_upper ltbl form =
+  let (xs,c) = form in
+  let build (x,k) =
+    if Num.eq_num k num_0 then Some None
+    else if Num.lt_num num_0 k then
+      (match bridge_cert_lookup x ltbl with
+       | Some (_, Some (v,lt,h)) ->
+           if Num.eq_num k num_1 then Some (Some (h, x, lt, v))
+           else
+             let litk = bridge_int_lit k in
+             let h' = MP (ISPECL [litk;x;lt] INT_LE_LMUL)
+                        (CONJ (bridge_cert_pos_le k) h) in
+             Some (Some (h', mk_binop bridge_int_mul_tm litk x,
+                         mk_binop bridge_int_mul_tm litk lt, Num.mult_num k v))
+       | _ -> None)
+    else
+      (match bridge_cert_lookup x ltbl with
+       | Some (Some (v,lt,h), _) ->
+           let ak = Num.abs_num k in
+           let litak = bridge_int_lit ak in
+           let hs = MP (ISPECL [litak;lt;x] INT_LE_LMUL)
+                      (CONJ (bridge_cert_pos_le ak) h) in
+           let hn = EQ_MP
+               (ISPECL [mk_binop bridge_int_mul_tm litak x;
+                        mk_binop bridge_int_mul_tm litak lt] INT_LE_NEG2) hs in
+           let hn = REWRITE_RULE[INT_NEG_LMUL] hn in
+           Some (Some (hn, mk_binop bridge_int_mul_tm (bridge_int_lit k) x,
+                       mk_binop bridge_int_mul_tm (bridge_int_lit k) lt,
+                       Num.mult_num k v))
+       | _ -> None) in
+  try
+    let rec collect acc = function
+      | [] -> Some (List.rev acc)
+      | None :: _ -> raise Exit
+      | Some None :: rest -> collect acc rest
+      | Some (Some i) :: rest -> collect (i :: acc) rest in
+    let items = match collect [] (List.map build xs) with
+      | Some its -> its
+      | None -> raise Exit in
+    let items = if Num.eq_num c num_0 then items
+      else
+        let lc = bridge_int_lit c in
+        items @ [(ISPEC lc INT_LE_REFL, lc, lc, c)] in
+    (match items with
+     | [] ->
+         let lit = bridge_int_lit num_0 in
+         if aconv (bridge_lf_term form) lit
+         then Some (num_0, ISPEC lit INT_LE_REFL, lit, lit)
+         else None
+     | (h0,t0,r0,v0)::rest ->
+         let (h,t,r,value) = List.fold_left (fun (h,t,r,v) (h2,t2,r2,v2) ->
+             let h' = MP (ISPECL [t;r;t2;r2] INT_LE_ADD2) (CONJ h h2) in
+             (h', mk_binop bridge_int_add_tm t t2,
+                  mk_binop bridge_int_add_tm r r2, Num.add_num v v2))
+             (h0,t0,r0,v0) rest in
+         if aconv t (bridge_lf_term form) then Some (value, h, t, r)
+         else None)
+  with Exit -> None;;
+
+(* the canonical carrier equation `|K| * c = target', built once per distinct
+   aggregate and cached.  Reuse checks the hypothesis list, so a cached
+   equation is only returned for the same theorem statement under the same
+   assumptions. *)
+let bridge_cert_carrier_cache = Hashtbl.create 8;;
+
+let bridge_cert_carrier_eq th0 v k =
+  let key = string_of_term (concl th0) ^ "#" ^ string_of_term v in
+  let hyps_ok ceq =
+    let h1 = hyp ceq and h2 = hyp th0 in
+    List.length h1 = List.length h2 &&
+    List.for_all (fun t -> List.exists (aconv t) h2) h1 in
+  match Hashtbl.find_opt bridge_cert_carrier_cache key with
+  | Some (ke, tform, ceq) when hyps_ok ceq -> Some (ke, tform, ceq)
+  | _ ->
+      (try
+         match bridge_lf_row_of_thm th0 with
+         | None -> None
+         | Some row0 ->
+             let k0 = bridge_lf_coeff_in v row0 in
+             if not (Num.eq_num k0 k) then None else
+             let xs = fst row0 and c = snd row0 in
+             let rest_xs = List.filter (fun (t,_) -> not (aconv t v)) xs in
+             let tform = if Num.lt_num k num_0 then (rest_xs, c)
+                         else (List.map (fun (t,j) -> (t, Num.minus_num j)) rest_xs,
+                               Num.minus_num c) in
+             let tterm = bridge_lf_term tform in
+             let ke = Num.abs_num k in
+             let kv_act = bridge_lf_term ([(v, k)], num_0) in
+             let r0_term = bridge_lf_term (rest_xs, num_0) in
+             let afull = lhand (concl th0) in
+             let rhs = rand (concl th0) in
+             let hsplit = prove
+                 (mk_eq (afull, mk_binop bridge_int_add_tm kv_act r0_term),
+                  CONV_TAC INT_RING) in
+             let h_mid = TRANS (SYM hsplit) th0 in
+             let hke = EQ_MP
+                 (ISPECL [kv_act; rhs; r0_term] INT_EQ_SUB_LADD) h_mid in
+             let ceq =
+               if Num.lt_num k num_0 then
+                 let hneg = AP_TERM bridge_int_neg_tm hke in
+                 let hneg = REWRITE_RULE[INT_NEG_LMUL; INT_NEG_NEG] hneg in
+                 let hid = prove
+                     (mk_eq (mk_comb (bridge_int_neg_tm,
+                                      mk_binop bridge_cert_sub_tm rhs r0_term),
+                             tterm),
+                      CONV_TAC INT_RING) in
+                 TRANS hneg hid
+               else
+                 let hid = prove
+                     (mk_eq (mk_binop bridge_cert_sub_tm rhs r0_term, tterm),
+                      CONV_TAC INT_RING) in
+                 TRANS hke hid in
+             Hashtbl.replace bridge_cert_carrier_cache key (ke, tform, ceq);
+             Some (ke, tform, ceq)
+       with _ -> None);;
+
+(* the numeric search of `bridge_cert_hi' over the canonical target form,
+   returning the value and a closure that replays only the chosen path (so no
+   losing branch builds a proof). *)
+let bridge_cert_form_eq (xs,c) (ys,d) =
+  Num.eq_num c d && List.length xs = List.length ys &&
+  List.for_all (fun (t,k) ->
+      match List.find_opt (fun (u,_) -> aconv u t) ys with
+      | Some (_,j) -> Num.eq_num k j
+      | None -> false) xs;;
+
+let rec bridge_cert_search ltbl tbl depth rels target =
+  let (_,_,hi0,_) = bridge_cert_form_bounds tbl target in
+  let best0 = match hi0 with
+    | Some (u,_) -> Some (u, (fun () -> bridge_cert_leaf_upper ltbl target))
+    | None -> None in
+  if depth <= 0 then best0 else
+  List.fold_left (fun acc (th,f,strict) ->
+      match bridge_cert_rel_hi_tr target (th,f,strict) with
+      | None -> acc
+      | Some (alpha, rest) ->
+          let inner = bridge_cert_search ltbl tbl (depth - 1)
+              (List.filter (fun (u,_,_) ->
+                   not (aconv (concl u) (concl th))) rels) rest in
+          (match inner with
+           | None -> acc
+           | Some (vi, inner_replay) ->
+               let u = if strict then Num.sub_num vi num_1 else vi in
+               let replay () = bridge_cert_step th alpha strict inner_replay in
+               (match acc with
+                | None -> Some (u, replay)
+                | Some (u0,_) ->
+                    if Num.lt_num u u0 then Some (u, replay) else acc)))
+    best0 rels
+
+and bridge_cert_step th alpha strict inner_replay =
+  if strict then None else
+  match concl th with
+  | Comb(Comb(Const("int_le",_),pa),pb) ->
+      if not (Num.lt_num alpha num_0) ||
+         not (Num.eq_num alpha (Num.floor_num alpha)) then None else
+      (match inner_replay () with
+       | None -> None
+       | Some (vri, hri, tri, rri) ->
+           let p = mk_binop bridge_cert_sub_tm pb pa in
+           let hp = EQ_MP (SYM (ISPECL [pb;pa] INT_SUB_LE)) th in
+           let ak = Num.minus_num alpha in
+           let litak = bridge_int_lit ak in
+           let zero = bridge_cert_zero_tm in
+           let hsc0 = MP (ISPECL [litak; zero; p] INT_LE_LMUL)
+                        (CONJ (bridge_cert_pos_le ak) hp) in
+           let hsc = REWRITE_RULE[INT_MUL_RZERO] hsc0 in
+           let pterm = mk_binop bridge_int_mul_tm litak p in
+           let lhs_step = mk_comb (bridge_int_neg_tm, pterm) in
+           let hn = EQ_MP (ISPECL [pterm; zero] INT_LE_NEG2) hsc in
+           let hn = REWRITE_RULE[INT_NEG_0] hn in
+           let hs = MP (ISPECL [lhs_step; zero; tri; rri] INT_LE_ADD2)
+                      (CONJ hn hri) in
+           Some (vri, hs,
+                 mk_binop bridge_int_add_tm lhs_step tri,
+                 mk_binop bridge_int_add_tm zero rri))
+  | _ -> None;;
+
+(* the whole constructive certificate: derive `c = 0' from the canonical carrier
+   equation and a scaled-leaf bound, or return `None' (caller falls back). *)
+let bridge_cert_replay th0 v tbl rels all_hyps =
+  let stage = ref "start" in
+  let fail why =
+    bridge_slice_note "REPLAY nomatch %s at %s" why !stage; None in
+  try
+    match bridge_lf_row_of_thm th0 with
+    | None -> fail "not-linear"
+    | Some row0 ->
+        let k = bridge_lf_coeff_in v row0 in
+        if Num.eq_num k num_0 then fail "no-carrier" else
+        (match bridge_cert_shape v row0 with
+         | None -> fail "shape"
+         | Some _ ->
+             let bn = Num.abs_num k in
+             if Num.le_num bn num_1 then fail "small-carrier" else
+             let a = (List.filter (fun (t,_) -> not (aconv t v)) (fst row0),
+                      snd row0) in
+             let s = bridge_lf_neg a in
+             let target_form = if Num.lt_num k num_0
+                               then bridge_lf_neg s else s in
+             let rels_ns = List.filter (fun (_,_,strict) -> not strict) rels in
+             let ltbl = bridge_cert_lit_table all_hyps in
+             stage := "search";
+             (match bridge_cert_search ltbl tbl 3 rels_ns target_form with
+              | None -> fail "no-bound"
+              | Some (u, replay) ->
+                  stage := "replay";
+                  if not (Num.lt_num u bn) then fail "weak-bound" else
+                  (match replay () with
+                   | None -> fail "replay"
+                   | Some (vval, hb, tb, rb) ->
+                       if not (Num.lt_num vval bn) then fail "replay-weak" else
+                       let target_term = bridge_lf_term target_form in
+                       stage := "bridge";
+                       let hb =
+                         if aconv tb target_term then hb
+                         else
+                           let hbridge = prove (mk_eq (tb, target_term),
+                                                CONV_TAC INT_RING) in
+                           CONV_RULE (LAND_CONV (REWR_CONV hbridge)) hb in
+                       stage := "carrier";
+                       (match bridge_cert_carrier_eq th0 v k with
+                        | None -> fail "carrier"
+                        | Some (ke, tform, ceq) ->
+                            if not (bridge_cert_form_eq tform target_form)
+                            then fail "carrier-form" else
+                            let carrier = bridge_lf_term ([(v, ke)], num_0) in
+                            let hb = CONV_RULE
+                                (LAND_CONV (REWR_CONV (SYM ceq))) hb in
+                            let ke_lit = bridge_int_lit ke in
+                            stage := "ground";
+                            let hground = prove
+                                (mk_binop bridge_cert_lt_tm rb ke_lit,
+                                 INT_ARITH_TAC) in
+                            let hlt = MP (ISPECL [carrier; rb; ke_lit]
+                                            INT_LET_TRANS)
+                                        (CONJ hb hground) in
+                            stage := "divide";
+                            let hlt1 =
+                              let h2 = CONV_RULE
+                                  (RAND_CONV (fun tm ->
+                                       ISPEC tm (GSYM INT_MUL_RID))) hlt in
+                              let hpos = prove
+                                  (mk_binop bridge_cert_lt_tm
+                                     bridge_cert_zero_tm ke_lit,
+                                   INT_ARITH_TAC) in
+                              let iff = MP (ISPECL [v; bridge_int_lit num_1;
+                                                   ke_lit] INT_LT_LMUL_EQ) hpos in
+                              EQ_MP iff h2 in
+                            let h_nonneg = BRIDGE_BOUND_NONNEG v in
+                            let one = bridge_int_lit num_1 in
+                            stage := "zero";
+                            let hdisc = EQ_MP (ISPECL [v; one] INT_LT_DISCRETE) hlt1 in
+                            let hle = EQ_MP
+                                (SYM (ISPECL [v; one; one] INT_LE_SUB_LADD))
+                                hdisc in
+                            let hle0 = REWRITE_RULE[INT_SUB_REFL] hle in
+                            Some (MP (ISPECL [v; bridge_cert_zero_tm]
+                                        INT_LE_ANTISYM)
+                                      (CONJ hle0 h_nonneg))))))
+  with e ->
+    bridge_slice_note "REPLAY fail stage=%s: %s" !stage
+      (Printexc.to_string e);
+    None;;
+
 let bridge_carry_certificate aggregates all_hyps v =
   try
     let rows = List.filter_map (fun th ->
@@ -2591,6 +2961,15 @@ let bridge_carry_certificate aggregates all_hyps v =
                  | (Some (_,_,th), _) -> th
                  | _ -> BRIDGE_BOUND_NONNEG v
                with Not_found -> BRIDGE_BOUND_NONNEG v in
+             (* XXIX.B5: canonical-row replay first.  The IX.99 `INT_ARITH'
+                route below is the unchanged fallback. *)
+             (match bridge_cert_replay th0 v tbl rels all_hyps with
+              | Some th ->
+                  bridge_slice_note
+                    "ORACLE carry-cert %s = 0 base=%s limbs=%d why=canon-row"
+                    (string_of_term v) (Num.string_of_num base) limbs;
+                  Some th
+              | None ->
              let trial (combo,row) =
                let k = bridge_lf_coeff_in v row in
                let bn = Num.abs_num k in
@@ -2645,10 +3024,10 @@ let bridge_carry_certificate aggregates all_hyps v =
                   let th = prove(bridge_mk_imps prems goal, INT_ARITH_TAC) in
                   let th = List.fold_left (fun acc h -> MP acc h) th prems in
                   bridge_slice_note
-                    "ORACLE carry-cert %s = 0 base=%s limbs=%d premises=%d"
+                    "ORACLE carry-cert %s = 0 base=%s limbs=%d premises=%d why=INT_ARITH"
                     (string_of_term v) (Num.string_of_num base) limbs
                     (List.length prems);
-                  Some th))
+                  Some th)))
     | _ -> None
   with e ->
     bridge_slice_note "ORACLE carry-cert %s failed: %s"

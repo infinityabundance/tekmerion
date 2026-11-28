@@ -111,6 +111,21 @@ $s = repl1($s,
       let _ = csat_mark_at \"G:INT_ARITH:close-end\" in",
 "linear close INT_ARITH");
 
+# 8. Carry-bound certificate INT_ARITH (XXIX.B).  Labelled `fact` so the
+#    parser keeps it in the carry/borrow (fact) phase C.
+$s = repl1($s,
+"                  let goal = mk_eq(v, bridge_int_lit num_0) in
+                  let th =",
+"                  let goal = mk_eq(v, bridge_int_lit num_0) in
+                  let _ = csat_mark_at \"G:INT_ARITH:fact-cc-start\" in
+                  let th =",
+"carry-cert start");
+$s = repl1($s,
+"                  let th = List.fold_left (fun acc h -> MP acc h) th prems in",
+"                  let th = List.fold_left (fun acc h -> MP acc h) th prems in
+                  let _ = csat_mark_at \"G:INT_ARITH:fact-cc-end\" in",
+"carry-cert end");
+
 open(my $oh, '>', $out) or die "open $out: $!";
 print $oh $s;
 close $oh;
