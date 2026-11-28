@@ -7,6 +7,14 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### IX.102 — canonical zero selector before the split (`53c964d`)
+
+- `val (word_sub x (word 0)) = 0`, `word_join` zero tests and `bignum_of_wordlist = 0` are rewritten
+  to per-limb zero tests **before** the first splitter, via `VAL_EQ_0`/`WORD_SUB_EQ_0`/`WORD_OR_EQ_0`/
+  `BIGNUM_OF_WORDLIST_EQ_0`. **neg branches 10 → 2, totals 2,728,198 → 2,380,714 (−12.7 %; 3.30×
+  human), close 2,057 → 1,348, and `extra_eqs` (the impossible `val + 2^64 = 0`) is gone.** add/sub
+  unchanged (no selector of this shape). `STATEMENT_OK`.
+
 ### IX.101 — canonical-row replay of the carry certificate (`9983f9c`)
 
 - The carry certificate now replays a canonical form of the aggregate (built once and cached by

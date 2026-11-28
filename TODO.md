@@ -5619,6 +5619,19 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 - [x] **XXX.D3.** Measure per-fire cost before/after and the fact phase; fall back unchanged.
   — **Done.** Canonical kit built once (add 1, sub 2, neg 1), cached by conclusion.
 
+### XXX.B update (IX.102)
+
+- [x] **XXX.B1/B2 (neg).** The zero selector is canonicalised **before** the first splitter and the
+  split is single; **neg branches 10 → 2, totals 2,728,198 → 2,380,714 (3.30×), close 2,057 → 1,348,
+  the impossible `val + 2^64 = 0` equation is gone** (`research/receipts/ix102-zero-selector.md`).
+  `add`/`sub` unchanged: they have no selector of this shape.
+- [ ] **XXX.B6. `add`/`sub` branch counts come from arithmetic disjunctions**, not the zero selector
+  (12 and 24). The next elimination work for them is the disjunction/guard canonicalisation, not the
+  zero test.
+- [ ] **XXX.B7. Neg's remaining guard.** The non-zero case still splits the 256-bit
+  `VAL_WORD_SUB_CASES` guard into two closes; reaching the human's flat two leaves is that guard, not
+  the selector.
+
 ## XXX.E — P4: measure matched-session now
 
 - [x] **XXX.E1.** Load the support library before the counter starts, count it **once** in ledger
