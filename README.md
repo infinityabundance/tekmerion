@@ -35,6 +35,10 @@ what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
   (`aconv=1 hyps=0 axioms=3`, exactly `INFINITY_AX`/`SELECT_AX`/`ETA_AX`), with a mutated-statement
   negative control and a hostile harness self-test (5/5 rejected). The crates.io 0.2.0 artefact
   predates all of this.
+- **Measured matched-session (append-only, 2026-11-27, `7acf887`, receipt `xxx-e`):** with the support
+  library preloaded and kernel-checked before the counter (L7 = **1,496,597**), the task proofs cost
+  **add 2,591,777 (1.40× human) · sub 3,472,959 (2.71×) · neg 1,351,423 (1.87×)**. `L7 + matched =
+  strict` exactly on all three; every run is `STATEMENT_OK`, and a no-library control fails to build.
 - **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
   upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,
   whole-tree `make` green).

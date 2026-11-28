@@ -7,6 +7,20 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### XXX.E — measured matched-session baseline (`7acf887`)
+
+- With the support library preloaded and kernel-checked before the counter (L7 = **1,496,597**), the
+  task proofs cost **add 2,591,777 (1.40× human), sub 3,472,959 (2.71×), neg 1,351,423 (1.87×)**.
+  `L7 + matched = strict` exactly on all three; every run `STATEMENT_OK`; a no-library control fails
+  to build, so the task genuinely depends on the preloaded library.
+
+### XXX.A — carry-cert bound arithmetic fixed (`90c7090`)
+
+- The numeric bound layer now takes the tighter lower bound, requires exact integrality, and uses the
+  rational endpoint rules (`x<q ⟹ x ≤ ceil(q)−1`, etc.). Exhaustive tests: 272 `bound_core` cases,
+  289 join pairs, 22 `hi`/`lo` cases, five rule checks (34/34), mutation-proven (reverting each defect
+  yields 3/8/6 failures). Totals unchanged; `STATEMENT_OK`.
+
 ### XXVIII.A — statement and axiom check in every run (`3dda1ad`)
 
 - Every measurement run now checks `aconv (concl th) stmt`, `hyp th = []` and `axioms()` and writes a

@@ -5609,11 +5609,15 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 
 ## XXX.E — P4: measure matched-session now
 
-- [ ] **XXX.E1.** Load the support library before the counter starts, count it **once** in ledger
-  L7, and publish the measured matched-session total next to the strict one. The derived 1.40× /
-  2.71× / 1.87× are close enough to the headline that they must be replaced by measurement.
-- [ ] **XXX.E2.** The run must carry the statement check; report strict, matched, amortised, and the
-  L7 library cost for each task.
+- [x] **XXX.E1.** Load the support library before the counter starts, count it **once** in ledger
+  L7, and publish the measured matched-session total next to the strict one. — **Done, `7acf887`.**
+  Receipt `research/receipts/xxx-e-matched-session.md`; driver `tests/ix89/matched_session.sh`.
+  **L7 = 1,496,597**; matched **add 2,591,777 (1.40×), sub 3,472,959 (2.71×), neg 1,351,423
+  (1.87×)**. `L7 + matched = strict` exactly; `STATEMENT_OK`; a no-library control fails to build.
+  The derived figures were accurate to <0.1 %.
+- [x] **XXX.E2.** The run must carry the statement check; report strict, matched, amortised, and the
+  L7 library cost for each task. — **Done.** (Amortised over N is `(L7 + Σ matched)/N`; publish
+  beside strict, never instead.)
 
 ## XXX.F — P5: instrument the unaccounted neg cost
 
