@@ -7,6 +7,13 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### XXVIII.A — statement and axiom check in every run (`3dda1ad`)
+
+- Every measurement run now checks `aconv (concl th) stmt`, `hyp th = []` and `axioms()` and writes a
+  `STATEMENT_OK`/`STATEMENT_FAIL` sidecar; a run without `STATEMENT_OK` exits non-zero. add/sub/neg
+  all report `aconv=1 hyps=0 axioms=3` (`INFINITY_AX`, `SELECT_AX`, `ETA_AX`), totals unchanged, and
+  a mutated-statement negative control fails as intended. No ratio is published without it.
+
 ### IX.92–IX.95 — close certificates (`8576feb`)
 
 - **Slim close** (`ix92`): try the close without direct bounds, full-set fallback.

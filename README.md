@@ -32,7 +32,9 @@ what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
   entire close is closed by certificates (**1,170,099 → 2,057**); for `add`/`sub` the close is
   **786,931 → 259,274** and **2,554,010 → 831,616**. Cumulative since IX.89: add −23.5 %, sub
   −30.7 %, neg −27.5 %. All certificates are derived-rule kernel proofs (no `INT_ARITH` of the goal,
-  no new axiom). The crates.io 0.2.0 artefact predates all of this.
+  no new axiom). **Statement-checked in-run (`3dda1ad`):** all three report `STATEMENT_OK aconv=1
+  hyps=0 axioms=3` (exactly `INFINITY_AX`, `SELECT_AX`, `ETA_AX`), with a negative control that fails
+  when the cached statement is mutated. The crates.io 0.2.0 artefact predates all of this.
 - **27/27 generated proofs** accepted by upstream s2n-bignum's own build, including
   upstream's `_SUBROUTINE_CORRECT` derived from ours (same contract, same names,
   whole-tree `make` green).

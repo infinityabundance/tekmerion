@@ -5272,17 +5272,25 @@ The backlog stays frozen (`XXV.G`); this intake reorders work, it does not add a
 
 ## XXVIII.A — P0: `equals_thm` and `axioms()` inside every run (blocking)
 
-- [ ] **XXVIII.A1.** In the **same session** that produces the theorem, check
+- [x] **XXVIII.A1.** In the **same session** that produces the theorem, check
   `aconv (concl th) stmt` against the benchmark's statement term, `hyp th = []`, and that `axioms()`
   is exactly the three permitted axioms. Emit a machine-readable verdict line (e.g.
   `STATEMENT_OK aconv=1 hyps=0 axioms=3`) into the `.correct` log.
-- [ ] **XXVIII.A2.** Obtain `stmt` without needing the human proof text at measurement time: extract
+  — **Done, `3dda1ad`.** `tests/ix89/stmt_check.sh` + `stmt_lib.ml`, wired into `run_gen.sh`; every
+  run now writes `<tag>.correct.statement` and exits non-zero without `STATEMENT_OK`.
+- [x] **XXVIII.A2.** Obtain `stmt` without needing the human proof text at measurement time: extract
   the upstream `_CORRECT` conclusion once into a re-parseable form (same HOL Light + s2n-bignum base),
   and parse/`aconv` it in the generated session. Document the extraction command in the receipt.
-- [ ] **XXVIII.A3.** Wire the verdict into the measurement harness so every receipt carries it
+  — **Done.** Route (a): build the upstream proof once, cache `string_of_term (concl th)` hex-encoded
+  in `.bench/ix89/stmt/`, re-parse in the generated session (`STMT_REPARSE 1`), `aconv`.
+- [x] **XXVIII.A3.** Wire the verdict into the measurement harness so every receipt carries it
   automatically; a run without it is not a victory claim. No receipt may say "inherited" again.
-- [ ] **XXVIII.A4.** Re-run `add`, `sub`, `neg` and publish the statement/axiom verdict **before** the
-  next ratio in README/CHANGELOG.
+  — **Done.** `run_gen.sh` runs it automatically.
+- [x] **XXVIII.A4.** Re-run `add`, `sub`, `neg` and publish the statement/axiom verdict **before** the
+  next ratio in README/CHANGELOG. — **Done, `3dda1ad`.** All three `STATEMENT_OK aconv=1 hyps=0
+  axioms=3` (`INFINITY_AX`, `SELECT_AX`, `ETA_AX`), totals unchanged (4,396,406 / 6,259,618 /
+  4,121,086). Negative control: a mutated cached statement yields `STATEMENT_FAIL aconv=0` while the
+  theorem is untouched. Receipt `research/receipts/xxviii-statement-check.md`.
 
 ## XXVIII.B — P1: normalise once, replay canonical rows (P4, never run)
 
