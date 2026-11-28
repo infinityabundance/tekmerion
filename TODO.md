@@ -5555,19 +5555,25 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 
 ## XXX.A — P0: fix the bound arithmetic and test it exhaustively
 
-- [ ] **XXX.A1.** `bridge_cert_join_lo`: take the **maximum** of the two lower bounds (the tighter
-  one); symmetric check for upper bounds (minimum).
-- [ ] **XXX.A2.** Integrality: a bound candidate is only exact when the division is exact; when
+- [x] **XXX.A1.** `bridge_cert_join_lo`: take the **maximum** of the two lower bounds (the tighter
+  one); symmetric check for upper bounds (minimum). — **Done, `90c7090`.**
+- [x] **XXX.A2.** Integrality: a bound candidate is only exact when the division is exact; when
   `Num.div_num` yields a rational, round per the endpoint rules in `XXX.0.3` (ceil/floor), and never
-  emit a fractional integer bound.
-- [ ] **XXX.A3.** Strict tightening: apply `ceil(q)−1` / `floor(q)` / `floor(q)+1` / `ceil(q)` for
-  rational `q`, not a blanket `−1`.
-- [ ] **XXX.A4. Exhaustive small-integer regression tests** for the three functions over a grid of
-  small integers and rationals (positive, negative, zero, exact and non-exact division, equal and
-  unequal bounds). Acceptance: an OCaml test harness (like `tests/interval_engine_selftest`) that
-  enumerates the grid and fails on any wrong bound; included in `cargo test` or a scripted gate.
-- [ ] **XXX.A5.** Re-run add/sub/neg: `STATEMENT_OK`, totals no worse than `28c21d9`, and report any
-  change (a corrected bound may change a candidate, hence a cost).
+  emit a fractional integer bound. — **Done.**
+- [x] **XXX.A3.** Strict tightening: apply `ceil(q)−1` / `floor(q)` / `floor(q)+1` / `ceil(q)` for
+  rational `q`, not a blanket `−1`. — **Done.**
+- [x] **XXX.A4. Exhaustive small-integer regression tests** for the three functions over a grid of
+  small integers and rationals. — **Done.** `tests/cert_bounds_selftest.sh`: 272
+  `bound_core` cases, 289 join pairs, 22 `hi`/`lo` cases, five rule checks; **34/34**, wired into
+  `tools/selftest.sh` and CI. Mutation-proof: reverting each defect yields 3 / 8 / 6 failures.
+- [x] **XXX.A5.** Re-run add/sub/neg: `STATEMENT_OK`, totals no worse than `28c21d9`, and report any
+  change. — **Done.** 4,088,374 / 4,969,556 / 2,848,020, unchanged; `STATEMENT_OK`; `plain == phase`.
+  Receipt `research/receipts/xxx-a-bound-arithmetic.md`.
+- [ ] **XXX.A6. The interval joiners are inverted too.** `bridge_bound_join_lo`/`hi` (≈ lines
+  1708–1722) appear inverted against their comments, and
+  `tests/interval_engine_selftest_driver.ml`'s `sem_max_lo`/`sem_min_hi` clone the same code, so the
+  check cannot catch it. Both variants are sound but looser. Fix with the same max/min rule and an
+  independent semantic oracle; verify the interval phase costs do not regress.
 
 ## XXX.B — P1: fold the conditional select at the entry split (the elimination lever)
 
