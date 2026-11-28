@@ -5719,3 +5719,153 @@ Nothing omitted. Records the review of `28c21d9` and the follow-up note. The bac
 5. `XXX.F` — instrument the unaccounted cost.
 6. `XXX.G` — unified certificate representation; then families.
 7. Step-theorem cache and library diet for the strict win.
+
+---
+
+# XXXI — Intake 2026-11-28 (ninth): liveness first, static frame, and a checked first win
+
+Nothing omitted. Records the reviews of `02e12ca`, `897b8db`, `20b6c5a` and `183a674` plus the
+follow-up note. The backlog stays frozen (`XXV.G`).
+
+## XXXI.0 — Status and the accounting decision (append-only)
+
+- [ ] **XXXI.0.1. Status at `183a674` [measured].** strict **add 3,749,057 · sub 4,712,887 · neg
+  2,276,021** (2.03× / 3.67× / 3.15× human); matched-session derived **2,252,460 / 3,216,290 /
+  779,424** (1.219× / 2.507× / **1.080×**). Cumulative since IX.89: −34.8 % / −47.8 % / −59.9 %.
+  Every run `STATEMENT_OK`; the measured matched run (`7acf887`) agrees with the derived figures to
+  within **1,464 / 1,382 / 755**, so subtraction-derived matched figures are trustworthy.
+- [ ] **XXXI.0.2. The step cache is not the honest first-win lever.** Its saving depends on charging
+  the per-opcode derivations to L7; on `neg` alone the receipt says it is ~break-even. A first win
+  that depends on an accounting choice must be stated in the same sentence and is weaker.
+  **Liveness is charged to the task under every accounting** and saves ~2× the 58 K gap.
+- [ ] **XXXI.0.3. Pre-register the first-win target (before the run).** **matched-session `neg` below
+  721,473**, with the saving charged to the task, every phase in absolute counts, `STATEMENT_OK`,
+  and the upstream framework hashes printed next to the verdict. Step cache is published **second**,
+  with both charging variants side by side.
+- [ ] **XXXI.0.4. The user's read on the frame experiment is right**: deferring the merge moved cost
+  to finalisation (+267,044); only the one-shot per-instruction proof was a win. Record it as a
+  warning: measure the whole pipeline, never a single tactic.
+- [ ] **XXXI.0.5. The supersede rule is a conservative heuristic, not an equivalence theorem.** A
+  relational hypothesis about an overwritten component could still be useful; the identical
+  hypothesis sets on three routines are empirical, not universal. Add a read-set guard
+  (`XXXI.C2`) and a validation mode (`XXXI.B2`).
+
+## XXXI.A — One analysis, three uses (build this first)
+
+- [ ] **XXXI.A1.** Build **one** static analysis over the decoded instruction sequence: for each
+  component, its **write set**, **read set** and **last-use point**. This is the W1 dataflow machinery
+  applied to machine state.
+- [ ] **XXXI.A2.** Use it for: (a) the out-of-band write set feeding the static frame (`XXXI.D`);
+  (b) general liveness, dropping an assumption after its last use (`XXXI.E`); (c) the relaxed discard
+  of old-state facts. Order: analysis, frame, liveness (frame is the bigger bucket).
+- [ ] **XXXI.A3.** Acceptance: the analysis is computed once per proof, is checked against the
+  decoded instruction stream, and is exposed to the Tekmerion-owned tactics; no per-step recomputation.
+
+## XXXI.B — Assurance that must be automatic before the win
+
+- [ ] **XXXI.B1. Upstream hash check.** On every run, hash `common/components.ml`,
+  `common/relational.ml`, `arm/proofs/arm.ml` (and any other framework file the tactic relies on) and
+  print the hashes next to `STATEMENT_OK`. "Baseline untouched" becomes a checked fact on every
+  receipt, not a claim.
+- [ ] **XXXI.B2. Hypothesis-set identity validation mode.** Run the upstream tactic alongside the
+  Tekmerion tactic and assert the goal, every assumption conclusion, every frame predicate and the
+  bridge hypotheses are `aconv`-identical, **on every task** the tactic is used for (not just the
+  three). A mismatch fails the run.
+- [ ] **XXXI.B3. Backend selector.** An explicit switch between the original and Tekmerion simulation
+  backends, so the three baselines can be measured (see `XXXI.F`).
+- [ ] **XXXI.B4.** Move the embedded OCaml tactic out of the large Rust string into a dedicated `.ml`
+  and embed it with `include_str!`; add a singleton-list validator for frame-node extraction.
+
+## XXXI.C — Engineering hardening of the state engine
+
+- [ ] **XXXI.C1.** Compute the written-component set **once per instruction**, not per candidate
+  hypothesis.
+- [ ] **XXXI.C2.** Add the **read-set guard** to the supersede rule: skip a fact only when the step
+  does not read the component the fact depends on.
+- [ ] **XXXI.C3.** Interned component identifiers; an efficient sequence for the frame; indexed swap
+  cache with explicit scope; validate singleton `MAYCHANGE` lists (or support arbitrary lists).
+- [ ] **XXXI.C4.** Qualify the "linear complexity" claim: the current implementation removes repeated
+  canonicalisation and wasted commutations but still uses linear membership, move-back and list
+  concatenation. State a measured bound, not a complexity theorem.
+
+## XXXI.D — P: static frame certificate (the bigger bucket)
+
+- [ ] **XXXI.D1.** Compute the program's **full write set before simulation** from the decoded
+  instructions; start the simulation with that final frame `F`.
+- [ ] **XXXI.D2.** At each step, prove only that the step's writes are **inside** `F`, using a cached
+  per-opcode-and-register fact, and rely on `F ∘ F = F`. This replaces the incremental merge
+  (193,789, ≈10.2 K/step) with a lookup, and avoids the quadratic final merge that sank the deferred
+  version.
+- [ ] **XXXI.D3.** The same frame certificate should cut `ENSURES_FINAL_STATE_TAC` (142,511), which is
+  also a frame merge. Measure both in absolute inferences.
+- [ ] **XXXI.D4.** Caveat: arbitrary `MAYCHANGE` compositions are not unordered sets; component
+  overlap, memory aliasing, event semantics and relational composition need checked closure and
+  containment lemmas. Prove `F ∘ F = F` for the frame types used, or restrict to the types where it
+  holds.
+
+## XXXI.E — P: general liveness (the honest first-win lever)
+
+- [ ] **XXXI.E1.** From `XXXI.A`, drop each assumption after its **last use**. The hand-applied
+  prototype (drop memory assumptions after the last load) brought the residual `assume` cost to
+  ≈607/step; the general version projects 122 K → ≈11.5 K.
+- [ ] **XXXI.E2.** Charge the saving to the task (no L7), and pre-register the target
+  (`XXXI.0.3`). Publish every phase absolutely.
+- [ ] **XXXI.E3.** If liveness alone closes the gap, that is the first win; do not mix in the step
+  cache in the same receipt.
+
+## XXXI.F — Comparison discipline for a win
+
+- [ ] **XXXI.F1.** Three baselines: (1) generated vs the original human proof (system superiority);
+  (2) generated vs the human proof run on the **same optimised backend** (arithmetic-compiler
+  superiority); (3) Tekmerion backend vs original backend (state-engine superiority). Do not let a
+  simulator gain be presented as an arithmetic gain.
+- [ ] **XXXI.F2.** Re-measure the matched-session baseline after `XXXI.D`/`E`; keep the cold-session
+  strict total, timing, and resource accounting.
+- [ ] **XXXI.F3.** Publish the step cache **second**, with both charging variants (per-task and L7)
+  side by side, and its derivation cost visible in strict/amortised accounting.
+
+## XXXI.G — add/sub: selector fold and the guard
+
+- [ ] **XXXI.G1. Pre-register the selector-fold target:** one certificate fire per theorem on all
+  three tasks, and a branch count of **2** (the human structure). Current: add 8 fires/12 branches,
+  sub 4/24, neg 1/2.
+- [ ] **XXXI.G2.** The fold must keep the selector a **typed piecewise-affine operation**
+  (`r = q·x + (1−q)·y`, `q = bitval b`), not expand it into nonlinear polynomial arithmetic, or it
+  leaves the linear certificate engine.
+- [ ] **XXXI.G3.** For add/sub, the branch counts come from **arithmetic disjunctions**, not the zero
+  selector (`XXX.B6`); canonicalise those guards with kernel-checked rewrites before splitting.
+
+## XXXI.H — P: the library diet (the only strict-win route)
+
+- [ ] **XXXI.H1.** Split the 327 inlined phrases into **OCaml code** (free; keep all) and **proved
+  theorems** (costly). DIMACS/CNF/LDRUP/CSAT machinery is the SAT route's and is not used by the
+  three solver-free proofs.
+- [ ] **XXXI.H2.** Take the import list from the **proof-object exporter** (the `add` object lists
+  612 imports), close it under dependencies, and include only that theorem set. Count the saved
+  construction and prove the answer still closes.
+- [ ] **XXXI.H3.** Acceptance: strict totals fall toward the matched ones without `STATEMENT_OK`
+  changing; the minimal theorem set is computed, not guessed.
+
+## XXXI.I — Share the aggregate theorem (cheap)
+
+- [ ] **XXXI.I1.** The aggregate is rebuilt 5× on neg (identical term; ceiling 46,977). Share it with
+  a checked dependency scope (`XXXI.C3`), not a branch-dependent conclusion.
+
+## XXXI.J — Targeted literature (backlog frozen)
+
+- [ ] **XXXI.J1.** Search only for what `XXXI.D`/`XXXI.E`/`XXXI.H` need: **frame invariants /
+  separation-logic frame rules** for verified machine code, **liveness-based state pruning** in
+  verified decompilers, and **proof-library minimisation by dependency closure** (e.g. OpenTheory
+  article import closure). Log in `research/receipts/xxxi-search-log.md`.
+- [ ] **XXXI.J2.** No new programme documents; the next artefact is a measured first win.
+
+## XXXI.K — Execution order
+
+1. `XXXI.B` — hash check + hypothesis-identity validation + backend selector (so the win is checked).
+2. `XXXI.A` — the read/write/last-use analysis.
+3. `XXXI.E` — general liveness, charged to the task; pre-registered target.
+4. `XXXI.D` — static frame certificate.
+5. `XXXI.F2` — re-measure matched session.
+6. `XXXI.G` — selector fold for add/sub.
+7. `XXXI.H` — library diet for a strict win.
+8. Step cache, both variants.
