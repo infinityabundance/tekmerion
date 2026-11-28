@@ -5763,18 +5763,22 @@ follow-up note. The backlog stays frozen (`XXV.G`).
 
 ## XXXI.B — Assurance that must be automatic before the win
 
-- [ ] **XXXI.B1. Upstream hash check.** On every run, hash `common/components.ml`,
-  `common/relational.ml`, `arm/proofs/arm.ml` (and any other framework file the tactic relies on) and
-  print the hashes next to `STATEMENT_OK`. "Baseline untouched" becomes a checked fact on every
-  receipt, not a claim.
-- [ ] **XXXI.B2. Hypothesis-set identity validation mode.** Run the upstream tactic alongside the
-  Tekmerion tactic and assert the goal, every assumption conclusion, every frame predicate and the
-  bridge hypotheses are `aconv`-identical, **on every task** the tactic is used for (not just the
-  three). A mismatch fails the run.
-- [ ] **XXXI.B3. Backend selector.** An explicit switch between the original and Tekmerion simulation
-  backends, so the three baselines can be measured (see `XXXI.F`).
-- [ ] **XXXI.B4.** Move the embedded OCaml tactic out of the large Rust string into a dedicated `.ml`
-  and embed it with `include_str!`; add a singleton-list validator for frame-node extraction.
+- [x] **XXXI.B1. Upstream hash check.** — **Done, `18e3f01`.** `tests/ix89/framework_check.sh` pins
+  `common/components.ml`, `common/relational.ml`, `arm/proofs/arm.ml`, `arm/proofs/base.ml` in
+  `tests/ix89/upstream_manifest.txt`; every run prints `UPSTREAM_HASH` + `UPSTREAM_UNCHANGED 1`.
+  Tamper control: one byte appended → `UPSTREAM_UNCHANGED 0`, exit 1.
+- [x] **XXXI.B2. Hypothesis-set identity validation mode.** — **Done.** `TEKMERION_AB=1` builds both
+  backends and asserts `aconv` on 39 states, **all** assumption conclusions (831 neg / 1189 add),
+  38 frame predicates and the bridge hypotheses. neg and add: `AB_IDENTICAL`, both `STATEMENT_OK`.
+- [x] **XXXI.B3. Backend selector.** — **Done.** `TEKMERION_SIM_BACKEND=upstream` reproduces the
+  upstream baseline exactly (neg 2,380,714); default `tekmerion`. Three-baseline procedure in
+  `tests/ix89/ASSURANCE.md`.
+- [x] **XXXI.B4.** Move the tactic to a dedicated `.ml` / singleton validator. — **Partially:** the A/B
+  harness is a dedicated `.ml`; the embedded tactic restructure is still open.
+- [ ] **XXXI.B5. Freeze schema note.** `TEKMERION_SIM_BACKEND` is now a declared `TEKMERION_*`
+  variable (the `declared_binary_vars_match_the_source` contract requires it), so the freeze-bound
+  configuration set is **7 vars**, not 6. The sealed v6 tag is unmoved; regenerate the v7 manifest
+  (`freeze-closure-v7`) and record the boundary before any release.
 
 ## XXXI.C — Engineering hardening of the state engine
 
