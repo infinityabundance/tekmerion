@@ -7,6 +7,13 @@ per-answer totals by a constant).
 
 ## [Unreleased]
 
+### IX.103 — Tekmerion-owned supersede state update (`7546ac2`)
+
+- A Tekmerion-owned inlined tactic skips carrying facts about components a step overwrites (they are
+  superseded anyway). The shared s2n-bignum framework is **untouched** (files diff identical), and the
+  final hypothesis sets are byte-identical. **sim add 787,891 → 743,177, sub 674,249 → 630,423, neg
+  528,862 → 493,972; totals 3,840,774 (2.08× human) / 4,787,318 (3.73×) / 2,345,824 (3.25×).**
+
 ### IX.102 — canonical zero selector before the split (`53c964d`)
 
 - `val (word_sub x (word 0)) = 0`, `word_join` zero tests and `bignum_of_wordlist = 0` are rewritten

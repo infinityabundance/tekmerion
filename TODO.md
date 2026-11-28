@@ -5395,23 +5395,21 @@ turns an impossible wrap case into a hypothesis.
   and `aconv`-identical statement, saving **34,890** on neg (sim 528,083 → 493,193). A liveness
   stand-in saves **64,856** (463,787). The `MAYCHANGE` frame merge is the blocker (deferring it was
   +76,687 worse). With the step cache, projected neg sim **386,647** — still 3.9× the ~100K target.
-- [ ] **XXX.G4. DECISION REQUIRED: where the supersede rule lives.** `ASSUMPTION_STATE_UPDATE_TAC` /
-  `MAYCHANGE_STATE_UPDATE_TAC` are the **shared s2n-bignum framework**, used by the human baseline
-  too. Modifying them changes the human proof; shadowing them after the framework defines the
-  tactics may not take effect. Options: (a) a Tekmerion-owned tactic variant used only by generated
-  answers (counted as a Tekmerion addition, baseline unchanged — needs the framework to call it
-  dynamically, or the emitted answer to redefine the caller); (b) modify the shared framework and
-  **re-run the human baseline** with the same framework (fair only if both sides are re-measured, and
-  it changes the published baseline). Record a decision before implementing; do not silently change
-  the baseline.
-- [ ] **XXX.G5. Step cache as an L7 preloaded library.** Per-opcode step theorems pay only when their
-  derivation is shared across tasks (neg alone: derive ≈74K vs save ≈77K). Derive once into L7, then
-  measure the per-task saving on add/sub/neg; a matched-session claim is legitimate with the cache in
-  L7.
-- [ ] **XXX.G6. Frame-merge mechanism (the 193,789 blocker).** The four requirements recorded in the
-  receipt: read/write-set liveness, a relaxed discard, an out-of-band write set with a linear one-shot
-  frame proof, and component-indexed resolution instead of a proof per write. Do not build until
-  `XXX.G4` is decided.
+- [x] **XXX.G4. DECISION REQUIRED: where the supersede rule lives.** — **Decided (a) and done,
+  IX.103.** A Tekmerion-owned inlined tactic (`src/tools/emit.rs::TEKMERION_ARM_TACTIC`) is used
+  only by generated answers; the shared framework is untouched (files diff identical). Saves 44,714 /
+  43,826 / 34,890 with identical hypothesis sets. Receipt
+  `research/receipts/ix103-supersede-state-update.md`.
+- [ ] **XXX.G6. Frame-merge mechanism (the 193,789 blocker).** The four requirements:
+  read/write-set liveness, a relaxed discard, an out-of-band write set with a linear one-shot frame
+  proof, and component-indexed resolution instead of a proof per write. **This is now the largest
+  remaining simulation lever** (neg 193,789; simulation 493,972 → potential ~300K). Do it as a
+  Tekmerion-owned tactic variant (route (a)) before considering any shared-framework change.
+- [ ] **XXX.G7. Liveness / last-use analysis.** The prototype's `deadmem` was program-specific; a
+  general read-set/last-use pass over the decoded sequence would let the liveness stand-in ship
+  (~30K on neg). Do after `XXX.G6`.
+- [ ] **XXX.G8. `TEKMERION_ARM_STEPS_TAC`.** `arm/neg_p521` has an empty accumulate set and still
+  calls `ARM_STEPS_TAC`; add the supersede counterpart so every ARM task benefits.
 - [ ] **XXVIII.G3.** Measured matched-session baselines (`XXV.C` step 2): library built and
   kernel-checked before the counter, cost in L7.
 

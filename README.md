@@ -25,13 +25,14 @@ what is not, is summarised in [`CHANGELOG.md`](CHANGELOG.md). In brief:
   5,268,391** (2.85× human), **sub 8,217,594** (6.40×), **neg 5,683,733** (7.88×, unchanged —
   its proof has one aggregate, so the selection is a no-op). The published crates.io 0.2.0
   artefact predates this; these are repository measurements, not a crate release.
-- **Latest measurement (append-only, 2026-11-28, `53c964d`, receipts `ix92`–`ix102`):** the slim
+- **Latest measurement (append-only, 2026-11-28, `7546ac2`, receipts `ix92`–`ix103`):** the slim
   close, the refutations, the complement/identity/Farkas certificates, the hoisted aggregate fact,
-  the width-independent carry-bound certificate, the entry hoist, canonical-row replay and the
-  canonical zero selector bring the strict totals to **add 3,885,488** (**2.10×** human), **sub
-  4,831,144** (**3.77×**), **neg 2,380,714** (**3.30×**). Cumulative since IX.89: add −32.4 %, sub
-  −46.5 %, neg −58.1 %. Neg's close is **1,348** (certificate-only) and its branch count is **2**
-  (was 10); its fact phase **1,511,696 → 13,572**. All certificates are derived-rule kernel proofs.
+  the width-independent carry-bound certificate, the entry hoist, canonical-row replay, the canonical
+  zero selector and the Tekmerion-owned supersede state update bring the strict totals to **add
+  3,840,774** (**2.08×** human), **sub 4,787,318** (**3.73×**), **neg 2,345,824** (**3.25×**).
+  Cumulative since IX.89: add −33.2 %, sub −47.0 %, neg −58.7 %. Neg's close is **1,348**,
+  branch count **2**, fact phase **1,511,696 → 13,572**, simulation **528,862 → 493,972**. All
+  certificates are derived-rule kernel proofs and the shared s2n-bignum framework is untouched.
   **Statement-checked in-run** (`aconv=1 hyps=0 axioms=3`), with a mutated-statement negative control
   and a hostile harness self-test (5/5).
 - **Measured matched-session (append-only, 2026-11-27, `7acf887`, receipt `xxx-e`):** with the support
