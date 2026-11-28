@@ -17,6 +17,11 @@ th="BIGNUM_$(echo "${op}_${fam}" | tr 'a-z' 'A-Z')_CORRECT"
 tid="$arch.bignum_${op}_${fam}.$th"
 outdir="$ROOT/.bench/ix89/gen"; mkdir -p "$outdir"
 tag="${arch}_${op}_${fam}.${mode}"
+check="$ROOT/tests/ix89/stmt_check.sh"
+
+# XXVIII.A: the upstream conclusion is cached once per task; only the first
+# run of a task pays for the human proof build (capped, -j1, sequential).
+"$check" ensure "$op" || exit 94
 
 export TEKMERION_ALG_CLOSE="$tid"
 ./target/release/emit --task "$tid" --mode phase --out "$outdir/${tag}.raw.answer" \
@@ -29,6 +34,12 @@ else
 fi
 
 ./target/release/dropin assemble --task "$tid" --answer "$outdir/${tag}.answer" --stamp || exit 97
+
+# XXVIII.A: append the same-session statement/hypothesis/axiom check to the
+# generated proof.  It runs after the proof's own STAMP block, so it cannot
+# change STAMP_INFERENCES.
+"$check" inject "$op" || exit 93
+
 rm -f ".bench/dropin/${arch}/${dir}/${base}.correct"
 ( cd ".bench/dropin/${arch}" && \
   "$ROOT/tools/cap.sh" 12G -- make -j1 -B HOLDIR="$HOL" "${dir}/${base}.correct" ) \
@@ -36,6 +47,9 @@ rm -f ".bench/dropin/${arch}/${dir}/${base}.correct"
 rc=$?
 cp ".bench/dropin/${arch}/${dir}/${base}.correct" "$outdir/${tag}.correct" 2>/dev/null
 n=$(grep -c '^PHASE_MARK' "$outdir/${tag}.correct" 2>/dev/null || echo 0)
-echo "GEN_RUN ${tag} rc=$rc phase_marks=$n"
+"$check" verdict "$tag" "$outdir/${tag}.correct"
+sc=$?
+echo "GEN_RUN ${tag} rc=$rc phase_marks=$n statement_rc=$sc"
 grep -E '^(STAMP_INF_BEFORE|STAMP_INFERENCES|Running time)' "$outdir/${tag}.correct" 2>/dev/null | head
-exit "$rc"
+[ "$rc" -eq 0 ] || exit "$rc"
+exit "$sc"
